@@ -1,0 +1,41 @@
+# --- Core API & Web Server ---
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic>=2.0.0
+
+# --- AI & LLM Orchestration ---
+langchain
+langchain-community
+langchain-ollama
+sentence-transformers
+transformers
+tokenizers
+
+# --- Machine Learning & Graph Research ---
+torch
+torch-geometric
+networkx
+python-louvain
+scikit-learn
+scipy
+numpy
+pyvis
+
+# --- Riot API & Data Processing ---
+riotwatcher
+polars>=1.0.0
+requests
+beautifulsoup4
+
+# --- Data Storage & Infrastructure ---
+supabase
+pinecone-client
+boto3
+
+# --- Development & Quality ---
+black
+flake8
+tqdm
+matplotlib
+seaborn

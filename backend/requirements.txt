@@ -1,0 +1,24 @@
+# Backend & AI
+fastapi
+uvicorn
+supabase
+pinecone-client
+python-dotenv
+requests
+beautifulsoup4
+pandas
+boto3
+langchain
+openai
+
+# Research & GNN Layer (USP Model)
+torch
+torch-geometric
+scikit-learn
+matplotlib
+numpy
+
+# Code Quality (USP/Riot standards)
+black
+flake8
+pytest
