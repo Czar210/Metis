@@ -34,4 +34,4 @@
 4. Veja a [Arquitetura](docs/architecture.md) para entender o fluxo de dados.
 
 ---
-*Maturidade técnica e estratégia em um só lugar.*
+*"Um passo à frente deles. Um jogo à frente de todos." - Jericho Swain*

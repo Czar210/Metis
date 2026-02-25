@@ -9,7 +9,7 @@
 
 ---
 
-## 🧙‍♂️ Membro 1: AI & Knowledge Engineer (César?)
+## 🧙‍♂️ Membro 1: AI & Knowledge Engineer
 **Dever:** Criar a inteligência linguística e o sistema de busca semântica (RAG).
 **Tech Stack:** Ollama (Llama 3.1 8B), Sentence-Transformers, Pinecone/Supabase (pgvector), Cloudflare Tunnel.
 
@@ -22,7 +22,7 @@
 
 ---
 
-## 🎨 Membro 2: Product & UX Engineer (Takida?)
+## 🎨 Membro 2: Product & UX Engineer
 **Dever:** Interface intuitiva e visualização de dados.
 **Tech Stack:** Next.js (App Router), Tailwind CSS, Recharts/D3.js, Figma, Vercel.
 
@@ -35,7 +35,7 @@
 
 ---
 
-## ⚙️ Membro 3: Data Architect & CloudOps (André?)
+## ⚙️ Membro 3: Data Architect & CloudOps
 **Dever:** Ingestão de dados limpos e rápidos da Riot API.
 **Tech Stack:** Python (Polars), Riot API, Cloudflare R2, Supabase (SQL), Railway, FastAPI.
 
