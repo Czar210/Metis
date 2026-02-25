@@ -1,0 +1,48 @@
+services:
+  db:
+    image: ankane/pgvector:latest
+    container_name: metis_db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: metis
+      POSTGRES_USER: cesar
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - metis_network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: metis_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - metis_network
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: metis_api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://cesar:password@db:5432/metis
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      - db
+      - ollama
+    networks:
+      - metis_network
+
+networks:
+  metis_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  ollama_data:
