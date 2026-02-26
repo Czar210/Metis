@@ -47,4 +47,4 @@
 - [ ] **Tarefa Dupla:** Treinamento final da GNN (PyTorch)
 
 ---
-*Maturidade técnica, pesquisa científica e estratégia.*
+*"Um passo à frente deles. Um jogo à frente de todos." - Jericho Swain*
