@@ -2,8 +2,8 @@ name: Rotina Estática (Data Dragon)
 
 on:
   schedule:
-    # Roda todo dia 8 e dia 24 do mês, às 03:00 da manhã (UTC)
-    - cron: '0 3 8,24 * *'
+    # Roda toda Quarta-feira (3) às 03:00 da manhã (UTC)
+    - cron: '0 3 * * 3'
   workflow_dispatch:
 
 jobs:
