@@ -1,0 +1,32 @@
+name: "Metis - Ingestão High Elo (Diária)"
+
+on:
+  schedule:
+    # Roda todo dia às 08:00 UTC (05:00 da manhã no horário de Brasília)
+    - cron: '0 6 * * *'
+  workflow_dispatch: # Permite rodar apertando o botão manualmente no GitHub
+
+jobs:
+  ingest-high-elo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências
+        run: |
+          pip install requests boto3 python-dotenv riotwatcher
+
+      - name: Executar Trator de Ingestão
+        env:
+          CLOUDFLARE_R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_R2_BUCKET_NAME: "metis"
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+        run: python -m scripts.ingestion.fetch_high_elo_matches

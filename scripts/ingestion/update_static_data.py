@@ -100,12 +100,20 @@ if __name__ == "__main__":
         # Inicia o motor do R2
         s3 = get_r2_client()
 
-        # Faz um loop (for) garantindo que temos campeões e itens para todos os 3
+        # Faz um loop garantindo que temos TODOS os dicionários para os 3 patches
         for patch in recent_patches:
             print(f"\n--- Analisando Patch {patch} ---")
-            process_ddragon_data(patch, "champion", s3)
+
+            # A GRANDE MUDANÇA: Trocamos 'champion' por 'championFull'
+            # O championFull tem a matemática das habilidades (dano, cooldown, escalonamento)
+            process_ddragon_data(patch, "championFull", s3)
+
             process_ddragon_data(patch, "item", s3)
 
-        print("\n✅ Rotina Estática finalizada! Temos os 3 últimos patches garantidos.")
+            # ADIÇÕES: Runas e Feitiços de Invocador (Flash, Ignite)
+            process_ddragon_data(patch, "runesReforged", s3)
+            process_ddragon_data(patch, "summoner", s3)
+
+        print("\n✅ Rotina Estática finalizada! Temos os dicionários completos garantidos.")
     except Exception as e:
         print(f"❌ Erro crítico na rotina: {e}")

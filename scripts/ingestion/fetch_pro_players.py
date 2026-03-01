@@ -1,109 +1,87 @@
-import requests
-import json
 import os
-import boto3
-import time  # <--- O herói que estava faltando!
+import json
+import time
+from playwright.sync_api import sync_playwright
 from dotenv import load_dotenv
 
-load_dotenv()
+# Reutilizando seu motor do R2
+from scripts.ingestion.fetch_matches import get_r2_client
 
-# Credenciais
-R2_ACCOUNT_ID = os.environ.get("CLOUDFLARE_R2_ACCOUNT_ID")
-R2_ACCESS_KEY_ID = os.environ.get("CLOUDFLARE_R2_ACCESS_KEY_ID")
-R2_SECRET_ACCESS_KEY = os.environ.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY")
+load_dotenv()
 BUCKET_NAME = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
 
-def get_r2_client():
-    if not all([R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY]):
-        return None
-    return boto3.client(
-        's3',
-        endpoint_url=f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
-        aws_access_key_id=R2_ACCESS_KEY_ID,
-        aws_secret_access_key=R2_SECRET_ACCESS_KEY,
-        region_name='auto'
-    )
+def fetch_pro_players_playwright():
+    """Usa um navegador fantasma para extrair os dados da Wiki, incluindo as contas Smurfs."""
+    print("🎭 Invocando o Navegador Fantasma (Playwright)...")
 
-def fetch_leaguepedia_players():
-    """Usa a Cargo API com Paginação para não tomar ban do Fandom."""
-    print("🕵️‍♂️ Consultando o banco de dados da Leaguepedia...")
-    url = "https://lol.fandom.com/api.php"
+    # URL turbinada: Adicionamos o campo 'SoloqueueIds'
+    url = "https://lol.fandom.com/wiki/Special:CargoExport?tables=Players&fields=ID,Team,Role,Country,SoloqueueIds&where=IsRetired='0'&limit=1000&format=json"
 
-    headers = {
-        "User-Agent": "Metis-Data-Ingestion/1.0 (pesquisa acadêmica/dados de esports)"
-    }
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
 
-    pro_players = []
-    offset = 0
-    limit = 50
-
-    while True:
-        params = {
-            "action": "cargoquery",
-            "format": "json",
-            "tables": "Players",
-            "fields": "ID, Team, Role, Country",
-            "where": "IsRetired='0'",
-            "limit": str(limit),
-            "offset": str(offset)
-        }
-
+        print("🕵️‍♂️ Acessando a Leaguepedia sorrateiramente...")
         try:
-            response = requests.get(url, params=params, headers=headers)
-            response.raise_for_status()
-            data = response.json()
+            page.goto(url, wait_until="domcontentloaded")
+            time.sleep(3) # Tempo para o Cloudflare não desconfiar
 
-            if "error" in data:
-                print(f"⚠️ Erro da Wiki: {data['error']['info']}")
+            content = page.locator("body").inner_text()
+            data = json.loads(content)
+
+            if isinstance(data, list) and len(data) > 0:
+                print(f"✅ Sucesso! O disfarce funcionou. {len(data)} pro players capturados.")
+
+                # Salvamos o pacote completo de dados úteis!
+                pros_data = []
+                for player in data:
+                    pros_data.append({
+                        "id": player.get("ID"),
+                        "team": player.get("Team"),
+                        "role": player.get("Role"),
+                        "soloqueue_ids": player.get("SoloqueueIds", "")
+                    })
+
+                browser.close()
+                return pros_data
+            else:
+                print("⚠️ Formato inesperado. O segurança da Wiki pode ter mudado a fechadura.")
+                browser.close()
                 return None
 
-            entries = data.get("cargoquery", [])
-
-            if not entries:
-                break
-
-            for entry in entries:
-                pro_players.append(entry["title"])
-
-            print(f"📦 Lote recebido! Total acumulado: {len(pro_players)} jogadores...")
-
-            offset += limit
-            time.sleep(2) # Agora o Python sabe o que é isso!
-
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Erro de conexão com a Leaguepedia: {e}")
+        except json.JSONDecodeError:
+            print("❌ Erro ao ler os dados. A Wiki não retornou um JSON válido (Possível Captcha).")
+            browser.close()
+            return None
+        except Exception as e:
+            print(f"❌ Erro durante a infiltração: {e}")
+            browser.close()
             return None
 
-    return pro_players
-
 def save_to_bronze(data, filename, s3_client):
-    """Salva a lista de pro players direto no Cloudflare R2."""
-    if not s3_client:
-        print("⚠️ S3 Client não configurado.")
-        return
+    """Guarda a nossa lista rica em alvos no cofre."""
+    if not s3_client: return
 
     json_string = json.dumps(data, ensure_ascii=False, indent=4)
     file_key = f"pros/{filename}"
 
     try:
         s3_client.put_object(
-            Bucket=BUCKET_NAME,
-            Key=file_key,
-            Body=json_string.encode('utf-8'),
+            Bucket=BUCKET_NAME, Key=file_key, Body=json_string.encode('utf-8'),
             ContentType='application/json'
         )
-        print(f"☁️ Sucesso! {file_key} guardado no cofre da Camada Bronze.")
+        print(f"☁️ Arquivo salvo com segurança no R2: {file_key}")
     except Exception as e:
-        print(f"❌ Erro ao subir para o R2: {e}")
+        print(f"❌ Erro no R2: {e}")
 
 if __name__ == "__main__":
     s3 = get_r2_client()
+    pros_list = fetch_pro_players_playwright()
 
-    # 1. Puxa os dados
-    pros_data = fetch_leaguepedia_players()
-
-    # 2. Trava de Segurança: Só sobe se tiver dados
-    if pros_data and len(pros_data) > 0:
-        save_to_bronze(pros_data, "leaguepedia_active_pros.json", s3)
+    if pros_list:
+        save_to_bronze(pros_list, "leaguepedia_active_pros.json", s3)
     else:
-        print("🚫 Upload cancelado! Lista vazia ou erro na API.")
+        print("🚫 A missão falhou.")

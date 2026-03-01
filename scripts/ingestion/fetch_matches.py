@@ -3,7 +3,6 @@ import json
 import gzip
 import boto3
 import time
-from botocore.exceptions import ClientError
 from riotwatcher import LolWatcher, RiotWatcher, ApiError
 from dotenv import load_dotenv
 
@@ -27,32 +26,6 @@ def get_r2_client():
         region_name='auto'
     )
 
-def get_routing_region(server):
-    """A Riot exige continentes para a API de partidas."""
-    server = server.upper()
-    if server in ['BR1', 'NA1', 'LA1', 'LA2']:
-        return 'americas'
-    elif server in ['EUW1', 'EUN1', 'TR1', 'RU']:
-        return 'europe'
-    elif server in ['KR', 'JP1']:
-        return 'asia'
-    else:
-        return 'sea'
-
-def check_file_exists(s3_client, folder, match_id):
-    """Bate na porta do R2 para ver se o arquivo já existe."""
-    if not s3_client:
-        return False
-
-    file_key = f"{folder}/{match_id}.json.gz"
-    try:
-        s3_client.head_object(Bucket=BUCKET_NAME, Key=file_key)
-        return True # Já existe!
-    except ClientError as e:
-        if e.response['Error']['Code'] == '404':
-            return False
-        return False
-
 def compress_and_upload(data_dict, folder, match_id, s3_client):
     """Transforma o JSON em texto, espreme em GZIP e joga pro R2."""
     if not s3_client:
@@ -73,23 +46,28 @@ def compress_and_upload(data_dict, folder, match_id, s3_client):
     except Exception as e:
         print(f"  ❌ Erro ao subir {file_key}: {e}")
 
-def fetch_player_matches(game_name, tag_line, server, count, s3_client):
-    """Motor de Extração: Busca as partidas ranqueadas e devolve um relatório para a API."""
+def get_routing_region(server):
+    """A Riot exige continentes para a API de partidas."""
+    server = server.upper()
+    if server in ['BR1', 'NA1', 'LA1', 'LA2']:
+        return 'americas'
+    elif server in ['EUW1', 'EUN1', 'TR1', 'RU']:
+        return 'europe'
+    elif server in ['KR', 'JP1']:
+        return 'asia'
+    else:
+        return 'sea'
+
+def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
+    """Motor de Extração: Busca as últimas X partidas RANQUEADAS de um jogador."""
     if not RIOT_API_KEY:
-        return {"error": "RIOT_API_KEY não encontrada", "status": "failed"}
+        print("❌ RIOT_API_KEY não encontrada no .env!")
+        return False
 
     riot_watcher = RiotWatcher(RIOT_API_KEY)
     lol_watcher = LolWatcher(RIOT_API_KEY)
-    routing_region = get_routing_region(server)
 
-    # O Relatório de Completude que será enviado para o Frontend
-    stats = {
-        "requested": count,
-        "downloaded_new": 0,
-        "skipped_existing": 0,
-        "failed": 0,
-        "status": "processing"
-    }
+    routing_region = get_routing_region(server)
 
     try:
         print(f"\n🔍 Buscando o PUUID de {game_name}#{tag_line} no servidor {server}...")
@@ -97,59 +75,56 @@ def fetch_player_matches(game_name, tag_line, server, count, s3_client):
         puuid = account['puuid']
 
         print(f"✅ PUUID encontrado! Buscando as últimas {count} partidas RANQUEADAS...")
+
+        # MUDANÇA 1: Adicionamos o filtro type="ranked" direto na chamada da Riot!
         match_history = lol_watcher.match.matchlist_by_puuid(
-            routing_region, puuid, count=count, type="ranked"
+            routing_region,
+            puuid,
+            count=count,
+            type="ranked"
         )
 
         if not match_history:
-            stats["status"] = "success"
-            stats["message"] = "Nenhuma partida ranqueada encontrada."
-            return stats
+            print("🤷‍♂️ Nenhuma partida ranqueada encontrada para este jogador.")
+            return True # Retorna True porque o processo deu certo, só não havia dados
 
-        print(f"🎮 {len(match_history)} partidas na fila. Iniciando extração...\n")
+        print(f"🎮 {len(match_history)} partidas encontradas na fila. Iniciando extração...\n")
 
         for index, match_id in enumerate(match_history, start=1):
             print(f"--- Processando Partida {index}/{len(match_history)}: {match_id} ---")
 
-            # Checa se o Match E a Timeline já existem
-            if check_file_exists(s3_client, "matches", match_id) and check_file_exists(s3_client, "timelines", match_id):
-                print(f"⏭️ Partida {match_id} completa já existe no R2. Pulando!")
-                stats["skipped_existing"] += 1
-                continue
+            match_data = lol_watcher.match.by_id(routing_region, match_id)
+            compress_and_upload(match_data, "matches", match_id, s3_client)
 
-            try:
-                # Baixa e comprime a Partida
-                match_data = lol_watcher.match.by_id(routing_region, match_id)
-                compress_and_upload(match_data, "matches", match_id, s3_client)
+            timeline_data = lol_watcher.match.timeline_by_match(routing_region, match_id)
+            compress_and_upload(timeline_data, "timelines", match_id, s3_client)
 
-                # Baixa e comprime a Timeline
-                timeline_data = lol_watcher.match.timeline_by_match(routing_region, match_id)
-                compress_and_upload(timeline_data, "timelines", match_id, s3_client)
+            time.sleep(1.5) # Aumentei levemente a pausa para garantir segurança contra Rate Limit
 
-                stats["downloaded_new"] += 1
-                time.sleep(1.5) # Pausa de segurança da API da Riot
+        print("\n🚀 Missão cumprida! Todas as partidas foram extraídas e comprimidas.")
+        return True
 
-            except Exception as e:
-                print(f"❌ Erro ao baixar partida {match_id}: {e}")
-                stats["failed"] += 1
+    except ApiError as err:
+        if err.response.status_code == 429:
+            print("⚠️ Rate Limit da Riot! Atingimos o limite de requisições por segundo.")
+        elif err.response.status_code == 404:
+            print("❌ Jogador ou partida não encontrados.")
+        else:
+            print(f"❌ Erro na Riot API: {err}")
+        return False
 
-        stats["status"] = "success"
-        stats["message"] = f"Completude: {stats['downloaded_new'] + stats['skipped_existing']}/{stats['requested']} partidas verificadas."
-        return stats
-
-    except Exception as err:
-        print(f"❌ Erro Crítico: {err}")
-        stats["status"] = "error"
-        stats["error"] = str(err)
-        return stats
-
-# O bloco abaixo serve APENAS para testes diretos no terminal.
-# Quando a FastAPI rodar, ela vai ignorar isso aqui.
+# MUDANÇA 2: Removidos os inputs. Agora é um script que roda silenciosamente.
 if __name__ == "__main__":
-    s3_test = get_r2_client()
+    print("=======================================")
+    print("🤖 METIS - EXTRATOR DE PARTIDAS (PROD) ")
+    print("=======================================\n")
 
-    # Teste rápido de 3 partidas. Altere para o seu nick.
-    resultado = fetch_player_matches("SeuNick", "BR1", "BR1", 3, s3_test)
+    s3 = get_r2_client()
 
-    print("\n📊 Relatório Final devolvido para a API:")
-    print(json.dumps(resultado, indent=4, ensure_ascii=False))
+    # Variáveis fixas para testes. A FastAPI vai injetar isso dinamicamente depois.
+    ALVO_NICK = "SeuNick"
+    ALVO_TAG = "BR1"
+    ALVO_SERVIDOR = "BR1"
+    QTD_PARTIDAS = 3
+
+    fetch_player_matches(ALVO_NICK, ALVO_TAG, ALVO_SERVIDOR, QTD_PARTIDAS, s3)

@@ -1,34 +1,44 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-import os
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from scripts.ingestion.fetch_matches import fetch_player_matches, get_r2_client
 
-# 1. Inicializa o servidor Metis
 app = FastAPI(
     title="Metis API",
-    description="Motor de processamento de dados e IA para League of Legends",
+    description="Interface de Ingestão de Dados para a IA Metis",
     version="0.1.0"
 )
 
-# 2. Configuração de CORS (Essencial para o "Escravo do Frontend" não travar)
-# Isso permite que o Next.js converse com a sua API sem bloqueios do navegador
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Depois trocamos pelo domínio oficial da Vercel
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# O "Contrato" de entrada
+class MatchRequest(BaseModel):
+    nick: str
+    tag: str
+    server: str
+    count: int
 
-# 3. Rota de Saúde (Health Check para o Railway)
-@app.get("/")
-async def root():
-    return {
-        "status": "online",
-        "message": "Metis API está operante!",
-        "version": "0.1.0"
-    }
+@app.post("/api/v1/ingestion/fetch-matches")
+async def ingest_matches(req: MatchRequest):
+    """
+    Endpoint para buscar partidas ranqueadas.
+    Pula as que já existem no R2 e devolve o status da operação.
+    """
+    s3 = get_r2_client()
+    if not s3:
+        raise HTTPException(status_code=500, detail="Erro ao conectar com o Storage (R2).")
 
-# 4. Rota de Teste para o Frontend
-@app.get("/ping")
-async def ping():
-    return {"ping": "pong", "architect": "César - Pedreiro da Arquitetura"}
+    # Chama o motor que já deixamos pronto e inteligente
+    resultado = fetch_player_matches(
+        game_name=req.nick,
+        tag_line=req.tag,
+        server=req.server,
+        count=req.count,
+        s3_client=s3
+    )
+
+    if resultado.get("status") == "error":
+        raise HTTPException(status_code=400, detail=resultado.get("error"))
+
+    return resultado
+
+@app.get("/health")
+def health_check():
+    return {"status": "online", "system": "Metis"}
