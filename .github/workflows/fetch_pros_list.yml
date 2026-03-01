@@ -17,7 +17,8 @@ jobs:
 
       - name: Instalar Dependências e Playwright
         run: |
-          pip install playwright boto3 python-dotenv
+          # Adicionamos 'riotwatcher' aqui na lista!
+          pip install playwright boto3 python-dotenv riotwatcher
           playwright install chromium
           playwright install-deps
 
