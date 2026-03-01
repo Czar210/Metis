@@ -24,8 +24,19 @@ REGION_MAP = {
     'SG': 'sea', 'TH': 'sea', 'TW': 'sea', 'VN': 'sea'
 }
 
+def get_pros_from_bronze(s3_client):
+    """Lê a lista de pro players que o scraper da Wiki salvou no R2."""
+    print("📂 Abrindo o cofre da Camada Bronze...")
+    try:
+        response = s3_client.get_object(Bucket=BUCKET_NAME, Key="pros/leaguepedia_active_pros.json")
+        json_data = response['Body'].read().decode('utf-8')
+        return json.loads(json_data)
+    except ClientError as e:
+        print(f"❌ Erro ao ler a lista de Pros no R2: {e}")
+        return []
+
 def get_blacklist(s3_client):
-    """Carrega a lista de nicks inválidos do R2."""
+    """Carrega a lista de nicks inválidos (404) do R2."""
     try:
         response = s3_client.get_object(Bucket=BUCKET_NAME, Key="pros/blacklist_404.json")
         return set(json.loads(response['Body'].read().decode('utf-8')))
@@ -33,7 +44,7 @@ def get_blacklist(s3_client):
         return set()
 
 def save_blacklist(s3_client, blacklist_set):
-    """Salva a lista atualizada de nicks inválidos no R2."""
+    """Salva a lista de nicks inválidos no R2 para não tentar de novo."""
     s3_client.put_object(
         Bucket=BUCKET_NAME, Key="pros/blacklist_404.json",
         Body=json.dumps(list(blacklist_set)).encode('utf-8'),
@@ -45,6 +56,7 @@ def fetch_pro_matches(target_matches_per_account=2):
     s3 = get_r2_client()
     if not s3: return
 
+    # AGORA DEFINIDA: Chama a função que estava faltando
     pros_list = get_pros_from_bronze(s3)
     blacklist = get_blacklist(s3)
 
@@ -80,7 +92,6 @@ def fetch_pro_matches(target_matches_per_account=2):
 
             conta_limpa = conta.replace("'", "").replace('"', '').strip()
 
-            # PULO DO GATO: Checa a Blacklist antes de tudo
             if conta_limpa in blacklist:
                 print(f"  ⏭️ '{conta_limpa}' ignorado (Blacklist/404).")
                 continue
@@ -113,7 +124,8 @@ def fetch_pro_matches(target_matches_per_account=2):
                     blacklist.add(conta_limpa)
                     new_404s = True
                 elif e.response.status_code == 429:
-                    time.sleep(20)
+                    wait = int(e.response.headers.get('Retry-After', 20))
+                    time.sleep(wait)
             except Exception:
                 pass
 
