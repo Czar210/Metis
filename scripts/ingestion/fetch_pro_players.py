@@ -15,7 +15,7 @@ def fetch_pro_players_playwright():
     print("🎭 Invocando o Navegador Fantasma (Playwright)...")
 
     # URL turbinada: Adicionamos o campo 'SoloqueueIds'
-    url = "https://lol.fandom.com/wiki/Special:CargoExport?tables=Players&fields=ID,Team,Role,Country,SoloqueueIds&where=IsRetired='0'&limit=1000&format=json"
+    url = "https://lol.fandom.com/wiki/Special:CargoExport?tables=Players&fields=ID,Team,Role,Country,SoloqueueIds&where=IsRetired='0'&limit=4000&format=json"
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)

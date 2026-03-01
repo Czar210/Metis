@@ -4,6 +4,7 @@ import gzip
 import boto3
 import time
 from riotwatcher import LolWatcher, RiotWatcher, ApiError
+from botocore.exceptions import ClientError # <-- Adicionado para lidar com o R2
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,6 +26,23 @@ def get_r2_client():
         aws_secret_access_key=R2_SECRET_ACCESS_KEY,
         region_name='auto'
     )
+
+def check_file_exists(s3_client, folder, match_id):
+    """Bate na porta do R2 para ver se a cópia já existe. Impede duplicatas."""
+    if not s3_client:
+        return False
+
+    file_key = f"{folder}/{match_id}.json.gz"
+    try:
+        s3_client.head_object(Bucket=BUCKET_NAME, Key=file_key)
+        return True # Arquivo já existe!
+    except ClientError as e:
+        # Erro 404 significa que o arquivo não está lá, então podemos baixar
+        if e.response['Error']['Code'] == '404':
+            return False
+        else:
+            print(f"⚠️ Erro ao verificar existência no R2: {e}")
+            return False
 
 def compress_and_upload(data_dict, folder, match_id, s3_client):
     """Transforma o JSON em texto, espreme em GZIP e joga pro R2."""
@@ -76,7 +94,6 @@ def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
 
         print(f"✅ PUUID encontrado! Buscando as últimas {count} partidas RANQUEADAS...")
 
-        # MUDANÇA 1: Adicionamos o filtro type="ranked" direto na chamada da Riot!
         match_history = lol_watcher.match.matchlist_by_puuid(
             routing_region,
             puuid,
@@ -86,12 +103,17 @@ def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
 
         if not match_history:
             print("🤷‍♂️ Nenhuma partida ranqueada encontrada para este jogador.")
-            return True # Retorna True porque o processo deu certo, só não havia dados
+            return True
 
         print(f"🎮 {len(match_history)} partidas encontradas na fila. Iniciando extração...\n")
 
         for index, match_id in enumerate(match_history, start=1):
             print(f"--- Processando Partida {index}/{len(match_history)}: {match_id} ---")
+
+            # Agora o próprio motor base também se protege de baixar duplicatas!
+            if check_file_exists(s3_client, "matches", match_id):
+                print(f"  ⏭️ Partida {match_id} já existe no R2. Pulando.")
+                continue
 
             match_data = lol_watcher.match.by_id(routing_region, match_id)
             compress_and_upload(match_data, "matches", match_id, s3_client)
@@ -99,7 +121,7 @@ def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
             timeline_data = lol_watcher.match.timeline_by_match(routing_region, match_id)
             compress_and_upload(timeline_data, "timelines", match_id, s3_client)
 
-            time.sleep(1.5) # Aumentei levemente a pausa para garantir segurança contra Rate Limit
+            time.sleep(1.5)
 
         print("\n🚀 Missão cumprida! Todas as partidas foram extraídas e comprimidas.")
         return True
@@ -113,7 +135,6 @@ def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
             print(f"❌ Erro na Riot API: {err}")
         return False
 
-# MUDANÇA 2: Removidos os inputs. Agora é um script que roda silenciosamente.
 if __name__ == "__main__":
     print("=======================================")
     print("🤖 METIS - EXTRATOR DE PARTIDAS (PROD) ")
@@ -121,7 +142,6 @@ if __name__ == "__main__":
 
     s3 = get_r2_client()
 
-    # Variáveis fixas para testes. A FastAPI vai injetar isso dinamicamente depois.
     ALVO_NICK = "SeuNick"
     ALVO_TAG = "BR1"
     ALVO_SERVIDOR = "BR1"

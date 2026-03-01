@@ -1,0 +1,28 @@
+name: "Metis - Partidas do Olimpo (A cada 2 dias)"
+
+on:
+  schedule:
+    # Roda às 04:00 a cada 2 dias
+    - cron: '0 4 */2 * *'
+  workflow_dispatch:
+
+jobs:
+  ingest-pro-matches:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar Dependências
+        run: pip install requests boto3 python-dotenv riotwatcher
+
+      - name: Executar Ingestão do Olimpo
+        env:
+          CLOUDFLARE_R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_R2_BUCKET_NAME: "metis"
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+        run: python -m scripts.ingestion.fetch_pro_matches

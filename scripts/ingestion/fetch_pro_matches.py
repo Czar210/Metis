@@ -2,14 +2,13 @@ import os
 import json
 import time
 import re
+import random
 from botocore.exceptions import ClientError
-from riotwatcher import LolWatcher, ApiError
+from riotwatcher import LolWatcher, RiotWatcher, ApiError
 from dotenv import load_dotenv
 
-# Reutilizando a infraestrutura de Zaun que já funciona
 from scripts.ingestion.fetch_matches import (
     get_r2_client,
-    get_routing_region,
     check_file_exists,
     compress_and_upload
 )
@@ -18,113 +17,125 @@ load_dotenv()
 RIOT_API_KEY = os.environ.get("RIOT_API_KEY")
 BUCKET_NAME = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
 
+REGION_MAP = {
+    'KR': 'asia', 'JP': 'asia',
+    'EUW': 'europe', 'EUNE': 'europe', 'TR': 'europe', 'RU': 'europe',
+    'NA': 'americas', 'BR': 'americas', 'LAN': 'americas', 'LAS': 'americas',
+    'OCE': 'sea', 'PH': 'sea', 'SG': 'sea', 'TH': 'sea', 'TW': 'sea', 'VN': 'sea'
+}
+
 def get_pros_from_bronze(s3_client):
-    """Lê o arquivo JSON com os pros e suas contas SoloQ direto do Cloudflare R2."""
-    print("📂 Abrindo o cofre da Camada Bronze para pegar a lista do Olimpo...")
+    print("📂 Abrindo o cofre da Camada Bronze...")
     try:
         response = s3_client.get_object(Bucket=BUCKET_NAME, Key="pros/leaguepedia_active_pros.json")
         json_data = response['Body'].read().decode('utf-8')
         return json.loads(json_data)
     except ClientError as e:
-        print(f"❌ Erro ao ler a lista de Pros no R2: {e}")
+        print(f"❌ Erro ao ler a lista de Pros: {e}")
         return []
 
-def fetch_pro_matches(server="BR1", target_matches_per_account=3):
-    """
-    Motor que itera sobre os profissionais, extrai as tags corretas e tenta baixar as partidas.
-    """
+def fetch_pro_matches(target_matches_per_account=2):
     if not RIOT_API_KEY:
-        print("❌ RIOT_API_KEY ausente.")
+        print("❌ RIOT_API_KEY não encontrada.")
         return
 
     s3 = get_r2_client()
     if not s3: return
 
     pros_list = get_pros_from_bronze(s3)
-    if not pros_list:
-        print("⚠️ A lista de pros está vazia. Rode o script do Playwright primeiro.")
-        return
+    if not pros_list: return
 
+    # Inicia os DOIS motores da Riot
+    riot_watcher = RiotWatcher(RIOT_API_KEY)
     lol_watcher = LolWatcher(RIOT_API_KEY)
-    region = get_routing_region(server)
 
-    print(f"🚀 Iniciando a Ingestão do Olimpo (Modo Caçador) no servidor {server}...")
+    random.shuffle(pros_list)
+    alvos_teste = pros_list[:50]
+
+    print(f"🌍 Iniciando a Ingestão Global (Modo Verbose) com {len(alvos_teste)} alvos aleatórios...\n")
 
     sucessos = 0
 
-    # Vamos limitar aos 50 primeiros para o teste inicial não gastar toda a sua chave
-    for idx, pro in enumerate(pros_list[:50]):
-        nome_oficial = pro.get("id")
+    for idx, pro in enumerate(alvos_teste):
+        nome_oficial = pro.get("id", "Desconhecido")
+        time_do_pro = pro.get("team", "Sem Time")
+        rota_do_pro = pro.get("role", "Desconhecida")
         sq_ids_raw = pro.get("soloqueue_ids", "")
 
-        # 1. Cria uma lista de possíveis contas para tentar
         contas_para_tentar = []
 
-        # O Regex abaixo procura Nick#Tag dentro da string suja da Wiki
         if sq_ids_raw:
-            encontrados = re.findall(r'([^:\n,]+#[^\s,]+)', sq_ids_raw)
-            for acc in encontrados:
-                contas_para_tentar.append(acc.strip())
+            encontrados = re.findall(r'([A-Z]+):\s*([^:\n,]+#[^\s,]+)', sq_ids_raw)
+            for servidor_wiki, nick_tag in encontrados:
+                contas_para_tentar.append((servidor_wiki, nick_tag.strip()))
 
-        # Se a Leaguepedia não tem a tag, tentamos o plano B: Nick#Servidor (Ex: brTT#BR1)
         if not contas_para_tentar:
-            contas_para_tentar.append(f"{nome_oficial}#{server}")
+            contas_para_tentar.append(('BR', f"{nome_oficial}#BR1"))
 
-        print(f"\n[{idx+1}/50] Analisando a lenda: {nome_oficial} ({len(contas_para_tentar)} contas conhecidas)")
+        print(f"\n[{idx+1}/50] 🕵️ Lenda: {nome_oficial} | 🛡️ Time: {time_do_pro} | ⚔️ Rota: {rota_do_pro}")
 
-        # 2. Tenta puxar partidas de cada conta
-        for conta in contas_para_tentar:
+        for servidor_wiki, conta in contas_para_tentar:
+            continente = REGION_MAP.get(servidor_wiki)
+            if not continente:
+                print(f"  ⏭️ Servidor '{servidor_wiki}' ignorado (Não suportado pela Riot).")
+                continue
+
+            conta_limpa = conta.replace("'", "").replace('"', '').strip()
+
+            print(f"  -> Sondando conta: '{conta_limpa}' na rota '{continente}'...")
+
             try:
-                # Separa o Nick da Tag com cuidado
-                nick, tag = conta.split("#", 1)
-                nick = nick.strip()
-                tag = tag.strip()
+                nick, tag = conta_limpa.split("#", 1)
 
-                # Se o Regex pegou alguma sujeira e o nick ficou vazio, pula
-                if not nick or not tag: continue
-
-                account_data = lol_watcher.account.by_riot_id(region, nick, tag)
+                # Busca o PUUID
+                account_data = riot_watcher.account.by_riot_id(continente, nick.strip(), tag.strip())
                 puuid = account_data['puuid']
+                print(f"    ✔️ PUUID encontrado! Buscando histórico...")
 
-                match_ids = lol_watcher.match.matchlist_by_puuid(region, puuid, count=target_matches_per_account, type="ranked")
+                # Busca as Partidas
+                match_ids = lol_watcher.match.matchlist_by_puuid(continente, puuid, count=target_matches_per_account, type="ranked")
 
                 if not match_ids:
-                    continue # Se a conta não tem ranqueada recente, tenta a próxima da lista
+                    print(f"    🤷‍♂️ Sem ranqueadas recentes nesta conta.")
+                    continue
+
+                print(f"    🎮 {len(match_ids)} partidas encontradas! Iniciando download...")
 
                 for m_id in match_ids:
                     if check_file_exists(s3, "matches", m_id):
-                        print(f"  ⏭️ Partida {m_id} já existe no cofre.")
+                        print(f"      ⏭️ {m_id} já existe no R2. Pulando.")
                         continue
 
-                    # Faz o download das novidades
-                    m_data = lol_watcher.match.by_id(region, m_id)
+                    m_data = lol_watcher.match.by_id(continente, m_id)
                     compress_and_upload(m_data, "matches", m_id, s3)
 
-                    t_data = lol_watcher.match.timeline_by_match(region, m_id)
+                    t_data = lol_watcher.match.timeline_by_match(continente, m_id)
                     compress_and_upload(t_data, "timelines", m_id, s3)
 
                     sucessos += 1
-                    time.sleep(1.2) # Respeitando a Riot
+                    time.sleep(1.2)
 
-                print(f"  🎯 Sucesso! Partidas capturadas da conta: {conta}")
-                break # Se achamos os dados em uma conta, podemos pular as outras para economizar a API
+                print(f"  🎯 GOLPE DE MESTRE! Dados salvos com sucesso.")
+                break
 
             except ValueError:
-                pass # Ignora se falhou no split('#')
+                print(f"    ⚠️ Erro de formatação no Nick#Tag. A Wiki mandou lixo: {conta_limpa}")
             except ApiError as e:
-                # Se a Riot disser 404 (Conta não existe), apenas pulamos pro próximo 'for conta' silenciosamente
-                if e.response.status_code == 429:
+                if e.response.status_code == 404:
+                    print(f"    🥷 Erro 404: Conta não existe ou o nick mudou.")
+                elif e.response.status_code == 429:
                     wait = int(e.response.headers.get('Retry-After', 10))
-                    print(f"  ⚠️ Limite de requisições! Dormindo {wait}s...")
+                    print(f"    ⏳ Limite da Riot (429)! Pausando por {wait} segundos...")
                     time.sleep(wait)
+                else:
+                    print(f"    ❌ Erro na API da Riot: {e.response.status_code}")
             except Exception as e:
-                pass
+                print(f"    ❌ Erro inesperado do sistema: {e}")
 
     print("\n==================================================")
-    print(f"✨ Ingestão do Olimpo Finalizada!")
-    print(f"📈 Partidas novas injetadas na Camada Bronze: {sucessos}")
+    print(f"✨ Ingestão do Olimpo Global Finalizada!")
+    print(f"📈 Partidas de Pro Players injetadas no R2: {sucessos}")
     print("==================================================")
 
 if __name__ == "__main__":
-    # Teste focado no Brasil
-    fetch_pro_matches(server="BR1", target_matches_per_account=3)
+    fetch_pro_matches(target_matches_per_account=2)

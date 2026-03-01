@@ -1,0 +1,30 @@
+name: "Metis - Lista de Pro Players (Quinzenal)"
+
+on:
+  schedule:
+    # Roda às 04:00 do dia 1 e 15 de cada mês
+    - cron: '0 4 1,15 * *'
+  workflow_dispatch:
+
+jobs:
+  update-pros:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar Dependências e Playwright
+        run: |
+          pip install playwright boto3 python-dotenv
+          playwright install chromium
+          playwright install-deps
+
+      - name: Executar Scrap da Wiki
+        env:
+          CLOUDFLARE_R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_R2_BUCKET_NAME: "metis"
+        run: python -m scripts.ingestion.fetch_pro_players
