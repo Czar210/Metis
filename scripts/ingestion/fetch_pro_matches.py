@@ -45,18 +45,18 @@ def fetch_pro_matches(target_matches_per_account=2):
     pros_list = get_pros_from_bronze(s3)
     if not pros_list: return
 
-    # Inicia os DOIS motores da Riot
     riot_watcher = RiotWatcher(RIOT_API_KEY)
     lol_watcher = LolWatcher(RIOT_API_KEY)
 
+    # Mantemos o shuffle para que, se a Action falhar, na próxima ela comece por outros nomes
     random.shuffle(pros_list)
-    alvos_teste = pros_list[:50]
+    total_alvos = len(pros_list)
 
-    print(f"🌍 Iniciando a Ingestão Global (Modo Verbose) com {len(alvos_teste)} alvos aleatórios...\n")
+    print(f"🌍 Iniciando a Ingestão Global INTEGRAL com {total_alvos} alvos...\n")
 
     sucessos = 0
 
-    for idx, pro in enumerate(alvos_teste):
+    for idx, pro in enumerate(pros_list):
         nome_oficial = pro.get("id", "Desconhecido")
         time_do_pro = pro.get("team", "Sem Time")
         rota_do_pro = pro.get("role", "Desconhecida")
@@ -72,38 +72,30 @@ def fetch_pro_matches(target_matches_per_account=2):
         if not contas_para_tentar:
             contas_para_tentar.append(('BR', f"{nome_oficial}#BR1"))
 
-        print(f"\n[{idx+1}/50] 🕵️ Lenda: {nome_oficial} | 🛡️ Time: {time_do_pro} | ⚔️ Rota: {rota_do_pro}")
+        print(f"\n[{idx+1}/{total_alvos}] 🕵️ Lenda: {nome_oficial} | 🛡️ Time: {time_do_pro} | ⚔️ Rota: {rota_do_pro}")
 
         for servidor_wiki, conta in contas_para_tentar:
             continente = REGION_MAP.get(servidor_wiki)
             if not continente:
-                print(f"  ⏭️ Servidor '{servidor_wiki}' ignorado (Não suportado pela Riot).")
                 continue
 
             conta_limpa = conta.replace("'", "").replace('"', '').strip()
-
-            print(f"  -> Sondando conta: '{conta_limpa}' na rota '{continente}'...")
+            print(f"  -> Sondando: '{conta_limpa}' em '{continente}'...")
 
             try:
                 nick, tag = conta_limpa.split("#", 1)
 
-                # Busca o PUUID
                 account_data = riot_watcher.account.by_riot_id(continente, nick.strip(), tag.strip())
                 puuid = account_data['puuid']
-                print(f"    ✔️ PUUID encontrado! Buscando histórico...")
 
-                # Busca as Partidas
                 match_ids = lol_watcher.match.matchlist_by_puuid(continente, puuid, count=target_matches_per_account, type="ranked")
 
                 if not match_ids:
-                    print(f"    🤷‍♂️ Sem ranqueadas recentes nesta conta.")
+                    print(f"    🤷‍♂️ Sem ranqueadas recentes.")
                     continue
-
-                print(f"    🎮 {len(match_ids)} partidas encontradas! Iniciando download...")
 
                 for m_id in match_ids:
                     if check_file_exists(s3, "matches", m_id):
-                        print(f"      ⏭️ {m_id} já existe no R2. Pulando.")
                         continue
 
                     m_data = lol_watcher.match.by_id(continente, m_id)
@@ -113,29 +105,22 @@ def fetch_pro_matches(target_matches_per_account=2):
                     compress_and_upload(t_data, "timelines", m_id, s3)
 
                     sucessos += 1
-                    time.sleep(1.2)
+                    time.sleep(1.2) # Pausa estratégica para respeitar sua Prod Key
 
-                print(f"  🎯 GOLPE DE MESTRE! Dados salvos com sucesso.")
+                print(f"  🎯 Partidas capturadas!")
                 break
 
-            except ValueError:
-                print(f"    ⚠️ Erro de formatação no Nick#Tag. A Wiki mandou lixo: {conta_limpa}")
             except ApiError as e:
                 if e.response.status_code == 404:
-                    print(f"    🥷 Erro 404: Conta não existe ou o nick mudou.")
+                    print(f"    🥷 404: Nick mudou.")
                 elif e.response.status_code == 429:
-                    wait = int(e.response.headers.get('Retry-After', 10))
-                    print(f"    ⏳ Limite da Riot (429)! Pausando por {wait} segundos...")
+                    wait = int(e.response.headers.get('Retry-After', 15))
+                    print(f"    ⏳ Rate Limit! Pausando {wait}s...")
                     time.sleep(wait)
-                else:
-                    print(f"    ❌ Erro na API da Riot: {e.response.status_code}")
-            except Exception as e:
-                print(f"    ❌ Erro inesperado do sistema: {e}")
+            except Exception:
+                pass
 
-    print("\n==================================================")
-    print(f"✨ Ingestão do Olimpo Global Finalizada!")
-    print(f"📈 Partidas de Pro Players injetadas no R2: {sucessos}")
-    print("==================================================")
+    print(f"\n✨ Ciclo Integral Finalizado! Injetadas: {sucessos}")
 
 if __name__ == "__main__":
     fetch_pro_matches(target_matches_per_account=2)
