@@ -21,8 +21,9 @@ def fetch_pro_players_playwright():
         "&fields=ID,Team,Role,Country,SoloqueueIds"
         "&where=IsRetired='0' "
         "AND Role IN ('Top', 'Jungle', 'Mid', 'Bot', 'Support') "
-        "AND Team != '' AND Team IS NOT NULL"
-        "&limit=5000"
+        "AND Team != '' AND Team IS NOT NULL "
+        "AND Country IN ('South Korea', 'China', 'Brazil', 'United States', 'Germany', 'Denmark', 'France', 'Poland')"
+        "&limit=2000"
         "&format=json"
     )
 
