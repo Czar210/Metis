@@ -5,7 +5,8 @@ import boto3
 import time
 import random
 from concurrent.futures import ThreadPoolExecutor
-from riotwatcher import LolWatcher, ApiError
+# IMPORTANTE: RiotWatcher voltou para a lista de imports!
+from riotwatcher import LolWatcher, RiotWatcher, ApiError
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 
@@ -19,7 +20,7 @@ BUCKET_NAME = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
 RIOT_API_KEY = os.environ.get("RIOT_API_KEY")
 
 # --- Configurações de Performance ---
-MAX_WORKERS = 5        # Baixa 5 partidas em paralelo
+MAX_WORKERS = 5        # Baixa 5 partidas em paralelo no Turbo
 RATE_LIMIT_PAUSE = 120 # Pausa de 2 min se a Riot gritar 429
 
 # --- utilitários de Conexão e Upload (Camada Bronze) ---
@@ -68,8 +69,61 @@ def get_routing_region(server):
     if server in ['KR', 'JP1']: return 'asia'
     return 'sea'
 
-# --- Lógica de Extração Turbo ---
+# =========================================================
+# 🔗 FUNÇÃO DA API (Essa é a que o main.py estava sentindo falta!)
+# =========================================================
+def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
+    """Busca as partidas de um jogador específico (Usado pela API/Backend)."""
+    if not RIOT_API_KEY:
+        print("❌ RIOT_API_KEY não encontrada no .env!")
+        return False
 
+    riot_watcher = RiotWatcher(RIOT_API_KEY)
+    lol_watcher = LolWatcher(RIOT_API_KEY)
+    routing_region = get_routing_region(server)
+
+    try:
+        print(f"\n🔍 Buscando PUUID de {game_name}#{tag_line} no servidor {server}...")
+        account = riot_watcher.account.by_riot_id(routing_region, game_name, tag_line)
+        puuid = account['puuid']
+
+        print(f"✅ PUUID encontrado! Buscando últimas {count} partidas RANQUEADAS...")
+        match_history = lol_watcher.match.matchlist_by_puuid(
+            routing_region, puuid, count=count, type="ranked"
+        )
+
+        if not match_history:
+            print("🤷‍♂️ Nenhuma partida ranqueada encontrada.")
+            return True
+
+        for index, match_id in enumerate(match_history, start=1):
+            print(f"--- Processando Partida {index}/{len(match_history)}: {match_id} ---")
+
+            if check_file_exists(s3_client, "matches", match_id):
+                print(f"  ⏭️ Partida {match_id} já existe no R2. Pulando.")
+                continue
+
+            match_data = lol_watcher.match.by_id(routing_region, match_id)
+            compress_and_upload(match_data, "matches", match_id, s3_client)
+
+            timeline_data = lol_watcher.match.timeline_by_match(routing_region, match_id)
+            compress_and_upload(timeline_data, "timelines", match_id, s3_client)
+            time.sleep(1.5)
+
+        return True
+
+    except ApiError as err:
+        if err.response.status_code == 429:
+            print("⚠️ Rate Limit da Riot atingido!")
+        elif err.response.status_code == 404:
+            print("❌ Jogador ou partida não encontrados.")
+        else:
+            print(f"❌ Erro na Riot API: {err}")
+        return False
+
+# =========================================================
+# 🚀 MOTOR HIGH-ELO TURBO (Scraping em Massa)
+# =========================================================
 def get_league_data(lol_watcher, server, tier):
     """Tenta obter a lista de jogadores com retentativas para evitar o erro do Master."""
     for tentativa in range(3):
@@ -84,7 +138,7 @@ def get_league_data(lol_watcher, server, tier):
     return None
 
 def process_single_match(match_id, routing_region, lol_watcher, s3_client):
-    """Executa o download e upload de uma única partida."""
+    """Executa o download e upload de uma única partida (Usado pelo ThreadPool)."""
     if check_file_exists(s3_client, "matches", match_id):
         return "EXISTE"
     try:
@@ -104,7 +158,6 @@ def fetch_high_elo_turbo(server, target_per_tier=250):
     s3 = get_r2_client()
     routing_region = get_routing_region(server)
 
-    # Incluímos DIAMOND para cobrir o "Masters-"
     tiers = ['CHALLENGER', 'GRANDMASTER', 'MASTER', 'DIAMOND']
 
     for tier in tiers:
@@ -120,7 +173,7 @@ def fetch_high_elo_turbo(server, target_per_tier=250):
 
         while coletadas < target_per_tier and idx < len(entries):
             player = entries[idx]
-            s_id = player.get('summonerId') or player.get('summonerId') # Fallback para entries
+            s_id = player.get('summonerId') or player.get('summonerId')
             if not s_id and 'summonerName' in player: s_id = player['summonerName']
 
             try:
