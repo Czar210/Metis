@@ -25,18 +25,16 @@ REGION_MAP = {
 }
 
 def get_pros_from_bronze(s3_client):
-    """Lê a lista de pro players que o scraper da Wiki salvou no R2."""
-    print("📂 Abrindo o cofre da Camada Bronze...")
+    """Lê a lista de pro players capturada da Wiki."""
     try:
         response = s3_client.get_object(Bucket=BUCKET_NAME, Key="pros/leaguepedia_active_pros.json")
-        json_data = response['Body'].read().decode('utf-8')
-        return json.loads(json_data)
-    except ClientError as e:
-        print(f"❌ Erro ao ler a lista de Pros no R2: {e}")
+        return json.loads(response['Body'].read().decode('utf-8'))
+    except Exception as e:
+        print(f"❌ Erro ao ler lista de Pros: {e}")
         return []
 
 def get_blacklist(s3_client):
-    """Carrega a lista de nicks inválidos (404) do R2."""
+    """Carrega nicks que deram 404 anteriormente."""
     try:
         response = s3_client.get_object(Bucket=BUCKET_NAME, Key="pros/blacklist_404.json")
         return set(json.loads(response['Body'].read().decode('utf-8')))
@@ -44,7 +42,7 @@ def get_blacklist(s3_client):
         return set()
 
 def save_blacklist(s3_client, blacklist_set):
-    """Salva a lista de nicks inválidos no R2 para não tentar de novo."""
+    """Salva a memória de erros no R2."""
     s3_client.put_object(
         Bucket=BUCKET_NAME, Key="pros/blacklist_404.json",
         Body=json.dumps(list(blacklist_set)).encode('utf-8'),
@@ -56,7 +54,6 @@ def fetch_pro_matches(target_matches_per_account=2):
     s3 = get_r2_client()
     if not s3: return
 
-    # AGORA DEFINIDA: Chama a função que estava faltando
     pros_list = get_pros_from_bronze(s3)
     blacklist = get_blacklist(s3)
 
@@ -67,7 +64,7 @@ def fetch_pro_matches(target_matches_per_account=2):
     total_alvos = len(pros_list)
     new_404s = False
 
-    print(f"🌍 Iniciando Ingestão Integral ({total_alvos} alvos) | Blacklist: {len(blacklist)} nicks")
+    print(f"🌍 Ingestão Integral ({total_alvos} alvos) | Blacklist: {len(blacklist)} nicks")
 
     for idx, pro in enumerate(pros_list):
         nome_oficial = pro.get("id", "Desconhecido")
@@ -93,7 +90,6 @@ def fetch_pro_matches(target_matches_per_account=2):
             conta_limpa = conta.replace("'", "").replace('"', '').strip()
 
             if conta_limpa in blacklist:
-                print(f"  ⏭️ '{conta_limpa}' ignorado (Blacklist/404).")
                 continue
 
             try:
@@ -106,6 +102,13 @@ def fetch_pro_matches(target_matches_per_account=2):
                 if not match_ids:
                     print(f"    🤷‍♂️ Sem ranqueadas recentes.")
                     continue
+
+                # 🚀 O PULO DO GATO:
+                # Se a primeira partida (mais recente) já existe, todas as outras
+                # (que são mais antigas) também estarão lá. Podemos pular este jogador.
+                if check_file_exists(s3, "matches", match_ids):
+                    print(f"    ⏭️ Jogador atualizado. Partida mais recente ({match_ids}) já consta no R2.")
+                    break # Sai do loop de contas deste Pro e vai para o próximo jogador
 
                 for m_id in match_ids:
                     if not check_file_exists(s3, "matches", m_id):
@@ -120,7 +123,7 @@ def fetch_pro_matches(target_matches_per_account=2):
 
             except ApiError as e:
                 if e.response.status_code == 404:
-                    print(f"    🥷 404 Detectado. Adicionando '{conta_limpa}' à blacklist.")
+                    print(f"    🥷 404 Detectado: Adicionando à blacklist.")
                     blacklist.add(conta_limpa)
                     new_404s = True
                 elif e.response.status_code == 429:
@@ -131,7 +134,6 @@ def fetch_pro_matches(target_matches_per_account=2):
 
     if new_404s:
         save_blacklist(s3, blacklist)
-        print(f"💾 Blacklist atualizada com sucesso no R2.")
 
 if __name__ == "__main__":
     fetch_pro_matches(target_matches_per_account=2)
