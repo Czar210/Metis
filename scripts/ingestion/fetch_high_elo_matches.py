@@ -1,10 +1,11 @@
 import os
 import time
-import boto3
+import random
+from concurrent.futures import ThreadPoolExecutor
 from riotwatcher import LolWatcher, ApiError
 from dotenv import load_dotenv
 
-# Importando as ferramentas de infra que já validamos
+# Importando as ferramentas do nosso arquivo base!
 from scripts.ingestion.fetch_matches import (
     get_r2_client,
     get_routing_region,
@@ -13,124 +14,82 @@ from scripts.ingestion.fetch_matches import (
 )
 
 load_dotenv()
-
 RIOT_API_KEY = os.environ.get("RIOT_API_KEY")
 
-def fetch_high_elo_sequential(server, target_per_tier=250):
-    """
-    Trator de Ingestão: Percorre a elite do servidor, baixando
-    exatamente X partidas para CADA elo, do Challenger ao Diamante 4.
-    """
-    if not RIOT_API_KEY:
-        print("❌ RIOT_API_KEY não configurada.")
-        return
+MAX_WORKERS = 5
+RATE_LIMIT_PAUSE = 120
 
+def get_league_data(lol_watcher, server, tier):
+    """Tenta obter a lista de jogadores com retentativas para evitar o erro do Master."""
+    for tentativa in range(3):
+        try:
+            if tier == 'CHALLENGER': return lol_watcher.league.challenger_by_queue(server, 'RANKED_SOLO_5x5')
+            if tier == 'GRANDMASTER': return lol_watcher.league.grandmaster_by_queue(server, 'RANKED_SOLO_5x5')
+            if tier == 'MASTER': return lol_watcher.league.masters_by_queue(server, 'RANKED_SOLO_5x5')
+            if tier == 'DIAMOND': return lol_watcher.league.entries_by_rank(server, 'RANKED_SOLO_5x5', 'DIAMOND', 'I')
+        except Exception as e:
+            print(f"⚠️ Tentativa {tentativa+1} para {tier} falhou. Retentando...")
+            time.sleep(5)
+    return None
+
+def process_single_match(match_id, routing_region, lol_watcher, s3_client):
+    """Executa o download e upload de uma única partida."""
+    if check_file_exists(s3_client, "matches", match_id):
+        return "EXISTE"
+    try:
+        m_data = lol_watcher.match.by_id(routing_region, match_id)
+        compress_and_upload(m_data, "matches", match_id, s3_client)
+
+        t_data = lol_watcher.match.timeline_by_match(routing_region, match_id)
+        compress_and_upload(t_data, "timelines", match_id, s3_client)
+        return "SUCESSO"
+    except ApiError as e:
+        if e.response.status_code == 429: return "LIMIT"
+        return "ERRO"
+
+def fetch_high_elo_turbo(server, target_per_tier=250):
+    print(f"🌍 Iniciando Varredura Turbo em {server}...")
     lol_watcher = LolWatcher(RIOT_API_KEY)
     s3 = get_r2_client()
-    region = get_routing_region(server)
+    routing_region = get_routing_region(server)
 
-    # Adicionamos D3 e D4 para garantir a cobertura completa do High Elo
-    tiers_to_scan = [
-        ('CHALLENGER', None),
-        ('GRANDMASTER', None),
-        ('MASTER', None),
-        ('DIAMOND', 'I'),
-        ('DIAMOND', 'II'),
-        ('DIAMOND', 'III'),
-        ('DIAMOND', 'IV')
-    ]
+    tiers = ['CHALLENGER', 'GRANDMASTER', 'MASTER', 'DIAMOND']
 
-    matches_global = 0
+    for tier in tiers:
+        print(f"\n--- Camada: {tier} ---")
+        data = get_league_data(lol_watcher, server, tier)
+        if not data: continue
 
-    print(f"🚀 Iniciando Varredura Pesada em {server} | Meta: {target_per_tier} partidas POR ELO.")
+        entries = data['entries'] if isinstance(data, dict) else data
+        random.shuffle(entries)
 
-    for tier, division in tiers_to_scan:
-        tier_matches = 0 # Reseta o contador para o novo Elo!
-        nome_elo = f"{tier} {division if division else ''}".strip()
+        coletadas = 0
+        idx = 0
 
-        print(f"\n==================================================")
-        print(f"📂 Escavando Camada: {nome_elo}")
-        print(f"==================================================")
+        while coletadas < target_per_tier and idx < len(entries):
+            player = entries[idx]
+            s_id = player.get('summonerId') or player.get('summonerId')
+            if not s_id and 'summonerName' in player: s_id = player['summonerName']
 
-        try:
-            # Coleta a lista completa do Tier
-            if tier == 'CHALLENGER':
-                league_data = lol_watcher.league.challenger_by_queue(server, 'RANKED_SOLO_5x5')
-                players = league_data['entries']
-            elif tier == 'GRANDMASTER':
-                league_data = lol_watcher.league.grandmaster_by_queue(server, 'RANKED_SOLO_5x5')
-                players = league_data['entries']
-            elif tier == 'MASTER':
-                league_data = lol_watcher.league.masters_by_queue(server, 'RANKED_SOLO_5x5')
-                players = league_data['entries']
-            else:
-                players = lol_watcher.league.entries(server, 'RANKED_SOLO_5x5', tier, division)
+            try:
+                summ = lol_watcher.summoner.by_id(server, s_id)
+                m_list = lol_watcher.match.matchlist_by_puuid(routing_region, summ['puuid'], count=3, type="ranked")
 
-            print(f"✅ Lista obtida! {len(players)} jogadores em {nome_elo}.")
+                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                    results = list(executor.map(lambda mid: process_single_match(mid, routing_region, lol_watcher, s3), m_list))
 
-            for idx, player in enumerate(players):
-                # A grande mudança: A trava agora é por ELO!
-                if tier_matches >= target_per_tier:
-                    print(f"\n🎯 Meta de {target_per_tier} atingida para {nome_elo}! Avançando...")
-                    break
+                novas = results.count("SUCESSO")
+                coletadas += novas
+                print(f"✅ [{coletadas}/{target_per_tier}] Jogador {idx+1}: +{novas} partidas.")
 
-                s_id = player.get('summonerId')
-                puuid = player.get('puuid')
+                if "LIMIT" in results:
+                    print(f"⏳ Rate Limit! Pausando {RATE_LIMIT_PAUSE}s...")
+                    time.sleep(RATE_LIMIT_PAUSE)
+            except Exception:
+                pass
 
-                if not s_id and not puuid:
-                    continue
-
-                try:
-                    print(f"[{tier_matches}/{target_per_tier}] Analisando jogador {idx+1}/{len(players)}... ", end="\r")
-
-                    if not puuid and s_id:
-                        summoner_info = lol_watcher.summoner.by_id(server, s_id)
-                        puuid = summoner_info['puuid']
-                        time.sleep(1)
-
-                    match_ids = lol_watcher.match.matchlist_by_puuid(region, puuid, count=3, type="ranked")
-
-                    for m_id in match_ids:
-                        if tier_matches >= target_per_tier: break
-
-                        if check_file_exists(s3, "matches", m_id):
-                            continue
-
-                        m_data = lol_watcher.match.by_id(region, m_id)
-                        compress_and_upload(m_data, "matches", m_id, s3)
-
-                        t_data = lol_watcher.match.timeline_by_match(region, m_id)
-                        compress_and_upload(t_data, "timelines", m_id, s3)
-
-                        tier_matches += 1
-                        matches_global += 1
-                        time.sleep(1.2)
-
-                except ApiError as e:
-                    if e.response.status_code == 429:
-                        wait = int(e.response.headers.get('Retry-After', 10))
-                        print(f"\n⚠️ Limite de requisições! Pausando por {wait} segundos...")
-                        time.sleep(wait)
-                    continue
-                except Exception as e:
-                    continue
-
-        except ApiError as err:
-            print(f"\n❌ Erro ao acessar a liga {nome_elo}: {err}")
-
-    print(f"\n✨ Varredura finalizada no servidor {server}. Total geral: {matches_global} partidas injetadas.")
+            idx += 1
+            time.sleep(0.4)
 
 if __name__ == "__main__":
-    import time
-
-    # Configuração Global
-    servidores_alvo = ["BR1", "KR", "EUW1", "NA1"]
-    meta_por_elo = 250  # <-- 250 por cada um dos 7 elos!
-
-    print(f"🌍 Iniciando Varredura Global da Metis...")
-
-    for servidor in servidores_alvo:
-        fetch_high_elo_sequential(servidor, target_per_tier=meta_por_elo)
-        time.sleep(5)
-
-    print("\n🌐 Missão Global Concluída com Sucesso!")
+    fetch_high_elo_turbo("BR1", target_per_tier=250)
