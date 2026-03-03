@@ -1,0 +1,149 @@
+// ==========================================
+// Metis V1.3 - Camada Prata & Ouro (PostgreSQL Supabase)
+// Foco: Serviço de Luxo, Milestones e Análise de Combate
+// ==========================================
+
+// --- 1. ENTIDADES BASE ---
+Table pro_players {
+  id serial [primary key]
+  official_name varchar
+  team varchar
+  primary_role varchar
+  region varchar
+  is_active boolean
+}
+
+Table players {
+  puuid varchar [primary key]
+  pro_player_id int [ref: > pro_players.id, null]
+  game_name varchar
+  tag_line varchar
+  server varchar
+  tier varchar
+  last_updated timestamp
+}
+
+Table matches {
+  match_id varchar [primary key]
+  game_version varchar
+  game_duration int
+  queue_id int
+  end_type varchar
+  created_at timestamp
+}
+
+// --- 2. PARTICIPANTES E MÉTRICAS ---
+Table match_participants {
+  id bigserial [primary key]
+  match_id varchar [ref: > matches.match_id]
+  puuid varchar [ref: > players.puuid]
+  champion_name varchar
+  team_position varchar
+  win boolean
+
+  // Estatísticas Base (do seu not_challenges)
+  kills int
+  deaths int
+  assists int
+  gold_earned int
+  total_damage_dealt_to_champions int
+  damage_dealt_to_buildings int [note: 'Excelente para avaliar split pushers']
+  total_time_cc_dealt int
+  vision_score int
+
+  // Métricas de Destaque (do seu challenges)
+  solo_kills int
+  damage_per_minute float
+  kill_participation float
+  early_laning_phase_gold_exp_advantage float
+
+  // O Cofre do Takida: Tudo o que sobrar dos 'challenges' vem pra cá!
+  // O Supabase consegue fazer query dentro desse JSON via SQL
+  challenges jsonb [note: 'Dicionário com todas as outras 40+ métricas avançadas da Riot']
+}
+
+// --- 3. FOTOGRAFIAS TEMPORAIS (O "Quem fez o que aos 15 min") ---
+Table participant_snapshots {
+  id bigserial [primary key]
+  match_id varchar [ref: > matches.match_id]
+  puuid varchar [ref: > players.puuid]
+  timestamp_minute int [note: 'Ex: 10, 15, 20']
+
+  // A situação EXATA do jogador naquele minuto
+  level int
+  total_gold int
+  minions_killed int
+  jungle_minions_killed int
+  champion_damage_done int [note: 'Para saber quem estava dando mais dano aos 15min']
+  structure_damage_done int
+
+  // Diferenças vs Oponente Direto (Calculado pelo Takida)
+  gold_diff int
+  xp_diff int
+  cs_diff int
+}
+
+// --- 4. O MAPA DE CALOR (Eventos) ---
+Table critical_events {
+  id bigserial [primary key]
+  match_id varchar [ref: > matches.match_id]
+  timestamp int [note: 'Milissegundos desde o início']
+  event_type varchar [note: 'CHAMPION_KILL, DRAGON_KILL, BARON_KILL, TOWER_KILL']
+  primary_participant_id varchar [ref: > players.puuid]
+  position_x int
+  position_y int
+}
+
+// --- 5. O SERVIÇO DE LUXO: ANÁLISE DE MORTES ---
+Table death_analyses {
+  event_id bigint [primary key, ref: > critical_events.id]
+  victim_puuid varchar [ref: > players.puuid]
+  killer_puuid varchar [ref: > players.puuid]
+
+  // --- O Contexto do Jogo ---
+  game_phase varchar [note: 'LANING (<15m), MID_GAME (15-25m), LATE_GAME (>25m)']
+
+  // --- A Situação de Desvantagem ---
+  victim_level int
+  victim_gold int
+  enemies_involved int [note: '1 = Solo kill, 2 = Gank simples, 3+ = Collapse/Dive']
+  is_outnumbered boolean [note: 'A vítima e aliados próximos estavam em menor número?']
+  killers_stats jsonb [note: 'Array com PUUID, Level e Gold do assassino E de todas as assistências']
+
+  // --- O Contexto do Gank / Collapse ---
+  vision_score_local int [note: 'Havia wards do time da vítima perto da morte?']
+
+  // --- O Filme dos últimos 10 segundos ---
+  damage_received_last_10s int
+  cc_duration_last_10s float
+  summoner_spells_used jsonb [note: 'Ex: {"flash": true, "heal": false}']
+
+  // O Estado Geral do Mapa 1 min antes (Para a IA analisar o macro)
+  state_1_min_before jsonb
+
+  ai_avoidability_score int
+}
+
+// --- 6. O SERVIÇO DE LUXO: OBJETIVOS NEUTROS ---
+Table objective_analyses {
+  event_id bigint [primary key, ref: > critical_events.id]
+  objective_type varchar
+  team_id int
+  was_stolen boolean
+  teamfight_occurred boolean
+
+  // Preparação para o Objetivo
+  state_3_min_before jsonb
+  state_1_min_before jsonb
+}
+
+// --- 7. A BIBLIOTECA (NLP) ---
+Table champion_guides {
+  id serial [primary key]
+  champion_name varchar
+  author varchar
+  tier_filter varchar
+  chapter_title varchar
+  content text
+  embedding vector(1536)
+}
