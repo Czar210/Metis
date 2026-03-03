@@ -11,11 +11,15 @@ load_dotenv()
 # --- Conexões ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("❌ ERRO: Credenciais do Supabase não encontradas no arquivo .env!")
+
+supabase: Client = create_client(SUPABASE_URL or "", SUPABASE_KEY or "")
 
 def processar_partida_base(match_json_data):
     """
-    Processa o JSON bruto da Camada Bronze e insere nas tabelas 'matches' e 'match_participants'.
+    Processa o JSON bruto da Camada Bronze e insere nas tabelas 'players', 'matches' e 'match_participants'.
     """
     metadata = match_json_data.get("metadata", {})
     info = match_json_data.get("info", {})
@@ -39,10 +43,8 @@ def processar_partida_base(match_json_data):
     if info.get("gameEndedInEarlySurrender"):
         end_type = "early_ff"
     elif info.get("gameEndedInSurrender"):
-        # Se teve surrender, mas não foi early, é late_ff
         end_type = "late_ff"
 
-    # Preparando payload para a tabela 'matches'
     match_payload = {
         "match_id": match_id,
         "game_version": info.get("gameVersion"),
@@ -51,32 +53,49 @@ def processar_partida_base(match_json_data):
         "end_type": end_type
     }
 
-    # Inserindo/Atualizando a partida
-    supabase.table("matches").upsert(match_payload).execute()
+    try:
+        # Inserindo/Atualizando a partida (Tabela Pai)
+        supabase.table("matches").upsert(match_payload).execute()
+    except Exception as e:
+        print(f"❌ Erro ao inserir partida {match_id}: {e}")
+        return False
 
     # ---------------------------------------------------------
-    # 2. PROCESSAMENTO DOS PARTICIPANTES
+    # 2. PROCESSAMENTO DOS JOGADORES E PARTICIPANTES
     # ---------------------------------------------------------
     participants = info.get("participants", [])
+
+    players_payload = []
     participants_payload = []
 
     for p in participants:
-        # A) Lógica para identificar Quitters / AFK
-        # O cara jogou menos de 80% do tempo total da partida? Provável AFK.
+        puuid = p.get("puuid")
+
+        # --- A) Garantir que o Jogador existe no Banco ---
+        # Salvamos o jogador ANTES para não dar erro de Foreign Key
+        players_payload.append({
+            "puuid": puuid,
+            "game_name": p.get("riotIdGameName", "Desconhecido"),
+            "tag_line": p.get("riotIdTagline", "UNK")
+            # server e tier nós atualizamos em outros scripts
+        })
+
+        # --- B) Lógica de AFK e Extração ---
         time_played = p.get("timePlayed", game_duration)
         is_afk = p.get("teamEarlySurrendered", False) or (time_played < (game_duration * 0.8))
-
-        # B) Extração do "Cofre" (Challenges)
         challenges = p.get("challenges", {})
 
-        # C) Montagem da linha do jogador
+        # O PULO DO GATO: Guardamos o is_afk dentro do dicionário JSONB!
+        # Assim mantemos a tabela limpa, mas a informação continua salva pro modelo de IA.
+        challenges["is_afk"] = is_afk
+
+        # --- C) Montagem da linha do Participante ---
         participant_data = {
             "match_id": match_id,
-            "puuid": p.get("puuid"),
+            "puuid": puuid,
             "champion_name": p.get("championName"),
             "team_position": p.get("teamPosition"),
             "win": p.get("win"),
-            "is_afk": is_afk, # Nova métrica salva
 
             # KDA e Economia
             "kills": p.get("kills", 0),
@@ -96,26 +115,37 @@ def processar_partida_base(match_json_data):
             "kill_participation": challenges.get("killParticipation", 0.0),
             "early_laning_phase_gold_exp_advantage": challenges.get("earlyLaningPhaseGoldExpAdvantage", 0.0),
 
-            # O Cofre Completo em formato JSONB para a IA buscar o que quiser no futuro
+            # O Cofre (O Supabase lida com o JSONB e vai armazenar nosso 'is_afk' aqui dentro)
             "challenges": challenges
         }
         participants_payload.append(participant_data)
 
-    # Inserção em massa (Bulk Insert) para os 10 jogadores de uma vez só!
-    supabase.table("match_participants").upsert(participants_payload).execute()
+    try:
+        # 1º BULK INSERT: Cadastra ou atualiza os 10 jogadores no banco
+        supabase.table("players").upsert(players_payload).execute()
 
-    print(f"✅ {match_id}: Processada com sucesso! (Tipo: {end_type})")
-    return True
+        # 2º BULK INSERT: Agora sim inserimos as estatísticas da partida!
+        supabase.table("match_participants").upsert(participants_payload).execute()
 
-# --- Código de Teste (Simulando a leitura do R2) ---
+        print(f"✅ {match_id}: Processada com sucesso! (Tipo: {end_type})")
+        return True
+    except Exception as e:
+        print(f"❌ Erro ao inserir participantes da partida {match_id}: {e}")
+        return False
+
+# --- Código de Teste ---
 if __name__ == "__main__":
-    # Aqui, futuramente, você fará um loop baixando do R2 com o boto3
-    # Por enquanto, se você tiver um arquivo baixado localmente para teste:
-    caminho_teste = "caminho/para/uma/partida_de_teste.json.gz"
+    # Caminho base usando Raw String (r"") para evitar problemas no Windows
+    caminho_teste = r"C:\Users\cesar\Documents\GitHub\Metis\data\raw\matches_BR1_2907503741.json.gz"
 
     if os.path.exists(caminho_teste):
-        with gzip.open(caminho_teste, 'rt', encoding='utf-8') as f:
-            match_data = json.load(f)
-            processar_partida_base(match_data)
+        print(f"📂 Abrindo arquivo: {caminho_teste}")
+        try:
+            with gzip.open(caminho_teste, 'rt', encoding='utf-8') as f:
+                match_data = json.load(f)
+                processar_partida_base(match_data)
+        except Exception as e:
+            print(f"❌ Erro ao ler ou decodificar o arquivo: {e}")
     else:
-        print("Arquivo de teste não encontrado. Pronto para ser plugado no fluxo do R2.")
+        print(f"⚠️ O arquivo {caminho_teste} não foi encontrado.")
+        print("Certifique-se de que o caminho aponta para um .json.gz válido de Matches na sua máquina local.")
