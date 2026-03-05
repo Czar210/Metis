@@ -19,6 +19,25 @@ def get_champion_slug(champion_name):
         slug = slug.replace("--", "-")
     return slug
 
+def clean_text(raw_text):
+    """
+    Limpa tabulações e múltiplos espaços, mas AGORA PRESERVA as quebras de linha (\n).
+    Isso é crucial para manter listas (bullet points) e parágrafos organizados para a IA.
+    """
+    if not raw_text:
+        return ""
+
+    # Quebra o texto por linhas
+    linhas = raw_text.split('\n')
+
+    # Limpa os espaços extras dentro de cada linha
+    linhas_limpas = [' '.join(linha.split()) for linha in linhas]
+
+    # Remove as linhas que ficaram vazias e junta tudo de novo com 1 quebra de linha
+    texto_final = '\n'.join([linha for linha in linhas_limpas if linha])
+
+    return texto_final
+
 def get_elite_guide_urls(champion_name, page):
     slug = get_champion_slug(champion_name)
     print(f"\n🔎 Acessando o Diretório para: {champion_name}...")
@@ -52,13 +71,11 @@ def get_elite_guide_urls(champion_name, page):
         href = a_tag['href']
 
         if '/build/' in href and slug in href.lower():
-            link_text = a_tag.get_text(separator=' ', strip=True).lower()
-            if 'in-depth' in link_text or 'in depth' in link_text:
-                full_url = f"https://www.mobafire.com{href}" if href.startswith('/') else href
-                if full_url not in elite_urls:
-                    elite_urls.append(full_url)
-                    if len(elite_urls) >= 2:
-                        break
+            full_url = f"https://www.mobafire.com{href}" if href.startswith('/') else href
+            if full_url not in elite_urls:
+                elite_urls.append(full_url)
+                if len(elite_urls) >= 3:
+                    break
 
     return elite_urls
 
@@ -77,74 +94,73 @@ def scrape_mobafire_guide(url, champion_name, s3_client, page):
 
         soup = BeautifulSoup(page.content(), 'html.parser')
 
-        # --- FASE 0: EXTERMINADOR DE LIXO (Purificação do DOM) ---
-        # Antes de procurar o conteúdo, nós DELETAMOS tudo que é inútil do HTML.
+        # --- FASE 0: EXTERMINADOR DE LIXO ---
         lixos = [
             'footer', 'nav', 'script', 'style', 'iframe', 'noscript',
             '.mf-head', '.mf-footer', '#venatus-ad', '.ad-container',
             '.comment-list', '.guide-comments', '.social-share',
-            '.network-bar', '.more-guides'
+            '.network-bar', '.more-guides', '.champ-list', '.footer-links',
+            '.toc', '.guide-sidebar' # Limpa também a barra lateral de navegação
         ]
         for seletor in lixos:
             for node in soup.select(seletor):
-                node.decompose() # Destrói a tag do HTML
+                node.decompose()
 
         title_tag = soup.find('h1', class_='guide-main-title')
-        guide_title = title_tag.text.strip() if title_tag else "Sem Título"
+        guide_title = clean_text(title_tag.text) if title_tag else "Sem Título"
 
         author_tag = soup.find('span', class_='author-name')
-        author_name = author_tag.text.strip() if author_tag else "Desconhecido"
+        author_name = clean_text(author_tag.text) if author_tag else "Desconhecido"
 
         chapters_data = []
 
-        # --- REDE 1: Anotações Extras ---
-        for note in soup.find_all(['div', 'span'], class_=['build-text', 'champ-build__notes', 'matchup-notes', 'mf-redumb-content', 'notes']):
-            # Usando \n para manter parágrafos organizados em vez de bloco sólido
-            note_text = note.get_text(separator='\n', strip=True)
-            if len(note_text) > 40 and not any(note_text in c['content'] for c in chapters_data):
+        # --- REDE 1: Anotações Extras (Pequenas) ---
+        for note in soup.find_all(['div', 'span'], class_=['build-text', 'champ-build__notes', 'matchup-notes', 'notes']):
+            note_text = clean_text(note.get_text(separator='\n', strip=True))
+            # Relaxando o filtro de tamanho para pegar anotações mais curtas se houver
+            if len(note_text) > 20 and not any(note_text in c['content'] for c in chapters_data):
                 chapters_data.append({"title": "Anotações do Autor", "content": note_text})
 
-        # --- REDE 2: Capítulos (Suporta o Layout Antigo e o Layout Hiper Moderno) ---
+        # --- REDE 2: Capítulos (Suporta o Layout Antigo e o NOVO Layout) ---
+        # Removido a restrição que impedia o Arrastão (Rede 3) se a Rede 1 achasse algo.
+        capitulos_encontrados = False
         for chap in soup.find_all(['div', 'section'], class_=['guide-chapter', 'champ-build__section', 'view-guide__section']):
-            chap_title_tag = chap.find(['h2', 'h3', 'div'], class_=['champ-build__section__header', 'guide-chapter-title'])
+            chap_title_tag = chap.find(['h2', 'h3', 'div'], class_=['champ-build__section__header', 'guide-chapter-title', 'view-guide__section__title'])
             if not chap_title_tag:
                 chap_title_tag = chap.find(['h2', 'h3'])
 
-            chap_title = chap_title_tag.text.strip() if chap_title_tag else "Capítulo"
+            chap_title = clean_text(chap_title_tag.text) if chap_title_tag else "Capítulo"
 
-            text_block = chap.find(['div', 'article'], class_=['bbcode', 'champ-build__section__content', 'guide-chapter-content'])
+            text_block = chap.find(['div', 'article'], class_=['bbcode', 'champ-build__section__content', 'guide-chapter-content', 'view-guide__section__content', 'mf-redumb-content'])
             if text_block:
-                chap_text = text_block.get_text(separator='\n', strip=True)
+                chap_text = clean_text(text_block.get_text(separator='\n', strip=True))
             else:
-                chap_text = chap.get_text(separator='\n', strip=True)
-                if chap_title in chap_text:
-                    chap_text = chap_text.replace(chap_title, "", 1).strip()
+                raw_text = chap.get_text(separator='\n', strip=True)
+                if chap_title in raw_text:
+                    raw_text = raw_text.replace(chap_title, "", 1).strip()
+                chap_text = clean_text(raw_text)
 
-            if len(chap_text) > 50:
+            if len(chap_text) > 40: # Reduzido de 50 para 40
                 if not any(chap_text[:100] in c['content'] for c in chapters_data):
                     chapters_data.append({"title": chap_title, "content": chap_text})
+                    capitulos_encontrados = True
 
-        # --- REDE 3: O "Arrastão" (Se não achou capítulos formatados, cata os blocos soltos) ---
-        if not any(c['title'] != "Anotações do Autor" for c in chapters_data):
-            for block in soup.find_all('div', class_='bbcode'):
-                block_text = block.get_text(separator='\n', strip=True)
-                if len(block_text) > 100 and not any(block_text[:50] in c['content'] for c in chapters_data):
-                    chapters_data.append({"title": "Conteúdo Geral", "content": block_text})
+        # --- REDE 3: O "Arrastão" ---
+        # Agora roda INDEPENDENTE da Rede 1 (Anotações). Foca no conteúdo principal solto.
+        for block in soup.find_all('div', class_=['bbcode', 'mf-redumb-content']):
+            block_text = clean_text(block.get_text(separator='\n', strip=True))
 
-        # --- REDE 4: O MODO DESESPERO LIMPO (FORÇA BRUTA) ---
-        if not chapters_data:
-            print("    ⚠️ Redes normais falharam. Ativando Modo Desespero (Buscando texto bruto)...")
-            maior_bloco = ""
+            # Filtro mais inteligente: Se o texto for longo e NÃO estiver nos capítulos já encontrados
+            if len(block_text) > 80 and not any(block_text[:50] in c['content'] for c in chapters_data):
+                 # Tenta extrair um título provisório se houver tags <b> ou <strong> no início
+                 prov_title = "Conteúdo Geral"
+                 strong_tag = block.find(['b', 'strong', 'h3', 'h4'])
+                 if strong_tag:
+                     prov_title_text = clean_text(strong_tag.get_text(separator=' ', strip=True))
+                     if len(prov_title_text) < 50: # Evita títulos gigantes
+                         prov_title = prov_title_text
 
-            # Como purificamos o HTML na Fase 0, pegar o 'guide-main' ou o 'body' agora é muito mais seguro
-            main_content = soup.find('div', class_='guide-main') or soup.find('div', class_='guide-content')
-            if main_content:
-                maior_bloco = main_content.get_text(separator='\n', strip=True)
-            elif soup.body:
-                maior_bloco = soup.body.get_text(separator='\n', strip=True)
-
-            if len(maior_bloco) > 500:
-                chapters_data.append({"title": "Conteúdo Bruto (Recuperado na Força)", "content": maior_bloco})
+                 chapters_data.append({"title": prov_title, "content": block_text})
 
         if chapters_data:
             guide_package = {
@@ -178,20 +194,24 @@ def scrape_mobafire_guide(url, champion_name, s3_client, page):
                 print("    🛑 Execução Cancelada pelo Arquiteto. Traga os insights para o chat!")
                 return False
         else:
-            print("    ⚠️ Guia vazio (Não foi encontrado texto legível no DOM). Ignorando.")
+            print("    ⚠️ Guia estritamente visual (Sem textos longos explicativos). Ignorando para manter a qualidade da IA.")
             return True
 
     except Exception as e:
         print(f"    ❌ Falha ao extrair guia: {e}")
         return True
 
-def run_wisdom_ingestion():
+def run_specific_test():
+    """Modo Sniper: Testa apenas a URL da Ahri que o Arquiteto pediu."""
     s3 = get_r2_client()
     if not s3:
         print("❌ ERRO: Não foi possível conectar ao Cloudflare R2.")
         return
 
-    champions_to_scrape = ["Lee Sin", "Nidalee", "Elise"]
+    test_url = "https://www.mobafire.com/league-of-legends/build/26-5-pengs-ahri-guide-3-2mil-points-11x-challenger-648700"
+    champion = "Ahri"
+
+    print("🎯 Iniciando o Modo Sniper para testes diretos...")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
@@ -200,21 +220,11 @@ def run_wisdom_ingestion():
         )
         page = context.new_page()
 
-        for champ in champions_to_scrape:
-            urls = get_elite_guide_urls(champ, page)
-            if not urls:
-                print(f"🤷‍♀️ Nenhum guia Elite encontrado para {champ}.")
-                continue
-
-            for url in urls:
-                continuar = scrape_mobafire_guide(url, champ, s3, page)
-                if not continuar:
-                    print("\n🔌 Fechando o navegador para depuração...")
-                    browser.close()
-                    return
-                time.sleep(5)
+        scrape_mobafire_guide(test_url, champion, s3, page)
 
         browser.close()
 
 if __name__ == "__main__":
-    run_wisdom_ingestion()
+    # Trocamos para rodar o modo Sniper. Quando quiser a varredura total,
+    # basta trocar para run_wisdom_ingestion() novamente!
+    run_specific_test()
