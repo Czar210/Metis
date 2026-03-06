@@ -26,7 +26,8 @@ def get_league_data(lol_watcher, server, tier):
             if tier == 'CHALLENGER': return lol_watcher.league.challenger_by_queue(server, 'RANKED_SOLO_5x5')
             if tier == 'GRANDMASTER': return lol_watcher.league.grandmaster_by_queue(server, 'RANKED_SOLO_5x5')
             if tier == 'MASTER': return lol_watcher.league.masters_by_queue(server, 'RANKED_SOLO_5x5')
-            if tier == 'DIAMOND': return lol_watcher.league.entries_by_rank(server, 'RANKED_SOLO_5x5', 'DIAMOND', 'I')
+            # CORREÇÃO AQUI: O método correto é 'entries', não 'entries_by_rank'
+            if tier == 'DIAMOND': return lol_watcher.league.entries(server, 'RANKED_SOLO_5x5', 'DIAMOND', 'I')
         except ApiError as e:
             if e.response.status_code == 403:
                 print("❌ ERRO 403: SUA CHAVE DA RIOT EXPIROU!")
@@ -74,6 +75,11 @@ def fetch_high_elo_turbo(server, target_per_tier=250):
             continue
 
         entries = data['entries'] if isinstance(data, dict) else data
+
+        # O método 'entries' do Diamante às vezes retorna uma lista direta, precisamos tratar
+        if type(data) is list:
+            entries = data
+
         print(f"📊 Encontrados {len(entries)} jogadores na liga {tier}!")
         random.shuffle(entries)
 
@@ -83,20 +89,19 @@ def fetch_high_elo_turbo(server, target_per_tier=250):
         while coletadas < target_per_tier and idx < len(entries):
             player = entries[idx]
 
-            # --- CORREÇÃO DE ARQUITETURA AQUI ---
-            # Pegamos PUUID ou SummonerId com segurança. Se não vier nenhum, pulamos.
+            # Pegamos PUUID ou SummonerId com segurança
             puuid = player.get('puuid')
             s_id = player.get('summonerId')
 
             try:
-                # Se a Riot não deu o puuid, mas deu o ID, buscamos o puuid
+                # Se a Riot não deu o puuid, buscamos usando o summonerId
                 if not puuid and s_id:
                     summ = lol_watcher.summoner.by_id(server, s_id)
                     puuid = summ['puuid']
 
-                # Se mesmo assim o PUUID for nulo (conta banida, apagada, bug da Riot), a gente pula!
+                # Se ainda assim não tiver, pulamos
                 if not puuid:
-                    print(f"👻 Jogador {idx+1} é um fantasma (Sem ID). Pulando...", end="\r")
+                    print(f"👻 Jogador {idx+1} é um fantasma. Pulando...", end="\r")
                     idx += 1
                     continue
 
