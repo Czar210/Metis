@@ -3,12 +3,12 @@ name: 📚 Ingestão de Guias (Mobafire)
 on:
   workflow_dispatch: # Permite rodar clicando no botão "Run workflow"
   schedule:
-    - cron: '0 4 * * 0' # Roda às 04:00 da manhã de todo Domingo (UTC)
+    - cron: '0 4 */3 * *' # Roda às 04:00 UTC a cada 3 dias
 
 jobs:
   scrape-wisdom:
     runs-on: ubuntu-latest
-    timeout-minutes: 180 # Dá 3 horas de limite, pois raspar web é mais lento
+    timeout-minutes: 240 # 4h — 172 campeões × 2 guias (~50s/guia estimado)
 
     steps:
       - name: 📥 Clonar Repositório
@@ -17,7 +17,7 @@ jobs:
       - name: 🐍 Configurar Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Mesma versão que o seu servidor usa
+          python-version: '3.12'
 
       - name: 📦 Instalar Dependências do Python
         run: |
@@ -27,14 +27,22 @@ jobs:
       - name: 🌐 Instalar Navegador (Playwright)
         run: |
           playwright install chromium
-          playwright install-deps # Crucial no GitHub Actions para não dar erro de biblioteca Linux faltando
+          playwright install-deps
 
-      - name: 🚀 Executar Infiltrador do Mobafire
+      - name: 💾 Restaurar cache de URLs visitadas
+        uses: actions/cache@v4
+        with:
+          path: data/raw/guides_preview/_visited_urls.json
+          # Chave muda a cada run para sempre salvar a versão mais nova
+          key: visited-urls-${{ github.run_id }}
+          restore-keys: |
+            visited-urls-
+
+      - name: 🚀 Executar Infiltrador do Mobafire (todos os 172 campeões)
         env:
-          # Mapeamento exato dos Secrets que você já cadastrou!
           CLOUDFLARE_R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_R2_ACCOUNT_ID }}
           CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
           CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
           CLOUDFLARE_R2_BUCKET_NAME: ${{ secrets.CLOUDFLARE_R2_BUCKET_NAME }}
         run: |
-          python -m scripts.ingestion.fetch_guides
+          python -m scripts.ingestion.fetch_guides --auto --headless --guides 2
