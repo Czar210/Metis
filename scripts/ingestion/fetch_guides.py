@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 from dotenv import load_dotenv
 
-from scripts.ingestion.fetch_matches import (
+from scripts.utils.r2_storage import (
     get_r2_client,
     compress_and_upload
 )
