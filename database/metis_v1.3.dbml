@@ -57,7 +57,6 @@ Table match_participants {
   kill_participation float
   early_laning_phase_gold_exp_advantage float
 
-  // O Cofre do Takida: Tudo o que sobrar dos 'challenges' vem pra cá!
   // O Supabase consegue fazer query dentro desse JSON via SQL
   challenges jsonb [note: 'Dicionário com todas as outras 40+ métricas avançadas da Riot']
 }
