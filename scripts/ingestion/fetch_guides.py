@@ -17,12 +17,12 @@ BUCKET_NAME = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
 def prepare_for_vectorization(text):
     """
     Limpa o texto para uso em modelos de embedding/vetorização.
-    Problema principal: o BeautifulSoup gera \\n ao redor de tags <a>/<strong>
+    Problema principal: o BeautifulSoup gera \n ao redor de tags <a>/<strong>
     que envolvem nomes de campeões e itens, quebrando frases no meio.
 
     Estratégia:
-    - \\n entre texto contínuo (sem pontuação antes/depois) → colapsa em espaço
-    - \\n após pontuação real (. ! ? :) ou bullet-like → mantém como separador
+    - \n entre texto contínuo (sem pontuação antes/depois) → colapsa em espaço
+    - \n após pontuação real (. ! ? :) ou bullet-like → mantém como separador
     - Remove espaços duplos e normaliza ao final
     """
     if not text:
@@ -293,7 +293,7 @@ def run_wisdom_ingestion(champions=None, guides_per_champion=2, headless=False, 
         return
 
     visited = load_visited_urls()
-    print(f"   URLs já visitadas (histórico): {len(visited)}")
+    print(f"  URLs já visitadas (histórico): {len(visited)}")
 
     # --- Monta a lista de campeões ---
     if champions is None:
@@ -304,7 +304,7 @@ def run_wisdom_ingestion(champions=None, guides_per_champion=2, headless=False, 
 
     total = len(champions)
     print(f"\n🏛️  Iniciando ingestão de guias — {total} campeão(s) / {guides_per_champion} guia(s) cada.")
-    print(f"   Total máx de guias: {total * guides_per_champion}\n")
+    print(f"  Total máx de guias: {total * guides_per_champion}\n")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
@@ -345,16 +345,10 @@ if __name__ == "__main__":
 
     args = sys.argv[1:]
 
-    # Uso:
-    #   python -m scripts.ingestion.fetch_guides                               → interativo (todos os 172)
-    #   python -m scripts.ingestion.fetch_guides --auto                        → todos os 172, 5 guias, sem confirmação
-    #   python -m scripts.ingestion.fetch_guides --auto --limit 10             → primeiros 10, 5 guias
-    #   python -m scripts.ingestion.fetch_guides --auto --guides 3 --limit 10  → primeiros 10, 3 guias
-    #   python -m scripts.ingestion.fetch_guides --auto Ahri Zed "Lee Sin"     → campeões específicos, 5 guias
-    #   python -m scripts.ingestion.fetch_guides --auto --guides 1 Ahri        → 1 guia só
-
     auto = '--auto' in args
     headless = '--headless' in args
+
+    # Remove as flags da lista de argumentos
     args = [a for a in args if a not in ('--auto', '--headless')]
 
     # --guides N  (padrão: 2)
@@ -364,17 +358,9 @@ if __name__ == "__main__":
         n_guias = int(args[gi + 1])
         args = args[:gi] + args[gi + 2:]
 
-    if not args:
-        resposta = input("🎯 Campeões (separados por vírgula) ou Enter para TODOS: ").strip()
-        if resposta:
-            champion_list = [c.strip() for c in resposta.split(',') if c.strip()]
-        else:
-            champion_list = None  # todos
-        if not auto:
-            ng = input("📖 Quantos guias por campeão? [1-10, padrão=2]: ").strip()
-            n_guias = int(ng) if ng.isdigit() else n_guias
+    champion_list = None
 
-    elif '--limit' in args:
+    if '--limit' in args:
         idx = args.index('--limit')
         limit = int(args[idx + 1])
         champ_file = os.path.join("data", "static", "champion.json")
@@ -382,8 +368,26 @@ if __name__ == "__main__":
             all_champs = [v['name'] for v in json.load(f)['data'].values()]
         champion_list = all_champs[:limit]
 
-    else:
-        # Argumentos posicionais são os nomes dos campeões
+    elif len(args) > 0:
+        # Se sobraram argumentos, eles são os nomes dos campeões específicos
         champion_list = args
+
+    else:
+        # Se NÃO tem argumentos na linha de comando além das flags...
+        if auto:
+            # Modo CI/CD: assume TODOS os campeões silenciosamente
+            print("🤖 Modo AUTO ativado. Processando todos os campeões.")
+            champion_list = None
+        else:
+            # Modo Interativo (Manual): pergunta ao usuário
+            resposta = input("🎯 Campeões (separados por vírgula) ou Enter para TODOS: ").strip()
+            if resposta:
+                champion_list = [c.strip() for c in resposta.split(',') if c.strip()]
+            else:
+                champion_list = None  # todos
+
+            ng = input(f"📖 Quantos guias por campeão? [1-10, padrão={n_guias}]: ").strip()
+            if ng.isdigit():
+                n_guias = int(ng)
 
     run_wisdom_ingestion(champions=champion_list, guides_per_champion=n_guias, headless=headless, auto_upload=auto)
