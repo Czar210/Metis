@@ -72,3 +72,44 @@ async def update_history(req: UpdateHistoryRequest):
 
     except Exception as err:
         raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+
+class SyncRequest(BaseModel):
+    """Corpo da requisição para sincronizar o jogador pelo Riot ID unificado."""
+    riot_id: str = Field(..., examples=["Zaras#0210", "Monochaco#BR1"], description="Nome completo com tag")
+    server: str = Field(default="BR1", examples=["BR1", "EUW1", "NA1"], description="Servidor")
+    count: int = Field(default=10, ge=1, le=20, description="Quantidade de partidas")
+
+@router.post("/sync")
+async def sync_player(req: SyncRequest):
+    """
+    🔄 Sincronizar Jogador (atalho)
+    Faz exatamente a mesma coisa que update-history, mas recebe o riot_id 
+    no formato unificado 'Nome#Tag'.
+    """
+    if "#" not in req.riot_id:
+        raise HTTPException(status_code=400, detail="Formato inválido. O riot_id deve ser no formato Nome#Tag.")
+        
+    nick, tag = req.riot_id.split("#", 1)
+    
+    try:
+        resultado = atualizar_historico(
+            game_name=nick.strip(),
+            tag_line=tag.strip(),
+            server=req.server,
+            count=req.count,
+        )
+        return resultado
+
+    except ApiError as err:
+        status = err.response.status_code
+        if status == 429:
+            raise HTTPException(status_code=429, detail="Rate limit atingido. Tente novamente em breve.")
+        if status == 404:
+            raise HTTPException(status_code=404, detail=f"Jogador '{req.riot_id}' não encontrado em {req.server}.")
+        raise HTTPException(status_code=502, detail=f"Erro na Riot API: {err}")
+
+    except RuntimeError as err:
+        raise HTTPException(status_code=500, detail=str(err))
+
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")

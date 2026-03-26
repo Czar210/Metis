@@ -26,7 +26,10 @@ def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
     """Busca as partidas de um jogador específico para o Backend."""
     if not RIOT_API_KEY:
         print("❌ RIOT_API_KEY não encontrada no .env!")
-        return False
+        return {"status": "error", "error": "RIOT_API_KEY não encontrada no .env!"}
+
+    if tag_line.startswith("#"):
+        tag_line = tag_line[1:]
 
     riot_watcher = RiotWatcher(RIOT_API_KEY)
     lol_watcher = LolWatcher(RIOT_API_KEY)
@@ -44,7 +47,7 @@ def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
 
         if not match_history:
             print("🤷‍♂️ Nenhuma partida ranqueada encontrada.")
-            return True
+            return {"status": "success", "message": "Nenhuma partida ranqueada encontrada."}
 
         for index, match_id in enumerate(match_history, start=1):
             if check_file_exists(s3_client, "matches", match_id):
@@ -58,13 +61,19 @@ def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
             compress_and_upload(timeline_data, "timelines", match_id, s3_client)
             time.sleep(1.5)
 
-        return True
+        return {"status": "success", "message": f"{len(match_history)} partidas processadas com sucesso."}
 
     except ApiError as err:
         if err.response.status_code == 429:
             print("⚠️ Rate Limit da Riot atingido!")
+            error_msg = "Rate Limit da Riot atingido!"
         elif err.response.status_code == 404:
             print("❌ Jogador ou partida não encontrados.")
+            error_msg = "Jogador ou partida não encontrados."
+        elif err.response.status_code == 403:
+            print("❌ Api Key expirada ou inválida.")
+            error_msg = "Riot API Key expirada ou inválida."
         else:
             print(f"❌ Erro na Riot API: {err}")
-        return False
+            error_msg = f"Erro na Riot API: {err}"
+        return {"status": "error", "error": error_msg}

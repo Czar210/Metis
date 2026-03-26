@@ -131,3 +131,42 @@ Arquivos impactados: backend/api/routes/player.py, backend/api/__init__.py, back
 
 ### Lógica de negócio por trás
 - Fornece o contrato base onde a experiência do usuário de atualizar os próprios dados da Riot se baseia. A integridade do serviço depende dessa rota responder de maneira confiável e descritiva.
+
+## 9) Backend - Novo endpoint de sincronização simplificada (/sync)
+Arquivo impactado: backend/api/routes/player.py
+
+### O que foi alterado
+- Criado o novo endpoint `POST /api/v1/player/sync`.
+- Aceita um payload com um único campo `riot_id` no formato combinado `Nome#Tag` (ex: `Monochaco#BR1`).
+- Instancia o `atualizar_historico` parseando automaticamente esse `riot_id`.
+
+### Por que essa alteração foi feita
+- Ter endpoints recebendo campos complexos separados dificulta conexões via Webhooks ou Chatbots simples onde frequentemente a extração de linguagem natural capta o ID do LoL como uma string só.
+
+### Lógica de negócio por trás
+- Tornar a API mais resiliente e flexível para os futuros clientes e integrações do agente que operará a base de dados do Metis via linguagem natural.
+
+## 10) Debugging - Correções no Fetch de Partidas e Bypass de Storage Local
+Arquivos impactados: backend/main.py, scripts/ingestion/fetch_matches.py
+
+### O que foi alterado
+- A função que engatilhava o fetch antigo (`fetch_player_matches`) foi refatorada para retornar um Dicionário ao invés de Booleano (corrigindo `500 Server Error`).
+- Resolvido impedimento de `#` duplo bloqueando as chamadas 404 da Riot.
+- Remoção do erro travante (raise 500) caso as credenciais da Cloudflare R2 faltassem no ambiente local (`.env`). Substituído por um aviso não impeditivo no console.
+
+### Por que essa alteração foi feita
+- Desenvolvedores precisam testar as integrações básicas (chamadas da Riot) sem precisarem obrigatoriamente criar ou ter acesso à infraestrutura pesada em nuvem (Cloudflare).
+- Garantir que erros simples (como passar Hash numa API REST) não custem valioso tempo de debug do projeto principal.
+
+## 11) Backend - Atualização da Regra de Negócios (Camada Prata)
+Arquivo impactado: backend/services/riot_service.py
+
+### O que foi alterado
+- O limite mínimo de tempo (`game_duration`) para que uma partida seja salva no banco de dados do Metis subiu de `190` segundos (3m10s) para `900` segundos (15m00s).
+
+### Por que essa alteração foi feita
+- Antigamente o script descartava puramente partidas identificadas matematicamente como Remake/Drop de Servidor. 
+- A nova regra de negócio visa limpar ainda mais o pipeline do Supabase, descartando qualquer partida "curta demais" (inferior a 15 minutos), já que partidas ranqueadas competitivas que acabam em menos tempo que isso geralmente sofrem de distorções severas de métricas de KDA/Visão (ex: open mid, griefing explícito).
+
+### Lógica de negócio por trás
+- Alimentar o banco (e consequentemente o agente de IA e os painéis de análise tática) exclusivamente com amostras onde o jogador experimentou uma verdadeira fase de rotas ou um jogo normal. Dados de partidas relâmpago costumam envenenar a média histórica de desempenho.

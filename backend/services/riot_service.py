@@ -81,9 +81,9 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
 
     game_duration = info.get("gameDuration", 0)
 
-    # Filtro anti-ruído: remakes / quedas de servidor
-    if game_duration < 190:
-        return {"saved": False, "reason": f"Remake/queda ({game_duration}s)"}
+    # Filtro anti-ruído: remakes / partidas curtas (< 15 min)
+    if game_duration < 900:
+        return {"saved": False, "reason": f"Partida muito curta / Remake ({game_duration}s)"}
 
     end_type = _classificar_tipo_final(info)
 

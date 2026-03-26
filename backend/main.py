@@ -53,7 +53,7 @@ async def ingest_matches(req: MatchRequest):
     """
     s3 = get_r2_client()
     if not s3:
-        raise HTTPException(status_code=500, detail="Erro ao conectar com o Storage (R2).")
+        print("⚠️ Aviso: S3/R2 client não configurado. Partidas serão buscadas da Riot mas não salvas no bucket.")
 
     resultado = fetch_player_matches(
         game_name=req.nick,
