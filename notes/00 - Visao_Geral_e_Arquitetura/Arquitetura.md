@@ -1,6 +1,12 @@
 ---
-aliases: [Arquitetura, Arquitetura do Sistema, Arquitetura Metis, Stack]
+aliases:
+  - Arquitetura
+  - Arquitetura do Sistema
+  - Arquitetura Metis
+  - Stack
 ---
+
+
 A **Arquitetura** do projeto Metis foi desenhada para ser um ecossistema completo de ponta a ponta, unindo Engenharia de Dados robusta com Inteligência Artificial. Ela utiliza o padrão [[Arquitetura Medalhão]] para garantir que os dados fluam da fonte original até o usuário final com segurança, rapidez e baixíssimo custo.
 
 O sistema é dividido em quatro grandes pilares funcionais:
