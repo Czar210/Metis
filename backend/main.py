@@ -39,6 +39,9 @@ class MatchRequest(BaseModel):
     server: str
     count: int
 
+class ChatRequest(BaseModel):
+    mensagem: str
+
 @app.post("/api/v1/ingestion/fetch-matches")
 async def ingest_matches(req: MatchRequest):
     """
@@ -49,7 +52,6 @@ async def ingest_matches(req: MatchRequest):
     if not s3:
         raise HTTPException(status_code=500, detail="Erro ao conectar com o Storage (R2).")
 
-    # Chama o motor que já deixamos pronto e inteligente
     resultado = fetch_player_matches(
         game_name=req.nick,
         tag_line=req.tag,
@@ -62,6 +64,19 @@ async def ingest_matches(req: MatchRequest):
         raise HTTPException(status_code=400, detail=resultado.get("error"))
 
     return resultado
+
+@app.post("/api/v1/chat")
+async def chat(req: ChatRequest):
+    """
+    Endpoint do chat interativo com a IA Metis.
+    Recebe a mensagem do usuário e retorna a resposta do agente.
+    TODO: Integrar com Ollama (Llama 3) + pipeline RAG (Pinecone).
+    """
+    # Esqueleto — será substituído pela chamada real ao agente de IA
+    return {
+        "resposta": f"[Metis IA] Recebi sua mensagem: '{req.mensagem}'. Agente ainda não conectado.",
+        "status": "skeleton"
+    }
 
 @app.get("/api/v1/health")
 def health_check():
