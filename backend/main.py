@@ -10,6 +10,9 @@ app = FastAPI(
     version="0.1.0"
 )
 
+from backend.api.routes import player
+app.include_router(player.router)
+
 # ── CORS ──────────────────────────────────────────────────────────────
 # Origens permitidas: variável de ambiente ou padrões de desenvolvimento.
 # Em produção, defina CORS_ORIGINS="https://metis.vercel.app" (ou o domínio real).

@@ -98,3 +98,36 @@ Arquivo impactado: backend/main.py
 ### Lógica de negócio por trás
 - O chat interativo é uma das features pagas do Metis (objetivo #5 do projeto).
 - Ter a rota pronta permite desenvolvimento paralelo: frontend consome o stub enquanto o AI Engineer implementa o agente real.
+
+## 7) Backend - Serviço de Integração Riot API + Supabase
+Arquivos impactados: backend/services/riot_service.py e backend/services/__init__.py
+
+### O que foi alterado
+- Criado o arquivo `riot_service.py` isolando a lógica de negócio que orquestra RiotWatcher e Supabase.
+- Movemos toda a triagem "Prata" (filtragem de remakes, tempo de partida, AFK status) para dentro de funções como `_processar_e_salvar()`.
+- Cria a função principal `atualizar_historico()` que busca o PUUID, filtra partidas velhas/repetidas, consome as API oficiais e salva em Bulk no Supabase as partidas e participantes.
+
+### Por que essa alteração foi feita
+- Ter lógica complexa dentro da *rota* (`main.py` ou `player.py`) é um antipadrão. Criar um "serviço" deixa o código mais limpo e desacoplado.
+- Os scripts originais rodavam leitura de JSONs `.gz` locais. Precisávamos da mesma lógica convertida para lidar diretamente com o retorno real da API para uso _on-demand_.
+
+### Lógica de negócio por trás
+- Automatiza a atualização perfeitamente para quando o usuário clicar no botão "Atualizar Histórico" na plataforma Metis.
+- Evita estourar o banco de dados e duplicar dados realizando checagem de existência (`_match_exists`).
+
+## 8) Backend - Rota de Player e Integração no main.py
+Arquivos impactados: backend/api/routes/player.py, backend/api/__init__.py, backend/api/routes/__init__.py e backend/main.py
+
+### O que foi alterado
+- Criada a rota `POST /api/v1/player/update-history` usando `APIRouter`.
+- A rota valida os inputs usando `UpdateHistoryRequest` (Pydantic com `nick`, `tag`, `server`, `count`).
+- A rota consome a função `atualizar_historico()` do nosso novo modulo `riot_service`.
+- Inclusão de tratamento elegante de erros (`Rate Limit 429`, `Not Found 404`).
+- Registrado (app.include_router) no arquivo principal `backend/main.py`.
+
+### Por que essa alteração foi feita
+- Expor a funcionalidade para o Frontend em um formato JSON limpo e amigável.
+- Tratamento explícito de erros HTTP para garantir que o cliente (Next.js) mostre mensagens corretas ao usuário nos casos de limite de rate ou summoner não existente.
+
+### Lógica de negócio por trás
+- Fornece o contrato base onde a experiência do usuário de atualizar os próprios dados da Riot se baseia. A integridade do serviço depende dessa rota responder de maneira confiável e descritiva.
