@@ -1,4 +1,6 @@
+import os
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from scripts.ingestion.fetch_matches import fetch_player_matches, get_r2_client
 
@@ -6,6 +8,28 @@ app = FastAPI(
     title="Metis API",
     description="Interface de Ingestão de Dados para a IA Metis",
     version="0.1.0"
+)
+
+# ── CORS ──────────────────────────────────────────────────────────────
+# Origens permitidas: variável de ambiente ou padrões de desenvolvimento.
+# Em produção, defina CORS_ORIGINS="https://metis.vercel.app" (ou o domínio real).
+_default_origins = [
+    "http://localhost:3000",       # Next.js dev server
+    "http://localhost:3001",       # fallback dev port
+]
+_env_origins = os.getenv("CORS_ORIGINS", "")
+allowed_origins = (
+    [o.strip() for o in _env_origins.split(",") if o.strip()]
+    if _env_origins
+    else _default_origins
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # O "Contrato" de entrada
