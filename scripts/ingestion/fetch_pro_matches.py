@@ -113,9 +113,12 @@ def fetch_pro_matches(target_matches_per_account=2):
                 for m_id in match_ids:
                     if not check_file_exists(s3, "matches", m_id):
                         m_data = lol_watcher.match.by_id(continente, m_id)
-                        compress_and_upload(m_data, "matches", m_id, s3)
+                        if not compress_and_upload(m_data, "matches", m_id, s3):
+                            print(f"    ⚠️ Falha no upload de match {m_id}, pulando timeline.")
+                            continue
                         t_data = lol_watcher.match.timeline_by_match(continente, m_id)
-                        compress_and_upload(t_data, "timelines", m_id, s3)
+                        if not compress_and_upload(t_data, "timelines", m_id, s3):
+                            print(f"    ⚠️ Falha no upload de timeline {m_id}.")
                         time.sleep(1.2)
 
                 print(f"  🎯 Partidas capturadas!")

@@ -45,10 +45,13 @@ def process_single_match(match_id, routing_region, lol_watcher, s3_client):
         return "EXISTE"
     try:
         m_data = lol_watcher.match.by_id(routing_region, match_id)
-        compress_and_upload(m_data, "matches", match_id, s3_client)
+        ok_match = compress_and_upload(m_data, "matches", match_id, s3_client)
 
         t_data = lol_watcher.match.timeline_by_match(routing_region, match_id)
-        compress_and_upload(t_data, "timelines", match_id, s3_client)
+        ok_timeline = compress_and_upload(t_data, "timelines", match_id, s3_client)
+
+        if not ok_match or not ok_timeline:
+            return "ERRO"
         return "SUCESSO"
     except ApiError as e:
         if e.response.status_code == 429: return "LIMIT"

@@ -45,7 +45,9 @@ def _get_routing_region(server: str) -> str:
         return "europe"
     if server in ["KR", "JP1"]:
         return "asia"
-    return "sea"
+    if server in ["OC1", "PH2", "SG2", "TH2", "TW2", "VN2"]:
+        return "sea"
+    raise ValueError(f"Servidor desconhecido: '{server}'. Valores válidos: BR1, NA1, LA1, LA2, EUW1, EUN1, TR1, RU, KR, JP1, OC1, PH2, SG2, TH2, TW2, VN2")
 
 
 def _match_exists(supabase: Client, match_id: str) -> bool:

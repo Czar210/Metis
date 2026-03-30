@@ -88,8 +88,11 @@ async def sync_player(req: SyncRequest):
     """
     if "#" not in req.riot_id:
         raise HTTPException(status_code=400, detail="Formato inválido. O riot_id deve ser no formato Nome#Tag.")
-        
+
     nick, tag = req.riot_id.split("#", 1)
+
+    if not nick.strip() or not tag.strip():
+        raise HTTPException(status_code=400, detail="Formato inválido. Nome e Tag não podem ser vazios.")
     
     try:
         resultado = atualizar_historico(

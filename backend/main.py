@@ -1,8 +1,17 @@
+import logging
 import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+
 from scripts.ingestion.fetch_matches import fetch_player_matches, get_r2_client
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Metis API",
@@ -53,7 +62,7 @@ async def ingest_matches(req: MatchRequest):
     """
     s3 = get_r2_client()
     if not s3:
-        print("⚠️ Aviso: S3/R2 client não configurado. Partidas serão buscadas da Riot mas não salvas no bucket.")
+        logger.warning("S3/R2 client não configurado — partidas não serão salvas no bucket.")
 
     resultado = fetch_player_matches(
         game_name=req.nick,

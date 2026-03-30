@@ -1,7 +1,10 @@
+import logging
 import os
 import time
 from riotwatcher import LolWatcher, RiotWatcher, ApiError
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Re-exporta utilitários R2 para manter compatibilidade com imports existentes
 from scripts.utils.r2_storage import get_r2_client, check_file_exists, compress_and_upload  # noqa: F401
@@ -25,7 +28,7 @@ def get_routing_region(server):
 def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
     """Busca as partidas de um jogador específico para o Backend."""
     if not RIOT_API_KEY:
-        print("❌ RIOT_API_KEY não encontrada no .env!")
+        logger.error("RIOT_API_KEY não encontrada no .env")
         return {"status": "error", "error": "RIOT_API_KEY não encontrada no .env!"}
 
     if tag_line.startswith("#"):
@@ -36,44 +39,47 @@ def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
     routing_region = get_routing_region(server)
 
     try:
-        print(f"\n🔍 Buscando PUUID de {game_name}#{tag_line} no servidor {server}...")
+        logger.info("Buscando PUUID de %s#%s no servidor %s", game_name, tag_line, server)
         account = riot_watcher.account.by_riot_id(routing_region, game_name, tag_line)
         puuid = account['puuid']
 
-        print(f"✅ PUUID encontrado! Buscando últimas {count} partidas...")
+        logger.info("PUUID encontrado — buscando últimas %d partidas", count)
         match_history = lol_watcher.match.matchlist_by_puuid(
             routing_region, puuid, count=count, type="ranked"
         )
 
         if not match_history:
-            print("🤷‍♂️ Nenhuma partida ranqueada encontrada.")
+            logger.info("Nenhuma partida ranqueada encontrada")
             return {"status": "success", "message": "Nenhuma partida ranqueada encontrada."}
 
         for index, match_id in enumerate(match_history, start=1):
             if check_file_exists(s3_client, "matches", match_id):
-                print(f"  ⏭️ Partida {match_id} já existe no R2. Pulando.")
+                logger.debug("Partida %s já existe no R2, pulando", match_id)
                 continue
 
             match_data = lol_watcher.match.by_id(routing_region, match_id)
-            compress_and_upload(match_data, "matches", match_id, s3_client)
+            if not compress_and_upload(match_data, "matches", match_id, s3_client):
+                logger.warning("Falha no upload de match %s, pulando timeline", match_id)
+                continue
 
             timeline_data = lol_watcher.match.timeline_by_match(routing_region, match_id)
-            compress_and_upload(timeline_data, "timelines", match_id, s3_client)
+            if not compress_and_upload(timeline_data, "timelines", match_id, s3_client):
+                logger.warning("Falha no upload de timeline %s", match_id)
             time.sleep(1.5)
 
         return {"status": "success", "message": f"{len(match_history)} partidas processadas com sucesso."}
 
     except ApiError as err:
         if err.response.status_code == 429:
-            print("⚠️ Rate Limit da Riot atingido!")
+            logger.warning("Rate Limit da Riot atingido")
             error_msg = "Rate Limit da Riot atingido!"
         elif err.response.status_code == 404:
-            print("❌ Jogador ou partida não encontrados.")
+            logger.warning("Jogador ou partida não encontrados")
             error_msg = "Jogador ou partida não encontrados."
         elif err.response.status_code == 403:
-            print("❌ Api Key expirada ou inválida.")
+            logger.error("Riot API Key expirada ou inválida")
             error_msg = "Riot API Key expirada ou inválida."
         else:
-            print(f"❌ Erro na Riot API: {err}")
+            logger.error("Erro na Riot API: %s", err)
             error_msg = f"Erro na Riot API: {err}"
         return {"status": "error", "error": error_msg}

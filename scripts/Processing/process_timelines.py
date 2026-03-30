@@ -10,9 +10,9 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    print("❌ ERRO: Credenciais do Supabase não encontradas no arquivo .env!")
+    raise RuntimeError("SUPABASE_URL e SUPABASE_KEY são obrigatórios no .env")
 
-supabase: Client = create_client(SUPABASE_URL or "", SUPABASE_KEY or "")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def processar_timeline(timeline_json_data):
     """
