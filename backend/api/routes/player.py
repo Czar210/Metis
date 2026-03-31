@@ -53,7 +53,7 @@ async def update_history(req: UpdateHistoryRequest):
         return resultado
 
     except ApiError as err:
-        status = err.response.status_code
+        status = getattr(getattr(err, "response", None), "status_code", None)
         if status == 429:
             raise HTTPException(
                 status_code=429,
@@ -104,7 +104,7 @@ async def sync_player(req: SyncRequest):
         return resultado
 
     except ApiError as err:
-        status = err.response.status_code
+        status = getattr(getattr(err, "response", None), "status_code", None)
         if status == 429:
             raise HTTPException(status_code=429, detail="Rate limit atingido. Tente novamente em breve.")
         if status == 404:
