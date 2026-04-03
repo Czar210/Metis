@@ -22,11 +22,16 @@ backend/
 
 ## Endpoints Existentes
 
-| Método | Rota | Status |
-|--------|------|--------|
-| GET | `/api/v1/health` | ✅ Operacional |
-| POST | `/api/v1/ingestion/fetch-matches` | ✅ Operacional |
-| POST | `/api/v1/chat` | 🟡 Skeleton — aguarda integração Ollama/RAG |
+| Método | Rota | Arquivo | Status |
+|--------|------|---------|--------|
+| GET | `/api/v1/health` | `main.py` | ✅ Operacional |
+| POST | `/api/v1/ingestion/fetch-matches` | `main.py` | ✅ Operacional |
+| POST | `/api/v1/player/update-history` | `routes/player.py` | ✅ Operacional |
+| POST | `/api/v1/player/sync` | `routes/player.py` | ✅ Operacional |
+| GET | `/api/v1/stats/champions` | `routes/stats.py` | ✅ Operacional |
+| POST | `/api/v1/chat` | `main.py` | 🟡 Skeleton — aguarda integração Ollama/RAG |
+
+> **Nota `/api/v1/stats/champions`:** filtro `?elo=` é aceito mas ignorado — sem dados de rank por partida no schema atual.
 
 ## Regras Específicas do Backend
 

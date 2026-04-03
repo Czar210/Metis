@@ -3,7 +3,6 @@ import json
 import time
 import re
 import random
-from botocore.exceptions import ClientError
 from riotwatcher import LolWatcher, RiotWatcher, ApiError
 from dotenv import load_dotenv
 
@@ -16,6 +15,10 @@ from scripts.ingestion.fetch_matches import (
 load_dotenv()
 RIOT_API_KEY = os.environ.get("RIOT_API_KEY")
 BUCKET_NAME = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
+
+TEAM_BLOCKLIST_KEYWORDS = [
+    'university', 'college', 'collegiate', 'amateur'
+]
 
 REGION_MAP = {
     'KR': 'asia', 'JP': 'asia', 'EUW': 'europe', 'EUNE': 'europe',
@@ -80,6 +83,12 @@ def fetch_pro_matches(target_matches_per_account=2):
 
         if not contas_para_tentar:
             contas_para_tentar.append(('BR', f"{nome_oficial}#BR1"))
+
+        # Pula times amadores/universitários — consomem cota sem valor analítico
+        time_lower = (time_do_pro or '').lower()
+        if any(kw in time_lower for kw in TEAM_BLOCKLIST_KEYWORDS):
+            print(f"\n[{idx+1}/{total_alvos}] ⏭️ {nome_oficial} | {time_do_pro} — BLOQUEADO (universitário/amateur)")
+            continue
 
         print(f"\n[{idx+1}/{total_alvos}] 🕵️ {nome_oficial} | 🛡️ {time_do_pro} | ⚔️ {rota_do_pro}")
 

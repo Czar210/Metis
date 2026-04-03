@@ -2,13 +2,15 @@ name: "Metis - Partidas do Olimpo (A cada 2 dias)"
 
 on:
   schedule:
-    # Roda às 04:00 a cada 2 dias
-    - cron: '0 4 */2 * *'
+    # Roda às 19:00 BRT (22:00 UTC) a cada 2 dias — termina ~21:00 UTC
+    - cron: '0 22 */2 * *'
   workflow_dispatch:
 
 jobs:
   ingest-pro-matches:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

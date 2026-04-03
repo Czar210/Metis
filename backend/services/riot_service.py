@@ -21,6 +21,8 @@ from riotwatcher import LolWatcher, RiotWatcher, ApiError
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
+from scripts.processing.process_matches import _normalizar_patch
+
 load_dotenv()
 
 # ── Configurações ─────────────────────────────────────────────
@@ -92,7 +94,7 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
     # ── 1. Tabela: matches ────────────────────────────────────
     match_payload = {
         "match_id": match_id,
-        "game_version": info.get("gameVersion"),
+        "game_version": _normalizar_patch(info.get("gameVersion", "")),
         "game_duration": game_duration,
         "queue_id": info.get("queueId"),
         "end_type": end_type,
@@ -121,7 +123,7 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
             "match_id": match_id,
             "puuid": puuid,
             "champion_name": p.get("championName"),
-            "team_position": p.get("teamPosition"),
+            "team_position": p.get("teamPosition") or "UNKNOWN",
             "win": p.get("win"),
             "kills": p.get("kills", 0),
             "deaths": p.get("deaths", 0),
@@ -139,7 +141,9 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
         })
 
     supabase.table("players").upsert(players_payload).execute()
-    supabase.table("match_participants").upsert(participants_payload).execute()
+    supabase.table("match_participants").upsert(
+        participants_payload, on_conflict="match_id,puuid"
+    ).execute()
 
     return {"saved": True, "reason": f"OK ({end_type})"}
 

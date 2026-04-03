@@ -52,28 +52,46 @@ scripts/
 
 ## Status dos Scripts (M2)
 
-| Script | Status | Bloqueio |
-|--------|--------|----------|
+| Script | Status | Observação |
+|--------|--------|------------|
 | `fetch_matches.py` | ✅ Operacional | — |
-| `fetch_high_elo_matches.py` | ✅ Existe | Não testado em Actions |
+| `fetch_high_elo_matches.py` | ✅ Operacional | MAX_PLAYERS_PER_TIER cap + Diamond removido do cron diário |
 | `fetch_pro_players.py` | ✅ Existe | Não testado em Actions |
 | `fetch_pro_matches.py` | ✅ Existe | Não testado em Actions |
-| `fetch_guides.py` | 🟡 Parcial | Playwright via Actions + bugfix |
-| `process_matches.py` | 🟡 Parcial | Falta loop + Action + bugfix |
-| `process_timelines.py` | 🟡 Parcial | Falta loop + Action |
+| `fetch_guides.py` | 🟡 Parcial | Playwright via Actions + bugfix pendente |
+| `process_matches.py` | ✅ Operacional | Loop R2 + Action + builds de itens + 31 testes |
+| `process_timelines.py` | 🟡 Parcial | Lógica pronta, falta loop + GitHub Action |
 | `update_static_data.py` | ✅ Existe | — |
 
-## Próximo Passo (Ticket Ativo M2)
+## Convenções de process_matches.py
 
-**Script de Limpeza Bronze → Prata (`process_matches.py`)**
-- Montar o loop de processamento
-- Subir como GitHub Action com schedule
-- Bugfix de erros conhecidos
+- `extrair_dados_partida(match_json)` — parsing puro, retorna `(match_payload, players_payload, participants_payload)`
+- `extrair_builds_partida(match_json, item_dict)` — parsing puro de builds, retorna lista de registros para `champion_builds`
+- `processar_partida(match_json, db_client=None)` — persiste tudo (matches + players + participants + builds via RPC)
+- `rodar_pipeline(...)` — loop Bronze→Silver: lista R2, filtra `processed_matches`, processa batch
+- `_get_item_dict()` — lazy cache do `data/static/item.json`, lido uma vez por processo
+
+## Filtros da Camada Prata (process_matches.py)
+
+| Filtro | Regra |
+|--------|-------|
+| Duração | < 190s → descarta (remake) |
+| Queue | Só 420 (Ranked Solo) e 440 (Ranked Flex) |
+| Participantes | Exatamente 10 |
+| Bots | `botPlayer=True` ou `puuid` vazio/`BOT_` → ignora participante |
+| teamPosition | Vazio/None → `"UNKNOWN"` |
+| game_version | Normalizado para "major.minor" (ex: "14.10") |
+| Itens | Slot 0 e IDs fora do `item.json` → ignorados silenciosamente |
+
+> **Threshold 190s vs 900s:** `process_matches.py` usa 190s (remake filter — pipeline batch). `riot_service.py` usa 900s (15 min — sync on-demand por jogador). Diferença intencional por contexto de uso.
 
 ## Testes
 
 ```bash
-pytest tests/ -v -k "pipeline"
+pytest tests/ -v
 ```
 
-Mocks de banco para TDD ficam em `tests/` na raiz. Simule o R2 com `moto` (S3 mock) e Supabase com fixtures.
+| Arquivo de Teste | Cobre |
+|-----------------|-------|
+| `test_process_matches.py` | Filtros, normalização, persistência mock (31 testes) |
+| `test_process_builds.py` | `extrair_builds_partida` — slots, bots, win/loss (16 testes) |

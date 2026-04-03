@@ -68,12 +68,11 @@ Riot API / Mobafire / Probuilds
 | M2: Engenharia de Dados & Scrapers | 🔄 Em progresso | César |
 | M3: Interface & UX | ⬜ Pendente | Takida |
 | M4: Orquestração RAG & IA | ⬜ Pendente | André / Todos |
-| M5: Qualidade & Testes | ⬜ Pendente | César + Claude |
+| M5: Qualidade & Testes | ✅ Concluído (API Metis) | César + Claude |
 
-**Próximo bloqueio no M2 (César):**
-1. `process_matches.py` — Lógica pronta, falta: loop + GitHub Action + bugfix
-2. Mobafire scraper — Playwright quebrado, precisa bugfix + Action semanal
-3. Modelagem de itens — tabela `champion_builds` + atualização do process_matches
+**Bloqueios restantes no M2 (César):**
+1. Mobafire scraper — Playwright quebrado, precisa bugfix + Action semanal
+2. `process_timelines.py` — falta loop + GitHub Action (lógica pronta)
 
 ### Coluna [Revisão] no Trello = César + Claude
 

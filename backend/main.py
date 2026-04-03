@@ -19,8 +19,9 @@ app = FastAPI(
     version="0.1.0"
 )
 
-from backend.api.routes import player
+from backend.api.routes import player, stats
 app.include_router(player.router)
+app.include_router(stats.router)
 
 # ── CORS ──────────────────────────────────────────────────────────────
 # Origens permitidas: variável de ambiente ou padrões de desenvolvimento.

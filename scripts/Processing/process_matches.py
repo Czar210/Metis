@@ -1,44 +1,90 @@
 import os
 import json
 import gzip
-import polars as pl
-from supabase import create_client, Client
+import io
+from pathlib import Path
 from dotenv import load_dotenv
 
-# Carrega as variáveis de ambiente
 load_dotenv()
 
-# --- Conexões ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+BATCH_SIZE = int(os.environ.get("BATCH_SIZE", 50))
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("❌ ERRO: Credenciais do Supabase não encontradas no arquivo .env!")
+# Queues aceitas: Ranked Solo (420) e Ranked Flex (440)
+VALID_QUEUE_IDS = {420, 440}
 
-supabase: Client = create_client(SUPABASE_URL or "", SUPABASE_KEY or "")
 
-def processar_partida_base(match_json_data):
+# ─────────────────────────────────────────────────────────────────────────────
+# DICIONÁRIO DE ITENS — carregado uma vez, reutilizado em toda a run
+# ─────────────────────────────────────────────────────────────────────────────
+
+_ITEM_DICT: dict[int, str] | None = None
+_ITEM_JSON_PATH = Path(__file__).parents[2] / "data" / "static" / "item.json"
+
+
+def _get_item_dict() -> dict[int, str]:
+    """Carrega data/static/item.json com lazy cache. {item_id: item_name}"""
+    global _ITEM_DICT
+    if _ITEM_DICT is None:
+        if not _ITEM_JSON_PATH.exists():
+            print(f"⚠️  item.json não encontrado em {_ITEM_JSON_PATH}. Builds serão ignoradas.")
+            _ITEM_DICT = {}
+        else:
+            with open(_ITEM_JSON_PATH, encoding="utf-8") as f:
+                raw = json.load(f)
+            _ITEM_DICT = {int(k): v["name"] for k, v in raw.get("data", {}).items()}
+    return _ITEM_DICT
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PARSING PURO — sem I/O, sem banco, totalmente testável
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _normalizar_patch(game_version: str) -> str:
+    """'14.10.123.456' → '14.10'"""
+    parts = (game_version or "").split(".")
+    if len(parts) >= 2:
+        return f"{parts[0]}.{parts[1]}"
+    return game_version or "unknown"
+
+
+def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
     """
-    Processa o JSON bruto da Camada Bronze e insere nas tabelas 'players', 'matches' e 'match_participants'.
+    Parsing puro do JSON bruto da Riot.
+    Aplica todos os filtros de limpeza sem tocar no banco.
+
+    Retorna:
+        match_payload: dict | None  — None se a partida deve ser descartada
+        players_payload: list[dict]
+        participants_payload: list[dict]
     """
-    metadata = match_json_data.get("metadata", {})
-    info = match_json_data.get("info", {})
+    metadata = match_json.get("metadata", {})
+    info = match_json.get("info", {})
 
     match_id = metadata.get("matchId")
     if not match_id or not info:
-        print("⚠️ Partida inválida ou corrompida. Ignorando.")
-        return False
+        return None, [], []
 
+    # ── Filtro 1: Duração mínima (remake / queda de servidor) ─────────────────
     game_duration = info.get("gameDuration", 0)
-
-    # ---------------------------------------------------------
-    # 1. LÓGICA DE LIMPEZA E CLASSIFICAÇÃO DA PARTIDA
-    # ---------------------------------------------------------
-    # Filtro anti-ruído pesado: Partidas com menos de 3 minutos são descartadas sumariamente
     if game_duration < 190:
-        print(f"⏭️ {match_id}: Remake/Queda de servidor ignorado (Duração: {game_duration}s).")
-        return False
+        print(f"⏭️  {match_id}: Descartado — duração {game_duration}s (remake).")
+        return None, [], []
 
+    # ── Filtro 2: Queue válida (só Ranked Solo/Flex) ──────────────────────────
+    queue_id = info.get("queueId", 0)
+    if queue_id not in VALID_QUEUE_IDS:
+        print(f"⏭️  {match_id}: Descartado — queue {queue_id} (não é ranked).")
+        return None, [], []
+
+    # ── Filtro 3: Partida com exatamente 10 participantes ────────────────────
+    participants_raw = info.get("participants", [])
+    if len(participants_raw) != 10:
+        print(f"⏭️  {match_id}: Descartado — {len(participants_raw)} participantes (corrompido).")
+        return None, [], []
+
+    # ── Montar payload da partida ─────────────────────────────────────────────
     end_type = "normal"
     if info.get("gameEndedInEarlySurrender"):
         end_type = "early_ff"
@@ -47,105 +93,288 @@ def processar_partida_base(match_json_data):
 
     match_payload = {
         "match_id": match_id,
-        "game_version": info.get("gameVersion"),
+        "game_version": _normalizar_patch(info.get("gameVersion", "")),
         "game_duration": game_duration,
-        "queue_id": info.get("queueId"),
-        "end_type": end_type
+        "queue_id": queue_id,
+        "end_type": end_type,
     }
 
-    try:
-        # Inserindo/Atualizando a partida (Tabela Pai)
-        supabase.table("matches").upsert(match_payload).execute()
-    except Exception as e:
-        print(f"❌ Erro ao inserir partida {match_id}: {e}")
-        return False
-
-    # ---------------------------------------------------------
-    # 2. PROCESSAMENTO DOS JOGADORES E PARTICIPANTES
-    # ---------------------------------------------------------
-    participants = info.get("participants", [])
-
+    # ── Montar payloads de jogadores e participantes ──────────────────────────
     players_payload = []
     participants_payload = []
 
-    for p in participants:
-        puuid = p.get("puuid")
+    for p in participants_raw:
+        puuid = p.get("puuid", "")
 
-        # --- A) Garantir que o Jogador existe no Banco ---
-        # Salvamos o jogador ANTES para não dar erro de Foreign Key
+        # ── Filtro 4: Bots ────────────────────────────────────────────────────
+        if not puuid or puuid.startswith("BOT_") or p.get("botPlayer", False):
+            print(f"   🤖 Bot detectado em {match_id} — participante ignorado.")
+            continue
+
         players_payload.append({
             "puuid": puuid,
             "game_name": p.get("riotIdGameName", "Desconhecido"),
-            "tag_line": p.get("riotIdTagline", "UNK")
-            # server e tier nós atualizamos em outros scripts
+            "tag_line": p.get("riotIdTagline", "UNK"),
         })
 
-        # --- B) Lógica de AFK e Extração ---
-        time_played = p.get("timePlayed", game_duration)
-        is_afk = p.get("teamEarlySurrendered", False) or (time_played < (game_duration * 0.8))
-        challenges = p.get("challenges", {})
+        # ── Filtro 5: teamPosition vazia → UNKNOWN ────────────────────────────
+        team_position = p.get("teamPosition") or "UNKNOWN"
 
-        # O PULO DO GATO: Guardamos o is_afk dentro do dicionário JSONB!
-        # Assim mantemos a tabela limpa, mas a informação continua salva pro modelo de IA.
+        time_played = p.get("timePlayed", game_duration)
+        is_afk = p.get("teamEarlySurrendered", False) or (time_played < game_duration * 0.8)
+        challenges = dict(p.get("challenges", {}))
         challenges["is_afk"] = is_afk
 
-        # --- C) Montagem da linha do Participante ---
-        participant_data = {
+        participants_payload.append({
             "match_id": match_id,
             "puuid": puuid,
             "champion_name": p.get("championName"),
-            "team_position": p.get("teamPosition"),
+            "team_position": team_position,
             "win": p.get("win"),
-
-            # KDA e Economia
             "kills": p.get("kills", 0),
             "deaths": p.get("deaths", 0),
             "assists": p.get("assists", 0),
             "gold_earned": p.get("goldEarned", 0),
-
-            # Combate e Objetivos
             "total_damage_dealt_to_champions": p.get("totalDamageDealtToChampions", 0),
             "damage_dealt_to_buildings": p.get("damageDealtToBuildings", 0),
             "total_time_cc_dealt": p.get("totalTimeCCDealt", 0),
             "vision_score": p.get("visionScore", 0),
-
-            # Dados avançados dos Challenges
             "solo_kills": challenges.get("soloKills", 0),
             "damage_per_minute": challenges.get("damagePerMinute", 0.0),
             "kill_participation": challenges.get("killParticipation", 0.0),
             "early_laning_phase_gold_exp_advantage": challenges.get("earlyLaningPhaseGoldExpAdvantage", 0.0),
+            "challenges": challenges,
+        })
 
-            # O Cofre (O Supabase lida com o JSONB e vai armazenar nosso 'is_afk' aqui dentro)
-            "challenges": challenges
-        }
-        participants_payload.append(participant_data)
+    return match_payload, players_payload, participants_payload
 
-    try:
-        # 1º BULK INSERT: Cadastra ou atualiza os 10 jogadores no banco
-        supabase.table("players").upsert(players_payload).execute()
 
-        # 2º BULK INSERT: Agora sim inserimos as estatísticas da partida!
-        supabase.table("match_participants").upsert(participants_payload).execute()
+def extrair_builds_partida(match_json: dict, item_dict: dict[int, str]) -> list[dict]:
+    """
+    Extrai as builds de itens de cada participante da partida.
+    Função pura — sem I/O, sem banco.
 
-        print(f"✅ {match_id}: Processada com sucesso! (Tipo: {end_type})")
-        return True
-    except Exception as e:
-        print(f"❌ Erro ao inserir participantes da partida {match_id}: {e}")
+    Retorna lista de registros prontos para a tabela champion_builds:
+        [{champion_name, item_id, item_name, patch, pick_count, win_count}, ...]
+
+    Regras:
+    - Slots zerados (item_id == 0) são ignorados.
+    - item_id ausente no item_dict é ignorado (ward, token de missão, etc.).
+    - Bots já filtrados em extrair_dados_partida não chegam aqui.
+    """
+    metadata = match_json.get("metadata", {})
+    info = match_json.get("info", {})
+
+    if not metadata.get("matchId") or not info:
+        return []
+
+    patch = _normalizar_patch(info.get("gameVersion", ""))
+    item_slots = ["item0", "item1", "item2", "item3", "item4", "item5"]
+    builds: list[dict] = []
+
+    for p in info.get("participants", []):
+        puuid = p.get("puuid", "")
+        if not puuid or puuid.startswith("BOT_") or p.get("botPlayer", False):
+            continue
+
+        champion = p.get("championName")
+        won = bool(p.get("win"))
+
+        for slot in item_slots:
+            item_id = p.get(slot, 0)
+            if not item_id:
+                continue
+            item_name = item_dict.get(item_id)
+            if not item_name:
+                continue
+
+            builds.append({
+                "champion_name": champion,
+                "item_id": item_id,
+                "item_name": item_name,
+                "patch": patch,
+                "pick_count": 1,
+                "win_count": 1 if won else 0,
+            })
+
+    return builds
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PERSISTÊNCIA — depende do db_client injetável
+# ─────────────────────────────────────────────────────────────────────────────
+
+def processar_partida(match_json: dict, db_client=None) -> bool:
+    """
+    Processa e persiste uma partida no Supabase.
+
+    Args:
+        match_json: JSON bruto da Riot Match API.
+        db_client: cliente Supabase injetável. Se None, cria usando variáveis de ambiente.
+    """
+    match_payload, players_payload, participants_payload = extrair_dados_partida(match_json)
+
+    if match_payload is None:
         return False
 
-# --- Código de Teste ---
-if __name__ == "__main__":
-    # Caminho base usando Raw String (r"") para evitar problemas no Windows
-    caminho_teste = r"C:\Users\cesar\Documents\GitHub\Metis\data\raw\matches_BR1_2907503741.json.gz"
+    if db_client is None:
+        from supabase import create_client
+        if not SUPABASE_URL or not SUPABASE_KEY:
+            print("❌ Credenciais do Supabase não encontradas no .env!")
+            return False
+        db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    if os.path.exists(caminho_teste):
-        print(f"📂 Abrindo arquivo: {caminho_teste}")
-        try:
-            with gzip.open(caminho_teste, 'rt', encoding='utf-8') as f:
-                match_data = json.load(f)
-                processar_partida_base(match_data)
-        except Exception as e:
-            print(f"❌ Erro ao ler ou decodificar o arquivo: {e}")
-    else:
-        print(f"⚠️ O arquivo {caminho_teste} não foi encontrado.")
-        print("Certifique-se de que o caminho aponta para um .json.gz válido de Matches na sua máquina local.")
+    match_id = match_payload["match_id"]
+    try:
+        db_client.table("matches").upsert(match_payload).execute()
+        if players_payload:
+            db_client.table("players").upsert(players_payload).execute()
+        if participants_payload:
+            # on_conflict garante que re-runs não criam duplicatas (UNIQUE match_id, puuid)
+            db_client.table("match_participants").upsert(
+                participants_payload, on_conflict="match_id,puuid"
+            ).execute()
+
+        builds = extrair_builds_partida(match_json, _get_item_dict())
+        if builds:
+            # RPC atomic: INSERT … ON CONFLICT DO UPDATE SET pick_count += 1, win_count += won
+            db_client.rpc("upsert_champion_builds", {"builds": builds}).execute()
+
+        print(f"✅ {match_id}: Salvo ({match_payload['end_type']}, patch {match_payload['game_version']}, {len(builds)} builds).")
+        return True
+    except Exception as e:
+        print(f"❌ {match_id}: Erro ao salvar — {e}")
+        return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LOOP DO R2 — lista, baixa, processa, marca
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _get_processed_ids(db_client) -> set:
+    """Retorna os match_ids já processados registrados no Supabase.
+    Usa paginação para não ser limitado pelo teto de 1000 linhas do PostgREST.
+    """
+    try:
+        ids: set[str] = set()
+        page_size = 1000
+        offset = 0
+        while True:
+            result = (
+                db_client.table("processed_matches")
+                .select("match_id")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            batch = result.data or []
+            for row in batch:
+                ids.add(row["match_id"])
+            if len(batch) < page_size:
+                break
+            offset += page_size
+        return ids
+    except Exception as e:
+        print(f"⚠️  Não foi possível buscar processed_matches: {e}")
+        return set()
+
+
+def _marcar_processado(db_client, match_id: str) -> None:
+    """Registra o match_id como processado."""
+    try:
+        db_client.table("processed_matches").upsert({"match_id": match_id}).execute()
+    except Exception as e:
+        print(f"⚠️  Falha ao marcar {match_id} como processado: {e}")
+
+
+def _listar_keys_r2(s3_client, bucket: str, prefix: str = "matches/") -> list[str]:
+    """Lista todas as keys do bucket R2 com o prefixo dado."""
+    keys = []
+    paginator = s3_client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            keys.append(obj["Key"])
+    return keys
+
+
+def _baixar_e_descomprimir(s3_client, bucket: str, key: str) -> dict | None:
+    """Baixa e descomprime um .gz do R2, retorna o dict JSON."""
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        compressed = response["Body"].read()
+        with gzip.open(io.BytesIO(compressed), "rt", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"❌ Falha ao baixar {key}: {e}")
+        return None
+
+
+def rodar_pipeline(s3_client=None, db_client=None, batch_size: int = BATCH_SIZE) -> dict:
+    """
+    Loop principal Bronze → Prata.
+    Lista partidas do R2, filtra as já processadas, processa em batch.
+
+    Retorna relatório: {"processadas": int, "descartadas": int, "erros": int}
+    """
+    from scripts.utils.r2_storage import get_r2_client
+    from supabase import create_client
+
+    if s3_client is None:
+        s3_client = get_r2_client()
+    if s3_client is None:
+        print("❌ R2 client não disponível.")
+        return {"processadas": 0, "descartadas": 0, "erros": 0}
+
+    if db_client is None:
+        if not SUPABASE_URL or not SUPABASE_KEY:
+            print("❌ Credenciais do Supabase não encontradas.")
+            return {"processadas": 0, "descartadas": 0, "erros": 0}
+        db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+    bucket = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
+
+    print("📋 Buscando partidas já processadas no Supabase...")
+    processed_ids = _get_processed_ids(db_client)
+    print(f"   {len(processed_ids)} partidas já processadas.")
+
+    print("📦 Listando partidas no R2...")
+    all_keys = _listar_keys_r2(s3_client, bucket, prefix="matches/")
+    print(f"   {len(all_keys)} arquivos encontrados no R2.")
+
+    # Filtra apenas as não processadas, extrai match_id da key (matches/BR1_123.json.gz)
+    pendentes = [
+        k for k in all_keys
+        if k.replace("matches/", "").replace(".json.gz", "") not in processed_ids
+    ]
+    print(f"   {len(pendentes)} pendentes. Processando batch de {batch_size}...")
+
+    batch = pendentes[:batch_size]
+    stats = {"processadas": 0, "descartadas": 0, "erros": 0}
+
+    for i, key in enumerate(batch, 1):
+        match_id = key.replace("matches/", "").replace(".json.gz", "")
+        print(f"[{i}/{len(batch)}] {match_id}", end=" — ")
+
+        match_json = _baixar_e_descomprimir(s3_client, bucket, key)
+        if match_json is None:
+            stats["erros"] += 1
+            _marcar_processado(db_client, match_id)  # não tentar de novo
+            continue
+
+        ok = processar_partida(match_json, db_client=db_client)
+        if ok:
+            stats["processadas"] += 1
+        else:
+            stats["descartadas"] += 1
+
+        _marcar_processado(db_client, match_id)
+
+    print(f"\n📊 Resultado: {stats}")
+    return stats
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ENTRYPOINT
+# ─────────────────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    rodar_pipeline()

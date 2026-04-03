@@ -28,9 +28,8 @@ A arquitetura é dividida entre a Pipeline de Engenharia de Dados (Extração/Pr
 - **Linguagens:** Python 3.12 (Engenharia de Dados/Backend), TypeScript (Frontend).
 - **Engenharia de Dados (Scraping & ETL):** Playwright, BeautifulSoup4, RiotWatcher.
 - **Armazenamento de Dados:**
-  - Supabase (PostgreSQL) para dados estruturados (Partidas, Timelines).
+  - Supabase (PostgreSQL + pgvector) para dados estruturados e busca semântica.
   - Cloudflare R2 (Object Storage S3) para dados brutos e JSONs de guias.
-  - Pinecone (Vector DB) para busca semântica da IA.
 - **Inteligência Artificial:** Llama 3 (via Ollama local/nuvem).
 - **Infraestrutura:** GitHub Actions (Automação ETL), Vercel (Frontend), Railway (Backend), Cloudflare Tunnel.
 
@@ -52,3 +51,64 @@ python -m venv .venv
 .venv\Scripts\activate
 # No Linux/Mac:
 source .venv/bin/activate
+```
+
+### 2. Instalando Dependências
+
+**Backend / Scripts (Python):**
+```bash
+pip install -r requirements.txt
+```
+
+**Frontend (Next.js):**
+```bash
+cd frontend
+npm install
+npm run dev   # http://localhost:3000
+```
+
+### 3. Variáveis de Ambiente
+
+O projeto tem **dois arquivos `.env`** — um para o backend/scripts e outro para o frontend. Ambos estão no `.gitignore` e **nunca devem ser commitados**.
+
+#### `/.env` — Backend, Scripts e CI/CD
+
+Copie o template e preencha com suas credenciais:
+
+```bash
+cp .env.example .env
+```
+
+| Variável | Onde obter |
+|----------|-----------|
+| `RIOT_API_KEY` | [developer.riotgames.com](https://developer.riotgames.com) |
+| `SUPABASE_URL` | Painel Supabase → Settings → API |
+| `SUPABASE_KEY` | Painel Supabase → Settings → API (anon/service_role) |
+| `CLOUDFLARE_R2_ACCOUNT_ID` | Painel Cloudflare → R2 → Manage R2 API Tokens |
+| `CLOUDFLARE_R2_ACCESS_KEY_ID` | Idem |
+| `CLOUDFLARE_R2_SECRET_ACCESS_KEY` | Idem |
+| `CLOUDFLARE_R2_BUCKET_NAME` | Nome do bucket criado no R2 (ex: `metis`) |
+| `OLLAMA_BASE_URL` | URL do Ollama local ou via Cloudflare Tunnel |
+| `CLOUDFLARE_TUNNEL_URL` | Painel Cloudflare → Zero Trust → Tunnels |
+
+> As mesmas variáveis (exceto `RIOT_API_KEY`) devem ser configuradas como **GitHub Secrets** para os Actions de ingestão e processamento rodarem em produção.
+
+---
+
+#### `/frontend/.env` — Next.js (Frontend)
+
+Copie o template e preencha:
+
+```bash
+cp frontend/.env.example frontend/.env
+```
+
+| Variável | Onde obter |
+|----------|-----------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Painel Supabase → Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Painel Supabase → Settings → API (chave anon pública) |
+| `NEXT_PUBLIC_API_URL` | URL do backend no Railway (ex: `https://metis-api.up.railway.app`) |
+
+> Para **deploy no Vercel**: configure as mesmas 3 variáveis no painel do projeto em Settings → Environment Variables.
+
+---

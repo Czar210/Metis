@@ -136,7 +136,24 @@ Table objective_analyses {
   state_1_min_before jsonb
 }
 
-// --- 7. A BIBLIOTECA (NLP) ---
+// --- 7. BUILDS DE ITENS ---
+Table champion_builds {
+  id bigserial [primary key]
+  champion_name varchar [not null]
+  item_id int [not null]
+  item_name varchar [not null]
+  patch varchar [not null]
+  pick_count int [not null, default: 0]
+  win_count int [not null, default: 0]
+
+  indexes {
+    (champion_name, item_id, patch) [unique]
+  }
+
+  note: 'Contagem acumulada de picks e vitórias por item/campeão/patch. View champion_item_stats calcula winrate_pct.'
+}
+
+// --- 8. A BIBLIOTECA (NLP) ---
 Table champion_guides {
   id serial [primary key]
   champion_name varchar
