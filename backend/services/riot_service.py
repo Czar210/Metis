@@ -21,9 +21,15 @@ from riotwatcher import LolWatcher, RiotWatcher, ApiError
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-from scripts.processing.process_matches import _normalizar_patch
-
 load_dotenv()
+
+
+def _normalizar_patch(game_version: str) -> str:
+    """'14.10.123.456' → '14.10'"""
+    parts = (game_version or "").split(".")
+    if len(parts) >= 2:
+        return f"{parts[0]}.{parts[1]}"
+    return game_version or "unknown"
 
 # ── Configurações ─────────────────────────────────────────────
 RIOT_API_KEY = os.environ.get("RIOT_API_KEY")
@@ -62,6 +68,13 @@ def _match_exists(supabase: Client, match_id: str) -> bool:
 #  CAMADA PRATA — limpeza inline (baseado em process_matches.py)
 # ══════════════════════════════════════════════════════════════
 
+# Filas ranqueadas aceitas: SoloQ (420) e Flex (440)
+RANKED_QUEUE_IDS = {420, 440}
+
+import logging
+logger = logging.getLogger(__name__)
+
+
 def _classificar_tipo_final(info: dict) -> str:
     """Classifica se a partida terminou normal, early_ff ou late_ff."""
     if info.get("gameEndedInEarlySurrender"):
@@ -71,9 +84,31 @@ def _classificar_tipo_final(info: dict) -> str:
     return "normal"
 
 
+def _salvar_dirty(supabase: Client, match_id: str | None, info: dict, reason: str) -> None:
+    """Registra partida descartada em matches_dirty para rastreabilidade."""
+    try:
+        supabase.table("matches_dirty").insert({
+            "match_id": match_id,
+            "reason": reason,
+            "queue_id": info.get("queueId"),
+            "game_duration": info.get("gameDuration"),
+            "game_version": _normalizar_patch(info.get("gameVersion", "")),
+            "raw_info": {
+                "gameMode": info.get("gameMode"),
+                "gameType": info.get("gameType"),
+                "queueId": info.get("queueId"),
+                "gameDuration": info.get("gameDuration"),
+            },
+        }).execute()
+    except Exception as e:
+        logger.warning(f"Não foi possível salvar em matches_dirty: {e}")
+
+
 def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
     """
     Aplica a lógica da Camada Prata e insere nas tabelas do Supabase.
+    Partidas limpas → matches + match_participants.
+    Partidas sujas  → matches_dirty (com reason).
     Retorna {"saved": True/False, "reason": "..."}.
     """
     metadata = match_data.get("metadata", {})
@@ -81,13 +116,25 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
     match_id = metadata.get("matchId")
 
     if not match_id or not info:
-        return {"saved": False, "reason": "JSON inválido ou corrompido"}
+        _salvar_dirty(supabase, match_id, {}, "invalid_json")
+        return {"saved": False, "reason": "invalid_json"}
 
+    queue_id = info.get("queueId", 0)
     game_duration = info.get("gameDuration", 0)
 
-    # Filtro anti-ruído: remakes / partidas curtas (< 15 min)
+    # Filtro 1: somente SoloQ (420) e Flex (440)
+    if queue_id not in RANKED_QUEUE_IDS:
+        reason = f"wrong_queue:{queue_id}"
+        logger.info(f"[dirty] {match_id} — {reason}")
+        _salvar_dirty(supabase, match_id, info, reason)
+        return {"saved": False, "reason": reason}
+
+    # Filtro 2: remakes / partidas curtas (< 15 min)
     if game_duration < 900:
-        return {"saved": False, "reason": f"Partida muito curta / Remake ({game_duration}s)"}
+        reason = "remake" if game_duration < 300 else "short_game"
+        logger.info(f"[dirty] {match_id} — {reason} ({game_duration}s)")
+        _salvar_dirty(supabase, match_id, info, reason)
+        return {"saved": False, "reason": reason}
 
     end_type = _classificar_tipo_final(info)
 
@@ -105,6 +152,9 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
     players_payload = []
     participants_payload = []
 
+    # PUUIDs na ordem do participantId (1-10) — necessário para a timeline
+    puuids_ordered: list[str] = metadata.get("participants", [])
+
     for p in info.get("participants", []):
         puuid = p.get("puuid")
 
@@ -118,6 +168,21 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
         time_played = p.get("timePlayed", game_duration)
         is_afk = p.get("teamEarlySurrendered", False) or (time_played < (game_duration * 0.8))
         challenges["is_afk"] = is_afk
+
+        # ── Items (slots 0-6, item6 = trinket) ────────────────
+        items = [p.get(f"item{i}", 0) for i in range(7)]
+
+        # ── Runas ─────────────────────────────────────────────
+        perks = p.get("perks", {})
+        styles = perks.get("styles", [])
+        primary        = styles[0] if styles else {}
+        secondary      = styles[1] if len(styles) > 1 else {}
+        primary_sels   = primary.get("selections") or []
+        keystone       = primary_sels[0].get("perk") if primary_sels else None
+
+        # ── CS e CS/min ────────────────────────────────────────
+        total_cs = p.get("totalMinionsKilled", 0) + p.get("neutralMinionsKilled", 0)
+        cspm = round(total_cs / (game_duration / 60), 2) if game_duration > 0 else 0.0
 
         participants_payload.append({
             "match_id": match_id,
@@ -138,6 +203,19 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
             "kill_participation": challenges.get("killParticipation", 0.0),
             "early_laning_phase_gold_exp_advantage": challenges.get("earlyLaningPhaseGoldExpAdvantage", 0.0),
             "challenges": challenges,
+            # ── Novos campos ───────────────────────────────────
+            "team_id":         p.get("teamId"),
+            "items":           items,
+            "summoner1_id":    p.get("summoner1Id"),
+            "summoner2_id":    p.get("summoner2Id"),
+            "rune_keystone":   keystone,
+            "rune_primary":    primary.get("style"),
+            "rune_secondary":  secondary.get("style"),
+            "runes_raw":       perks,
+            "total_cs":        total_cs,
+            "cs_per_minute":   float(cspm),
+            "champion_level":  p.get("champLevel", 1),
+            "items_purchased": p.get("itemsPurchased", 0),
         })
 
     supabase.table("players").upsert(players_payload).execute()
@@ -145,7 +223,61 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
         participants_payload, on_conflict="match_id,puuid"
     ).execute()
 
-    return {"saved": True, "reason": f"OK ({end_type})"}
+    return {"saved": True, "reason": f"OK ({end_type})", "puuids": puuids_ordered}
+
+
+def _salvar_timeline(
+    supabase: Client,
+    lol_watcher: LolWatcher,
+    routing: str,
+    match_id: str,
+    puuids_ordered: list[str],
+) -> None:
+    """
+    Busca a timeline da partida na Riot API e salva em match_timelines.
+    Um frame por minuto (timestamp múltiplo de ~60000ms).
+    Chamada apenas quando a partida é salva pela primeira vez — nunca rebusca.
+    """
+    try:
+        tl = lol_watcher.match.timeline_by_match(routing, match_id)
+        frames_raw = tl.get("info", {}).get("frames", [])
+
+        frames = []
+        for frame in frames_raw:
+            ts = frame.get("timestamp", 0)
+            minute = ts // 60000
+            participant_frames = frame.get("participantFrames", {})
+
+            participants_snap: dict[str, dict] = {}
+            for pid_str, pf in participant_frames.items():
+                idx = int(pid_str) - 1
+                if idx < 0 or idx >= len(puuids_ordered):
+                    continue
+                puuid = puuids_ordered[idx]
+                cs = pf.get("minionsKilled", 0) + pf.get("jungleMinionsKilled", 0)
+                participants_snap[puuid] = {
+                    "cs":    cs,
+                    "cspm":  round(cs / minute, 2) if minute > 0 else 0.0,
+                    "gold":  pf.get("totalGold", 0),
+                    "level": pf.get("level", 1),
+                    "xp":    pf.get("xp", 0),
+                }
+
+            frames.append({
+                "t_ms":  ts,
+                "t_min": minute,
+                "p":     participants_snap,
+            })
+
+        if frames:
+            supabase.table("match_timelines").upsert(
+                {"match_id": match_id, "frames": frames},
+                on_conflict="match_id",
+            ).execute()
+            logger.info(f"[timeline] {match_id} — {len(frames)} frames salvos")
+
+    except Exception as e:
+        logger.warning(f"[timeline] {match_id} falhou (não bloqueia o sync): {e}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -185,9 +317,12 @@ def atualizar_historico(
     }).execute()
 
     # ── 2. Buscar lista de partidas ranqueadas ────────────────
+    # type="ranked" retorna SoloQ (420) + Flex (440) + ARAM ranked etc.
+    # O filtro por queue_id exato é feito em _processar_e_salvar() via RANKED_QUEUE_IDS.
     match_ids: list[str] = lol_watcher.match.matchlist_by_puuid(
         routing, puuid, count=count, type="ranked"
     )
+    logger.info(f"[historico] {game_name}#{tag_line} — {len(match_ids)} partidas encontradas na Riot API")
 
     if not match_ids:
         return {
@@ -217,6 +352,11 @@ def atualizar_historico(
             resultado = _processar_e_salvar(supabase, match_data)
 
             if resultado["saved"]:
+                # Buscar e salvar timeline logo após a partida ser salva
+                puuids = resultado.get("puuids", [])
+                if puuids:
+                    _salvar_timeline(supabase, lol_watcher, routing, match_id, puuids)
+
                 detalhes.append({"match_id": match_id, "status": "salva", "info": resultado["reason"]})
                 novas += 1
             else:

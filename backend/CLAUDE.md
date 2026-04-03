@@ -28,8 +28,22 @@ backend/
 | POST | `/api/v1/ingestion/fetch-matches` | `main.py` | ✅ Operacional |
 | POST | `/api/v1/player/update-history` | `routes/player.py` | ✅ Operacional |
 | POST | `/api/v1/player/sync` | `routes/player.py` | ✅ Operacional |
+| GET | `/api/v1/player/history` | `routes/player.py` | ✅ Operacional — `?puuid=&limit=15&offset=0` + `has_more` |
 | GET | `/api/v1/stats/champions` | `routes/stats.py` | ✅ Operacional |
+| GET | `/api/v1/stats/tierlist` | `routes/stats.py` | ✅ Operacional |
 | POST | `/api/v1/chat` | `main.py` | 🟡 Skeleton — aguarda integração Ollama/RAG |
+
+## Separação de Dados — Camada Prata
+
+`riot_service._processar_e_salvar()` segue esta lógica antes de qualquer insert:
+
+1. JSON inválido → `matches_dirty` (reason: `invalid_json`)
+2. queue_id fora de `{420, 440}` → `matches_dirty` (reason: `wrong_queue:N`)
+3. duração < 300s → `matches_dirty` (reason: `remake`)
+4. duração < 900s → `matches_dirty` (reason: `short_game`)
+5. Passou tudo → `matches` + `match_participants` (dados limpos)
+
+`matches_dirty` tem RLS leitura pública, sem write client-side. Útil para debug e análise de padrões de remake.
 
 > **Nota `/api/v1/stats/champions`:** filtro `?elo=` é aceito mas ignorado — sem dados de rank por partida no schema atual.
 

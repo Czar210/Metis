@@ -10,6 +10,7 @@ Nota sobre o filtro ?elo=:
 """
 
 from __future__ import annotations
+from collections import defaultdict
 from typing import Any
 
 
@@ -86,3 +87,75 @@ def buscar_stats_campeao(
             "avg_kill_participation": round(avg("kill_participation"), 3),
         },
     }
+
+
+def buscar_tierlist(
+    db_client,
+    role: str | None = None,
+    server: str | None = None,
+    patch: str | None = None,
+    min_matches: int = 1,
+) -> list[dict[str, Any]]:
+    """
+    Agrega estatísticas de TODOS os campeões para montar a Tier List.
+
+    Retorna lista ordenada por winrate desc, apenas campeões com >= min_matches partidas.
+    """
+    query = (
+        db_client.table("match_participants")
+        .select(
+            "champion_name, team_position, win, kills, deaths, assists, "
+            "gold_earned, damage_per_minute, "
+            "matches(game_version, queue_id), players(server)"
+        )
+    )
+
+    if role:
+        query = query.eq("team_position", role.upper())
+
+    result = query.execute()
+    rows: list[dict] = result.data or []
+
+    # Filtros Python para campos de tabelas relacionadas
+    if server:
+        rows = [
+            r for r in rows
+            if (r.get("players") or {}).get("server", "").upper() == server.upper()
+        ]
+    if patch:
+        rows = [
+            r for r in rows
+            if (r.get("matches") or {}).get("game_version") == patch
+        ]
+
+    # Agrupamento por campeão
+    buckets: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        name = r.get("champion_name")
+        if name:
+            buckets[name].append(r)
+
+    result_list: list[dict[str, Any]] = []
+    for champion, champ_rows in buckets.items():
+        total = len(champ_rows)
+        if total < min_matches:
+            continue
+
+        wins = sum(1 for r in champ_rows if r.get("win"))
+
+        def avg(field: str) -> float:
+            return sum(r.get(field) or 0 for r in champ_rows) / total
+
+        result_list.append({
+            "champion": champion,
+            "total_matches": total,
+            "winrate": round(wins / total * 100, 2),
+            "avg_kills": round(avg("kills"), 2),
+            "avg_deaths": round(avg("deaths"), 2),
+            "avg_assists": round(avg("assists"), 2),
+            "avg_gold": round(avg("gold_earned"), 0),
+            "avg_damage_per_minute": round(avg("damage_per_minute"), 1),
+        })
+
+    result_list.sort(key=lambda x: x["winrate"], reverse=True)
+    return result_list

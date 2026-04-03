@@ -101,12 +101,24 @@ npx tsc --noEmit  # checar tipos sem compilar
 | Tela | Status | Arquivo |
 |------|--------|---------|
 | Home pública (busca + supervisão) | ✅ Implementado | `src/app/page.tsx` |
-| Login (Email/Senha) | ✅ Implementado | `src/app/auth/page.tsx` |
+| Login + Cadastro (Email/Senha) | ✅ Implementado | `src/app/auth/page.tsx` |
+| Callback de email confirmation | ✅ Implementado | `src/app/auth/callback/route.ts` |
 | Chat com FastAPI (gate premium) | ✅ Implementado | `src/app/chat/page.tsx` |
-| Player Stats (placeholder) | ✅ Implementado | `src/app/players/[puuid]/page.tsx` |
-| Histórico de Partidas | ⬜ Pendente | `src/app/history/` |
-| Tier List / Estatísticas | ⬜ Pendente | `src/app/champions/` |
-| Deploy Vercel | ⬜ Pendente (Takida) | — |
+| Histórico de Partidas do Jogador | ✅ Implementado | `src/app/players/[puuid]/page.tsx` |
+| MatchCard (vitória/derrota) | ✅ Implementado | `src/components/matches/MatchCard.tsx` |
+| Tier List / Meta (tabela + filtros) | ✅ Implementado | `src/app/champions/page.tsx` |
+| StatsTable (sortável + cores) | 🔄 Parcial — cores percentil pendente | `src/components/stats/StatsTable.tsx` |
+| Changelog / O que é novo | ✅ Implementado | `src/app/changelog/page.tsx` |
+| Conheça a Equipe | ✅ Implementado | `src/app/team/page.tsx` |
+| Deploy Vercel | ✅ Configurado | — |
+
+## Convenção de Changelog
+
+Toda feature visível ao usuário deve ser registrada em **dois lugares**:
+1. `.speckit/patch_notes.md` — linguagem técnica, para o time
+2. `src/app/changelog/page.tsx` — linguagem de produto, para usuários (sem jargão técnico)
+
+Versão atual: **Alpha v0.6.1**
 
 ## NUNCA
 - Não use `@/lib/supabase/client` em Server Components

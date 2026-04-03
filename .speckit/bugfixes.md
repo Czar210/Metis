@@ -5,6 +5,12 @@
 ## Blockers Abertos (Resolver ANTES de prosseguir)
 - Nenhum no momento.
 
+### [2026-04-03] BUG-008 — `requirements.txt` — encoding UTF-16 corrompido
+- Arquivo gerado com BOM UTF-16 LE — cada caractere aparecia separado por espaço, `pip install` falhava silenciosamente em ambientes novos. **Resolvido** com `pip freeze` redirecionado via Python (UTF-8 sem BOM).
+
+### [2026-04-03] BUG-007 — `riot_service.py` — import cross-package quebra Railway
+- Linha 24: `from scripts.processing.process_matches import _normalizar_patch` — funciona localmente mas falha no container Railway onde `scripts` não está no PYTHONPATH. **Resolvido** inlining a função `_normalizar_patch` diretamente em `riot_service.py` e removendo o import.
+
 ## Bugs Resolvidos
 
 ### [2026-04-03] BUG-003, 004, 005 — `riot_service.py` (3 inconsistências vs process_matches.py)

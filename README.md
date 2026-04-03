@@ -38,32 +38,34 @@ A arquitetura é dividida entre a Pipeline de Engenharia de Dados (Extração/Pr
 
 ## 🚀 Como Começar (Setup de Desenvolvimento)
 
-### 1. Preparando o Ambiente
-Clone o repositório e crie o seu ambiente virtual Python para isolar as dependências:
+### 1. Setup Automático (Windows — recomendado)
 
-```bash
-git clone [https://github.com/SeuUsuario/Metis.git](https://github.com/SeuUsuario/Metis.git)
-cd Metis
-python -m venv .venv
+Na raiz do projeto, rode o script de bootstrap:
 
-# Ative o ambiente virtual
-# No Windows:
-.venv\Scripts\activate
-# No Linux/Mac:
-source .venv/bin/activate
+```powershell
+.\setup.ps1
 ```
 
-### 2. Instalando Dependências
+Isso cria/valida o `.venv`, instala todos os pacotes Python e roda `npm install` no frontend automaticamente.
 
-**Backend / Scripts (Python):**
-```bash
-pip install -r requirements.txt
+**Flags opcionais:**
+```powershell
+.\setup.ps1 -Freeze    # atualiza requirements.txt com o estado atual do venv
+.\setup.ps1 -Backend   # setup + sobe o backend em localhost:8000
+```
+
+### 2. Subindo os serviços
+
+**Backend (FastAPI):** sempre rodar da raiz do projeto para os imports funcionarem.
+```powershell
+.venv\Scripts\Activate.ps1
+python -m uvicorn backend.main:app --reload --port 8000
+# Swagger disponível em http://localhost:8000/docs
 ```
 
 **Frontend (Next.js):**
 ```bash
 cd frontend
-npm install
 npm run dev   # http://localhost:3000
 ```
 

@@ -6,14 +6,14 @@ const config: Config = {
     extend: {
       colors: {
         metis: {
-          bg: '#0d0f14',
-          surface: '#161b27',
-          border: '#1e2533',
-          accent: '#4f8ef7',
-          'accent-hover': '#3a78e8',
-          muted: '#4a5568',
-          text: '#e2e8f0',
-          'text-dim': '#8892a4',
+          bg: 'rgb(var(--metis-bg) / <alpha-value>)',
+          surface: 'rgb(var(--metis-surface) / <alpha-value>)',
+          border: 'rgb(var(--metis-border) / <alpha-value>)',
+          accent: 'rgb(var(--metis-accent) / <alpha-value>)',
+          'accent-hover': 'rgb(var(--metis-accent-hover) / <alpha-value>)',
+          muted: 'rgb(var(--metis-muted) / <alpha-value>)',
+          text: 'rgb(var(--metis-text) / <alpha-value>)',
+          'text-dim': 'rgb(var(--metis-text-dim) / <alpha-value>)',
         },
       },
     },

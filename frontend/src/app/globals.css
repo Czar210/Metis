@@ -2,11 +2,139 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Modo escuro (padrão) ───────────────────────────────────── */
+:root,
+[data-mode="dark"] {
+  --metis-bg:           13 15 20;
+  --metis-surface:      20 24 34;
+  --metis-border:       30 37 55;
+  --metis-text:         226 232 240;
+  --metis-text-dim:     100 116 139;
+  --metis-muted:        71 85 105;
+  --metis-accent:       59 130 246;
+  --metis-accent-hover: 37 99 235;
+}
+
+/* ── Modo claro ─────────────────────────────────────────────── */
+[data-mode="light"] {
+  --metis-bg:           248 250 252;
+  --metis-surface:      255 255 255;
+  --metis-border:       226 232 240;
+  --metis-text:         15 23 42;
+  --metis-text-dim:     100 116 139;
+  --metis-muted:        148 163 184;
+  --metis-accent:       37 99 235;
+  --metis-accent-hover: 29 78 216;
+}
+
+/* ── Cores de acento (escuro) ───────────────────────────────── */
+[data-color="blue"] {
+  --metis-accent:       59 130 246;
+  --metis-accent-hover: 37 99 235;
+}
+[data-color="purple"] {
+  --metis-accent:       139 92 246;
+  --metis-accent-hover: 124 58 237;
+}
+[data-color="green"] {
+  --metis-accent:       16 185 129;
+  --metis-accent-hover: 5 150 105;
+}
+[data-color="red"] {
+  --metis-accent:       239 68 68;
+  --metis-accent-hover: 220 38 38;
+}
+[data-color="gold"] {
+  --metis-accent:       212 175 55;
+  --metis-accent-hover: 180 148 35;
+}
+
+/* ── Overrides para modo claro (contraste maior) ────────────── */
+[data-mode="light"][data-color="blue"] {
+  --metis-accent:       37 99 235;
+  --metis-accent-hover: 29 78 216;
+}
+[data-mode="light"][data-color="purple"] {
+  --metis-accent:       124 58 237;
+  --metis-accent-hover: 109 40 217;
+}
+[data-mode="light"][data-color="green"] {
+  --metis-accent:       5 150 105;
+  --metis-accent-hover: 4 120 87;
+}
+[data-mode="light"][data-color="red"] {
+  --metis-accent:       220 38 38;
+  --metis-accent-hover: 185 28 28;
+}
+[data-mode="light"][data-color="gold"] {
+  --metis-accent:       161 127 23;
+  --metis-accent-hover: 133 104 16;
+}
+
 html,
 body {
-  background-color: #0d0f14;
-  color: #e2e8f0;
+  background-color: rgb(var(--metis-bg));
+  color: rgb(var(--metis-text));
 }
+
+/* ── Runtime theme overrides ────────────────────────────────────────────────
+   Tailwind compila rgb(var(--metis-*)) como valores RGB fixos no build.
+   Estas regras usam var() real para que mudanças de tema em runtime funcionem.
+   Mesma especificidade de classe, porém posteriores no cascade → ganham.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* Backgrounds */
+.bg-metis-bg           { background-color: rgb(var(--metis-bg)           / var(--tw-bg-opacity, 1)); }
+.bg-metis-surface      { background-color: rgb(var(--metis-surface)      / var(--tw-bg-opacity, 1)); }
+.bg-metis-accent       { background-color: rgb(var(--metis-accent)       / var(--tw-bg-opacity, 1)); }
+.bg-metis-accent-hover { background-color: rgb(var(--metis-accent-hover) / var(--tw-bg-opacity, 1)); }
+.bg-metis-border       { background-color: rgb(var(--metis-border)       / var(--tw-bg-opacity, 1)); }
+.bg-metis-muted        { background-color: rgb(var(--metis-muted)        / var(--tw-bg-opacity, 1)); }
+
+/* Background com opacidade */
+.bg-metis-bg\/20     { background-color: rgb(var(--metis-bg)      / 0.20); }
+.bg-metis-bg\/40     { background-color: rgb(var(--metis-bg)      / 0.40); }
+.bg-metis-bg\/50     { background-color: rgb(var(--metis-bg)      / 0.50); }
+.bg-metis-accent\/15 { background-color: rgb(var(--metis-accent)  / 0.15); }
+.bg-metis-accent\/20 { background-color: rgb(var(--metis-accent)  / 0.20); }
+.bg-metis-accent\/30 { background-color: rgb(var(--metis-accent)  / 0.30); }
+.bg-metis-border\/30 { background-color: rgb(var(--metis-border)  / 0.30); }
+.bg-metis-border\/40 { background-color: rgb(var(--metis-border)  / 0.40); }
+.bg-metis-border\/50 { background-color: rgb(var(--metis-border)  / 0.50); }
+
+/* Text */
+.text-metis-text     { color: rgb(var(--metis-text)     / var(--tw-text-opacity, 1)); }
+.text-metis-text-dim { color: rgb(var(--metis-text-dim) / var(--tw-text-opacity, 1)); }
+.text-metis-accent   { color: rgb(var(--metis-accent)   / var(--tw-text-opacity, 1)); }
+.text-metis-muted    { color: rgb(var(--metis-muted)    / var(--tw-text-opacity, 1)); }
+
+/* Border */
+.border-metis-border { border-color: rgb(var(--metis-border) / var(--tw-border-opacity, 1)); }
+.border-metis-accent { border-color: rgb(var(--metis-accent) / var(--tw-border-opacity, 1)); }
+
+/* Border com opacidade */
+.border-metis-border\/30 { border-color: rgb(var(--metis-border) / 0.30); }
+.border-metis-border\/40 { border-color: rgb(var(--metis-border) / 0.40); }
+.border-metis-border\/50 { border-color: rgb(var(--metis-border) / 0.50); }
+
+/* Placeholder */
+.placeholder-metis-muted::placeholder { color: rgb(var(--metis-muted)); }
+
+/* Hover states */
+.hover\:bg-metis-accent:hover         { background-color: rgb(var(--metis-accent)); }
+.hover\:bg-metis-accent-hover:hover   { background-color: rgb(var(--metis-accent-hover)); }
+.hover\:bg-metis-bg\/50:hover         { background-color: rgb(var(--metis-bg) / 0.50); }
+.hover\:text-metis-accent:hover       { color: rgb(var(--metis-accent)); }
+.hover\:text-metis-accent-hover:hover { color: rgb(var(--metis-accent-hover)); }
+.hover\:text-metis-text:hover         { color: rgb(var(--metis-text)); }
+.hover\:border-metis-accent:hover     { border-color: rgb(var(--metis-accent)); }
+
+/* Focus states */
+.focus\:border-metis-accent:focus               { border-color: rgb(var(--metis-accent)); }
+.focus-within\:border-metis-accent:focus-within { border-color: rgb(var(--metis-accent)); }
+
+/* Group hover */
+.group:hover .group-hover\:text-metis-accent { color: rgb(var(--metis-accent)); }
 
 /* Scrollbar sutil para a área de chat */
 .chat-scroll::-webkit-scrollbar {
@@ -16,6 +144,6 @@ body {
   background: transparent;
 }
 .chat-scroll::-webkit-scrollbar-thumb {
-  background: #1e2533;
+  background: rgb(var(--metis-border));
   border-radius: 2px;
 }

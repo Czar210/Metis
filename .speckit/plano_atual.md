@@ -115,23 +115,32 @@ Cards na coluna [Revisão] com todas as checklists completas:
 - [ ] FastAPI: dependência `get_current_user` lendo o header
 - [ ] Validar token com chave pública Supabase → retornar 401 se inválido
 
-### [Takis] Tela de Histórico de Partidas do Jogador
-**Arquivos:** `frontend/src/app/history/` + `frontend/src/components/matches/MatchCard.tsx`
-**Libs:** `next`, `react`, `tailwindcss`, `date-fns`, `lucide-react`
-- [ ] Criar rota `/history` no Next.js
-- [ ] Fetch na API para buscar lista de partidas do jogador
-- [ ] Componente `MatchCard` (Resultado, Campeão, KDA, Ouro)
-- [ ] Estilização dinâmica: azul = Vitória, vermelho = Derrota
-- [ ] Botão "Analisar com Metis" → joga dados da partida pro chat
+### [Done ✅] Separação de Dados Sujos + Paginação (v0.6.3)
+- [x] Tabela `matches_dirty` no Supabase (reason + snapshot JSON + RLS)
+- [x] `riot_service.py` — filtro SoloQ/Flex (420/440) + remake/short_game → matches_dirty
+- [x] `GET /api/v1/player/history` com `offset` + `has_more`
+- [x] Player page — carga inicial 15, botão "Carregar mais" (+10), badge SoloQ/Flex
 
-### [Takis] Tela de Estatísticas Globais (Tier List / Meta)
-**Arquivos:** `frontend/src/app/champions/` + `frontend/src/components/stats/StatsTable.tsx`
-**Libs:** `next`, `react`, `recharts` ou `chart.js`, `clsx`, `tailwind-merge`
-- [ ] Criar rota `/champions` no Next.js
-- [ ] Fetch em `GET /api/v1/stats/champions`
-- [ ] Tabela: Ícone, Nome, Winrate (%), Pickrate, Banrate
-- [ ] Ordenação por coluna (click no header)
-- [ ] Cores: vermelho < 49%, verde > 51%
+### [Done ✅] Tela de Histórico de Partidas do Jogador
+**Arquivos:** `frontend/src/app/players/[puuid]/page.tsx` + `frontend/src/components/matches/MatchCard.tsx`
+- [x] Fetch em `GET /api/v1/player/history?puuid=&limit=10`
+- [x] Componente `MatchCard` (Resultado, Campeão via Data Dragon CDN, KDA, Ouro, DPM, duração)
+- [x] Azul = Vitória, vermelho = Derrota
+- [x] Botão "Analisar" → `/chat?match_id=&puuid=`
+- [x] Toggle supervisão (Star/StarOff) com label livre, watch via `watched_players`
+- [x] Backend: `GET /api/v1/player/history` com nested select PostgREST
+
+### [Done ✅] Tela de Estatísticas Globais (Tier List / Meta)
+**Arquivos:** `frontend/src/app/champions/page.tsx` + `frontend/src/components/stats/StatsTable.tsx`
+- [x] Rota `/champions` no Next.js
+- [x] Fetch em `GET /api/v1/stats/tierlist` com filtros role/server/patch
+- [x] Tabela sortável por qualquer coluna (click header, toggle asc/desc)
+- [x] Ícone do campeão via Data Dragon CDN
+- [x] Winrate: verde > 51%, vermelho < 49%
+- [x] Filtros: role (botões), servidor (select), patch (input), elo (emblemas Data Dragon, UI-only)
+- [x] Backend: `GET /api/v1/stats/tierlist` + `buscar_tierlist()` em `stats_service.py`
+- [ ] Cores percentil (top/bottom 25%) por coluna — pendente
+- [ ] Badge "baixa amostra" para campeões com poucos dados no filtro — pendente
 
 ---
 
