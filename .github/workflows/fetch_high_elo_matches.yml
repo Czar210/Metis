@@ -9,6 +9,7 @@ on:
 jobs:
   ingest-high-elo:
     runs-on: ubuntu-latest
+    timeout-minutes: 300  # 5h — garante encerramento limpo antes do kill de 6h do GitHub
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
@@ -29,4 +30,5 @@ jobs:
           CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           CLOUDFLARE_R2_BUCKET_NAME: "metis"
           RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+          MAX_PLAYERS_PER_TIER: "500"  # Cap por tier — CHALLENGER+GRANDMASTER+MASTER cabem em ~3h
         run: python -m scripts.ingestion.fetch_high_elo_matches

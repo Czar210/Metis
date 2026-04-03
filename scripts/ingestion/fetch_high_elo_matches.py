@@ -18,6 +18,8 @@ RIOT_API_KEY = os.environ.get("RIOT_API_KEY")
 
 MAX_WORKERS = 5
 RATE_LIMIT_PAUSE = 120
+# Limite de jogadores verificados por tier por run — evita timeout de 6h no Actions
+MAX_PLAYERS_PER_TIER = int(os.environ.get("MAX_PLAYERS_PER_TIER", 500))
 
 def get_league_data(lol_watcher, server, tier):
     """Tenta obter a lista de jogadores com retentativas."""
@@ -59,6 +61,7 @@ def process_single_match(match_id, routing_region, lol_watcher, s3_client):
 
 def fetch_high_elo_turbo(server, target_per_tier=250):
     print(f"🌍 Iniciando Varredura Turbo em {server}...")
+    print(f"⚙️  Config: target={target_per_tier} partidas/tier | max_players={MAX_PLAYERS_PER_TIER}/tier")
 
     if not RIOT_API_KEY:
         print("❌ ERRO CRÍTICO: RIOT_API_KEY não encontrada no arquivo .env!")
@@ -67,7 +70,9 @@ def fetch_high_elo_turbo(server, target_per_tier=250):
     lol_watcher = LolWatcher(RIOT_API_KEY)
     s3 = get_r2_client()
     routing_region = get_routing_region(server)
-    tiers = ['CHALLENGER', 'GRANDMASTER', 'MASTER', 'DIAMOND']
+    # Diamond removido do loop diário — 9k+ jogadores estouram o timeout de 6h do Actions.
+    # Diamond roda separadamente via workflow_dispatch quando necessário.
+    tiers = ['CHALLENGER', 'GRANDMASTER', 'MASTER']
 
     for tier in tiers:
         print(f"\n--- Camada: {tier} ---")
@@ -85,6 +90,8 @@ def fetch_high_elo_turbo(server, target_per_tier=250):
 
         print(f"📊 Encontrados {len(entries)} jogadores na liga {tier}!")
         random.shuffle(entries)
+        entries = entries[:MAX_PLAYERS_PER_TIER]  # cap por run
+        print(f"🎯 Verificando até {len(entries)} jogadores nesta tier.")
 
         coletadas = 0
         idx = 0

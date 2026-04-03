@@ -38,6 +38,18 @@ jobs:
           restore-keys: |
             visited-urls-
 
+      - name: 🗂️ Gerar champion.json (Data Dragon)
+        run: |
+          mkdir -p data/static
+          python -c "
+          import requests, json
+          ver = requests.get('https://ddragon.leagueoflegends.com/api/versions.json').json()[0]
+          data = requests.get(f'https://ddragon.leagueoflegends.com/cdn/{ver}/data/pt_BR/champion.json').json()
+          with open('data/static/champion.json', 'w', encoding='utf-8') as f:
+              json.dump(data, f)
+          print(f'champion.json gerado: patch {ver}, {len(data[\"data\"])} campeões')
+          "
+
       - name: 🚀 Executar Infiltrador do Mobafire (todos os 172 campeões)
         env:
           CLOUDFLARE_R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_R2_ACCOUNT_ID }}
