@@ -84,7 +84,7 @@ async def chat(req: ChatRequest):
     Recebe a mensagem do usuário e retorna a resposta do agente.
     TODO: Integrar com Ollama (Llama 3) + pipeline RAG (Pinecone).
     """
-    # Esqueleto — será substituído pela chamada real ao agente de IA
+    # Esqueleto — será substituído pela chamada ao rag_service → Langflow (OpenRAG) → Ollama (Llama 3)
     return {
         "resposta": f"[Metis IA] Recebi sua mensagem: '{req.mensagem}'. Agente ainda não conectado.",
         "status": "skeleton"

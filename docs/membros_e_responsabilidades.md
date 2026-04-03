@@ -4,10 +4,10 @@ Este documento detalha o papel de cada um dos 3 membros da equipe, suas tecnolog
 
 ---
 
-## 🧙‍♂️ Membro 1: AI & Knowledge Engineer
-**Foco:** Inteligência Artificial, Processamento de Linguagem Natural (NLP) e RAG.
+## 🧙‍♂️ Membro 1 (André): Backend, Python & AI Engineer
+**Foco:** Construção do Servidor (FastAPI), Arquitetura Backend, Inteligência Financeira (RAG/NLP) e Prompt Engineering. [LinkedIn](https://www.linkedin.com/in/andre-messina-506179239/)
 
-**Dever:** Construir o sistema que permite ao usuário "conversar" com o conhecimento de especialistas. Ele é responsável por transformar guias de texto em vetores matemáticos que a IA consegue buscar.
+**Dever:** André adora aprender metodologias de arquitetura escalável e engenharia em **Python**. Ele montou grande parte do **FastAPI** base. Além dessa forte fundação Backend, ajuda construindo a ponte onde o usuário "conversa" com o servidor, formatando a identidade do Llama 3.
 
 ### Tech Stack
 - **Ollama:** Execução local de LLMs (Llama 3.1).
@@ -24,8 +24,8 @@ Este documento detalha o papel de cada um dos 3 membros da equipe, suas tecnolog
 
 ---
 
-## 🎨 Membro 2: Product & UX Engineer
-**Foco:** Frontend, Visualização de Dados e Design de Produto.
+## 🎨 Membro 2 (Takida): Product & UX Engineer
+**Foco:** Frontend, Visualização de Dados, Next.js e Design de Produto.
 
 **Dever:** Transformar as funções matemáticas complexas em algo que um jogador entenda. Ele cuida da experiência do usuário (UX) e da parte visual dos grafos de estilo.
 
@@ -44,10 +44,10 @@ Este documento detalha o papel de cada um dos 3 membros da equipe, suas tecnolog
 
 ---
 
-## ⚙️ Membro 3: Data Architect & CloudOps
-**Foco:** Engenharia de Dados, Infraestrutura e Backend.
+## ⚙️ Membro 3 (César): Data Architect, CI/CD & Tech Lead
+**Foco:** Engenharia de Dados, Infraestrutura, Automação (CI/CD) e Liderança Técnica. [LinkedIn](https://www.linkedin.com/in/cesar-sibila/)
 
-**Dever:** É o "encanador" do projeto. Garante que os gigabytes de dados da Riot saiam da API, sejam limpos e fiquem disponíveis para o Frontend e a IA no menor tempo possível.
+**Dever:** É a engrenagem Ops do projeto e o **Tech Lead** do time. Foca as mãos nas tubulações massivas de dados (pipelines Riot $\rightarrow$ Cloudflare), construindo os GitHub Actions de CI/CD para automatizações. Como Tech Lead, também avalia as mudanças de código dos amigos e garante a manutenibilidade de toda a base.
 
 ### Tech Stack
 - **Python (Polars):** Processamento massivo de dados (mais rápido que Pandas).

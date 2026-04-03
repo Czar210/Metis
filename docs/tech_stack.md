@@ -15,8 +15,8 @@ A stack de tecnologia da Metis foi projetada como um ecossistema híbrido e esca
 
 ## 📊 Engenharia de Dados (Arquitetura Medalhão)
 - **Camada Bronze (Data Lake)**: Dados brutos da API da Riot Games capturados via **GitHub Actions** e armazenados no **Cloudflare R2**.
-- **Camada Prata/Ouro (Data Warehouse)**: Dados processados e limpos no **Supabase (PostgreSQL)**.
-- **Busca Semântica (RAG)**: Vetores estratégicos e guias armazenados no **Pinecone**.
+- **Camada Prata/Ouro (Data Warehouse & Busca Semântica)**: Dados estruturados, limpos e conhecimento estratégico vetorizado no **Supabase Puro (PostgreSQL + pgvector)**, garantindo atomicidade total e RLS (Row Level Security).
+- **RAG e Inteligência**: Orquestração via **OpenRAG** interagindo diretamente com os índices vetoriais do Supabase.
 
 ---
-*Esta arquitetura garante soberania, baixo custo e alta precisão nas respostas da Metis.*
+*Esta arquitetura garante soberania, segurança RLS nativa, isolamento e alta precisão nas respostas da Metis.*

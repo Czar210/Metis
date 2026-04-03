@@ -1,6 +1,13 @@
 # 🦅 Metis
 
+**Bem-vinde!**
+
 Metis é uma aliada estratégica de alto nível para jogadores de League of Legends. Combinando o poder de Agentes de IA (Llama 3 via Ollama) com uma arquitetura de dados robusta (RAG - Retrieval-Augmented Generation), a Metis não apenas exibe estatísticas, mas "entende" o estado do jogo e oferece sabedoria tática real.
+
+## 🧑‍💻 Equipe Principal
+- **César (Tech Lead, Data Eng & CI/CD) - [LinkedIn](https://www.linkedin.com/in/cesar-sibila/):** Maestro da infraestrutura e engenharia de dados. Focado na orquestração de deploy via CI/CD (Actions) e sustentação atômica. Como Tech Lead, também guia e revisa ativamente as formatações e mudanças técnicas desenvolvidas pelos parceiros.
+- **Takida (Frontend & UX Engineer):** Responsável por dar vida e fluidez aos dados na interface visual com Next.js, mantendo uma experiência visual premium (Tailwind) e fluxos seguros de Auth.
+- **André (Backend, Python & AI Engineer) - [LinkedIn](https://www.linkedin.com/in/andre-messina-506179239/):** Engenheiro polivalente sedento por arquitetura. Fundador de grande parte do esqueleto do **FastAPI**, além de ser o estrategista cognitivo que doma o modelo Llama 3 (Prompt Engineer) conectando-o precisamente com o OpenRAG.
 
 ## 🏗️ Estrutura do Projeto
 

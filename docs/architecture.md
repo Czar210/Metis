@@ -3,7 +3,7 @@
 A Metis utiliza uma arquitetura híbrida e escalável que une engenharia de dados moderna (Arquitetura Medalhão) com inteligência artificial de ponta (RAG).
 
 ## 🚀 Visão Geral
-A stack utiliza **Next.js** no frontend, **FastAPI** como maestro no backend, e **Llama 3 (Ollama)** rodando soberanamente via **Cloudflare Tunnels**. A inteligência é potencializada por um sistema de **RAG** utilizando **Pinecone** e um fluxo de dados automatizado via **GitHub Actions** para o **Cloudflare R2 (Bronze)** e **Supabase (Prata/Ouro)**.
+A stack utiliza **Next.js** no frontend, **FastAPI** como maestro no backend, e **Llama 3 (Ollama)** rodando soberanamente via **Cloudflare Tunnels**. A inteligência é potencializada por um sistema robusto baseado em **OpenRAG** utilizando **Supabase Puro (PostgreSQL + pgvector)** como motor vetorial atômico e repositório estruturado, além de um fluxo de dados automatizado via **GitHub Actions** armazenando dados brutos no **Cloudflare R2 (Bronze)**.
 
 ## 📐 Diagrama de Fluxo
 graph TD
@@ -21,8 +21,7 @@ graph TD
 
     subgraph "Storage Layer"
         R2[(Cloudflare R2 - Bronze)]
-        Supa[(Supabase Postgres - Silver)]
-        Pine[(Pinecone Vector - Gold)]
+        Supa[(Supabase Postgres + pgvector - Silver/Gold)]
     end
 
     subgraph "Internal Intelligence Layer (Backend)"
@@ -40,17 +39,15 @@ graph TD
     RiotAPI --> GAA --> R2
     R2 --> GAA --> Supa
     Wiki --> GAB --> Supa
-    Guides --> GAC --> Pine
+    Guides --> GAC --> Supa
 
     Next <--> API
     API <--> Core
     Core <--> Models
     Core <--> Supa
-    Core <--> Pine
     Core <--> Tunnel <--> Ollama
 ```
 
-## Data Layers
+## Data Layers / Segurança
 - **Bronze (R2):** Raw JSON from Riot API. Keep everything for audit/re-processing.
-- **Silver (Supabase):** Structured and cleaned data. Player stats, champion ratios, game events.
-- **Gold (Pinecone):** Vectorized strategic knowledge. Guides, pro-tips, and contextual analysis.
+- **Silver / Gold (Supabase):** Structured data (Player stats, events) and Vectorized strategic knowledge (Guides, tips) armazenados com `pgvector`. Todo o acesso respeita as políticas de **Row Level Security (RLS)** definindo forte isolamento de tenant.
