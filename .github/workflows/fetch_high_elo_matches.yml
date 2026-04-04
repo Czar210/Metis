@@ -33,5 +33,5 @@ jobs:
           CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           CLOUDFLARE_R2_BUCKET_NAME: "metis"
           RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
-          MAX_PLAYERS_PER_TIER: "400"  # 400 players ≈ 4h30m — dentro do timeout de 280min
+          MAX_PLAYERS_PER_TIER: "200"  # 200 players ≈ 2h30m — dentro do timeout de 280min
         run: python -m scripts.ingestion.fetch_high_elo_matches
