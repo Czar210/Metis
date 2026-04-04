@@ -15,13 +15,20 @@ from scripts.processing.process_matches import (
 # Fixture base — partida ranked válida com 10 participantes
 # ─────────────────────────────────────────────────────────────────────────────
 
-def make_participant(puuid: str, position: str = "MIDDLE", bot: bool = False) -> dict:
+def make_participant(puuid: str, position: str = "MIDDLE", bot: bool = False,
+                     team_id: int = 100, items: list | None = None,
+                     keystone: int = 8214, primary_style: int = 8100,
+                     secondary_style: int = 8300,
+                     total_minions: int = 150, neutral_minions: int = 30,
+                     champ_level: int = 18, items_purchased: int = 15) -> dict:
+    items = items or [3157, 3165, 3089, 3020, 4645, 3135, 3364]
     return {
         "puuid": puuid,
         "riotIdGameName": f"Player_{puuid[:4]}",
         "riotIdTagline": "BR1",
         "championName": "Ahri",
         "teamPosition": position,
+        "teamId": team_id,
         "win": True,
         "kills": 5, "deaths": 2, "assists": 8,
         "goldEarned": 12000,
@@ -32,6 +39,25 @@ def make_participant(puuid: str, position: str = "MIDDLE", bot: bool = False) ->
         "timePlayed": 1800,
         "teamEarlySurrendered": False,
         "botPlayer": bot,
+        "summoner1Id": 4,
+        "summoner2Id": 14,
+        "totalMinionsKilled": total_minions,
+        "neutralMinionsKilled": neutral_minions,
+        "champLevel": champ_level,
+        "itemsPurchased": items_purchased,
+        **{f"item{i}": items[i] if i < len(items) else 0 for i in range(7)},
+        "perks": {
+            "styles": [
+                {
+                    "style": primary_style,
+                    "selections": [{"perk": keystone, "var1": 0, "var2": 0, "var3": 0}],
+                },
+                {
+                    "style": secondary_style,
+                    "selections": [],
+                },
+            ]
+        },
         "challenges": {"soloKills": 2, "damagePerMinute": 800.0, "killParticipation": 0.7},
     }
 
@@ -257,3 +283,175 @@ class TestProcessarPartida:
         ok = processar_partida({}, db_client=mock_db)
         assert ok is False
         mock_db.table.assert_not_called()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Campos enriquecidos v0.6.4 — items, runas, CS/m, team_id
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCamposEnriquecidos:
+    """Garante que extrair_dados_partida() salva os 12 novos campos em cada participante."""
+
+    def _get_first_participant(self, match_json=None) -> dict:
+        match_json = match_json or make_match()
+        _, _, parts = extrair_dados_partida(match_json)
+        return parts[0]
+
+    # ── Items ─────────────────────────────────────────────────────────────────
+
+    def test_items_extraidos_como_lista(self):
+        p = self._get_first_participant()
+        assert "items" in p
+        assert isinstance(p["items"], list)
+        assert len(p["items"]) == 7
+
+    def test_items_valores_corretos(self):
+        items = [3157, 3165, 3089, 3020, 4645, 3135, 3364]
+        match_json = make_match()
+        match_json["info"]["participants"][0].update(
+            {f"item{i}": items[i] for i in range(7)}
+        )
+        p = self._get_first_participant(match_json)
+        assert p["items"] == items
+
+    def test_items_slot_vazio_vira_zero(self):
+        match_json = make_match()
+        for i in range(7):
+            match_json["info"]["participants"][0][f"item{i}"] = 0
+        p = self._get_first_participant(match_json)
+        assert all(v == 0 for v in p["items"])
+        assert isinstance(p["items"][0], int)
+
+    def test_items_ausentes_viram_zero(self):
+        """Se item0..item6 não existirem no JSON, deve retornar lista de zeros."""
+        match_json = make_match()
+        for i in range(7):
+            match_json["info"]["participants"][0].pop(f"item{i}", None)
+        p = self._get_first_participant(match_json)
+        assert p["items"] == [0, 0, 0, 0, 0, 0, 0]
+
+    # ── Runas ─────────────────────────────────────────────────────────────────
+
+    def test_rune_keystone_extraido(self):
+        match_json = make_match()
+        match_json["info"]["participants"][0]["perks"] = {
+            "styles": [
+                {"style": 8100, "selections": [{"perk": 8351}]},
+                {"style": 8300, "selections": []},
+            ]
+        }
+        p = self._get_first_participant(match_json)
+        assert p["rune_keystone"] == 8351
+
+    def test_rune_primary_extraido(self):
+        p = self._get_first_participant()
+        assert p["rune_primary"] == 8100
+
+    def test_rune_secondary_extraido(self):
+        p = self._get_first_participant()
+        assert p["rune_secondary"] == 8300
+
+    def test_rune_keystone_none_sem_perks(self):
+        """Participante sem `perks` → keystone = None, sem erro."""
+        match_json = make_match()
+        match_json["info"]["participants"][0].pop("perks", None)
+        p = self._get_first_participant(match_json)
+        assert p["rune_keystone"] is None
+
+    def test_rune_keystone_none_sem_selections(self):
+        """Estilo primário sem selections → keystone = None."""
+        match_json = make_match()
+        match_json["info"]["participants"][0]["perks"] = {
+            "styles": [{"style": 8100, "selections": []}, {"style": 8300, "selections": []}]
+        }
+        p = self._get_first_participant(match_json)
+        assert p["rune_keystone"] is None
+
+    def test_runes_raw_salvo(self):
+        """runes_raw deve conter o dict perks completo."""
+        p = self._get_first_participant()
+        assert "runes_raw" in p
+        assert isinstance(p["runes_raw"], dict)
+        assert "styles" in p["runes_raw"]
+
+    # ── CS/m ──────────────────────────────────────────────────────────────────
+
+    def test_total_cs_calculado(self):
+        """total_cs = totalMinionsKilled + neutralMinionsKilled."""
+        match_json = make_match()
+        match_json["info"]["participants"][0]["totalMinionsKilled"] = 150
+        match_json["info"]["participants"][0]["neutralMinionsKilled"] = 30
+        p = self._get_first_participant(match_json)
+        assert p["total_cs"] == 180
+
+    def test_cspm_calculado_corretamente(self):
+        """180 CS em 1800s (30 min) = 6.0 CS/m."""
+        match_json = make_match(duration=1800)
+        match_json["info"]["participants"][0]["totalMinionsKilled"] = 150
+        match_json["info"]["participants"][0]["neutralMinionsKilled"] = 30
+        p = self._get_first_participant(match_json)
+        assert p["cs_per_minute"] == pytest.approx(6.0, rel=0.01)
+
+    def test_cspm_zero_quando_duracao_minima(self):
+        """Duração mínima aceita (190s) → cspm calculado sem ZeroDivisionError."""
+        match_json = make_match(duration=190)
+        match_json["info"]["participants"][0]["totalMinionsKilled"] = 10
+        match_json["info"]["participants"][0]["neutralMinionsKilled"] = 0
+        _, _, parts = extrair_dados_partida(match_json)
+        assert parts[0]["cs_per_minute"] >= 0.0
+
+    def test_total_cs_campo_ausente_vira_zero(self):
+        """Se totalMinionsKilled não existir, total_cs deve ser 0."""
+        match_json = make_match()
+        match_json["info"]["participants"][0].pop("totalMinionsKilled", None)
+        match_json["info"]["participants"][0].pop("neutralMinionsKilled", None)
+        p = self._get_first_participant(match_json)
+        assert p["total_cs"] == 0
+
+    # ── team_id ───────────────────────────────────────────────────────────────
+
+    def test_team_id_100_extraido(self):
+        match_json = make_match()
+        match_json["info"]["participants"][0]["teamId"] = 100
+        p = self._get_first_participant(match_json)
+        assert p["team_id"] == 100
+
+    def test_team_id_200_extraido(self):
+        match_json = make_match()
+        match_json["info"]["participants"][0]["teamId"] = 200
+        p = self._get_first_participant(match_json)
+        assert p["team_id"] == 200
+
+    # ── Summoner Spells ───────────────────────────────────────────────────────
+
+    def test_summoner1_extraido(self):
+        p = self._get_first_participant()
+        assert p["summoner1_id"] == 4  # Flash
+
+    def test_summoner2_extraido(self):
+        p = self._get_first_participant()
+        assert p["summoner2_id"] == 14  # Ignite
+
+    # ── Champion Level ────────────────────────────────────────────────────────
+
+    def test_champion_level_extraido(self):
+        p = self._get_first_participant()
+        assert p["champion_level"] == 18
+
+    def test_champion_level_default_1_sem_campo(self):
+        match_json = make_match()
+        match_json["info"]["participants"][0].pop("champLevel", None)
+        p = self._get_first_participant(match_json)
+        assert p["champion_level"] == 1
+
+    # ── items_purchased ───────────────────────────────────────────────────────
+
+    def test_items_purchased_extraido(self):
+        p = self._get_first_participant()
+        assert p["items_purchased"] == 15
+
+    def test_items_purchased_default_0_sem_campo(self):
+        match_json = make_match()
+        match_json["info"]["participants"][0].pop("itemsPurchased", None)
+        p = self._get_first_participant(match_json)
+        assert p["items_purchased"] == 0

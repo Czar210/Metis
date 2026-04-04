@@ -31,7 +31,10 @@ export default function AuthPage() {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    // Mapeia username "admin" para o email real da conta admin
+    const resolvedEmail = email.trim() === 'admin' ? 'admin@metis.gg' : email.trim()
+
+    const { error } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password })
 
     if (error) {
       setError(error.message)
@@ -152,7 +155,7 @@ export default function AuthPage() {
               </label>
               <input
                 id="email"
-                type="email"
+                type="text"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required

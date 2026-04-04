@@ -28,8 +28,8 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // /chat exige autenticação
-  if (!user && pathname.startsWith('/chat')) {
+  // /chat e /admin exigem autenticação
+  if (!user && (pathname.startsWith('/chat') || pathname.startsWith('/admin'))) {
     return NextResponse.redirect(new URL('/auth', request.url))
   }
 

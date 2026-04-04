@@ -115,6 +115,7 @@ def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
             "puuid": puuid,
             "game_name": p.get("riotIdGameName", "Desconhecido"),
             "tag_line": p.get("riotIdTagline", "UNK"),
+            "profile_icon_id": p.get("profileIcon"),
         })
 
         # ── Filtro 5: teamPosition vazia → UNKNOWN ────────────────────────────
@@ -124,6 +125,21 @@ def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
         is_afk = p.get("teamEarlySurrendered", False) or (time_played < game_duration * 0.8)
         challenges = dict(p.get("challenges", {}))
         challenges["is_afk"] = is_afk
+
+        # ── Items (slots 0-6, slot 6 = trinket) ──────────────────────────────
+        items = [p.get(f"item{i}", 0) for i in range(7)]
+
+        # ── Runas ─────────────────────────────────────────────────────────────
+        perks = p.get("perks", {})
+        styles = perks.get("styles", [])
+        primary       = styles[0] if styles else {}
+        secondary     = styles[1] if len(styles) > 1 else {}
+        primary_sels  = primary.get("selections") or []
+        keystone      = primary_sels[0].get("perk") if primary_sels else None
+
+        # ── CS e CS/min ───────────────────────────────────────────────────────
+        total_cs = p.get("totalMinionsKilled", 0) + p.get("neutralMinionsKilled", 0)
+        cspm = round(total_cs / (game_duration / 60), 2) if game_duration > 0 else 0.0
 
         participants_payload.append({
             "match_id": match_id,
@@ -144,6 +160,19 @@ def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
             "kill_participation": challenges.get("killParticipation", 0.0),
             "early_laning_phase_gold_exp_advantage": challenges.get("earlyLaningPhaseGoldExpAdvantage", 0.0),
             "challenges": challenges,
+            # ── Campos enriquecidos (v0.6.4) ──────────────────────────────────
+            "team_id":         p.get("teamId"),
+            "items":           items,
+            "summoner1_id":    p.get("summoner1Id"),
+            "summoner2_id":    p.get("summoner2Id"),
+            "rune_keystone":   keystone,
+            "rune_primary":    primary.get("style"),
+            "rune_secondary":  secondary.get("style"),
+            "runes_raw":       perks,
+            "total_cs":        total_cs,
+            "cs_per_minute":   float(cspm),
+            "champion_level":  p.get("champLevel", 1),
+            "items_purchased": p.get("itemsPurchased", 0),
         })
 
     return match_payload, players_payload, participants_payload

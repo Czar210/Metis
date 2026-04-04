@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { championIconUrl, DDRAGON_VERSION } from '@/lib/ddragon'
 
@@ -114,7 +115,7 @@ export function StatsTable({ data, searchQuery }: Props) {
               >
                 {/* Campeão */}
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
+                  <Link href={`/champions/${c.champion}`} className="flex items-center gap-3 group">
                     <div className="relative w-8 h-8 rounded-md overflow-hidden flex-shrink-0 border border-metis-border">
                       <Image
                         src={championIconUrl(c.champion, DDRAGON_VERSION)}
@@ -124,8 +125,10 @@ export function StatsTable({ data, searchQuery }: Props) {
                         unoptimized
                       />
                     </div>
-                    <span className="font-medium text-metis-text">{c.champion}</span>
-                  </div>
+                    <span className="font-medium text-metis-text group-hover:text-metis-accent transition-colors">
+                      {c.champion}
+                    </span>
+                  </Link>
                 </td>
                 <td className="px-4 py-3 text-metis-text-dim">{c.total_matches}</td>
                 <td className="px-4 py-3"><WinrateCell value={c.winrate} /></td>

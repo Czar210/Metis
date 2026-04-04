@@ -44,14 +44,14 @@ class TestUpdateHistoryValidation:
         assert response.status_code in [422, 400]
 
     def test_count_maximum_boundary(self):
-        """Count more than 20 should be rejected"""
-        payload = {"nick": "Faker", "tag": "BR1", "server": "BR1", "count": 21}
+        """Count more than 100 should be rejected"""
+        payload = {"nick": "Faker", "tag": "BR1", "server": "BR1", "count": 101}
         response = client.post("/api/v1/player/update-history", json=payload)
         assert response.status_code in [422, 400]
 
     def test_count_valid_boundaries(self):
-        """Count 1 and 20 should be valid"""
-        for count in [1, 20]:
+        """Count 1 and 100 should be valid"""
+        for count in [1, 100]:
             payload = {"nick": "Faker", "tag": "BR1", "server": "BR1", "count": count}
             with patch("backend.api.routes.player.atualizar_historico") as mock:
                 mock.return_value = {"status": "success"}

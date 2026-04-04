@@ -20,10 +20,55 @@ type Release = {
 
 const RELEASES: Release[] = [
   {
-    version: 'Alpha v0.6.4',
+    version: 'Alpha v0.7.1',
     date: '04/2026',
     label: 'Atual',
     current: true,
+    entries: [
+      { version: '', date: '', tag: 'fix', text: 'Histórico de partidas agora sempre aparece do mais recente ao mais antigo.' },
+      { version: '', date: '', tag: 'fix', text: 'Data da partida mostra quando o jogo foi jogado, não quando foi importado para o banco.' },
+      { version: '', date: '', tag: 'fix', text: 'Botão "Ver partidas novas" não travava mais com erro 500 em determinadas condições.' },
+    ],
+  },
+  {
+    version: 'Alpha v0.7.0',
+    date: '04/2026',
+    label: '',
+    current: false,
+    entries: [
+      { version: '', date: '', tag: 'novo',     text: 'Página de campeão em /champions/[nome] — overview, builds, matchups e sinergias com filtros de lane, servidor e patch.' },
+      { version: '', date: '', tag: 'melhoria', text: 'Tier List: clicar no nome de um campeão abre a página do campeão diretamente.' },
+      { version: '', date: '', tag: 'melhoria', text: 'Cards de partida: novo botão "Campeão" para acessar a página do campeão jogado.' },
+      { version: '', date: '', tag: 'fix',      text: 'Ícones de lane e emblemas de elo na Tier List estavam quebrados — corrigidos com assets do CommunityDragon.' },
+    ],
+  },
+  {
+    version: 'Alpha v0.6.6',
+    date: '04/2026',
+    label: '',
+    current: false,
+    entries: [
+      { version: '', date: '', tag: 'novo',     text: 'Painel de administração em /admin — estatísticas do sistema em tempo real.' },
+      { version: '', date: '', tag: 'melhoria', text: 'Botão "Ver partidas novas" agora tem cooldown de 5 minutos com contador regressivo visível.' },
+      { version: '', date: '', tag: 'fix',      text: 'Cooldown persiste mesmo ao recarregar a página — sem burlar o limite ao dar F5.' },
+    ],
+  },
+  {
+    version: 'Alpha v0.6.5',
+    date: '04/2026',
+    label: '',
+    current: false,
+    entries: [
+      { version: '', date: '', tag: 'novo',     text: 'Timeline da partida — gráfico de CS/m, Ouro e XP ao longo do tempo para todos os jogadores.' },
+      { version: '', date: '', tag: 'novo',     text: 'Seu jogador aparece destacado na timeline com linha mais grossa e cores intensas.' },
+      { version: '', date: '', tag: 'melhoria', text: 'Página de detalhes da partida ganhou seção colapsável "Timeline da Partida" abaixo do scoreboard.' },
+    ],
+  },
+  {
+    version: 'Alpha v0.6.4',
+    date: '04/2026',
+    label: '',
+    current: false,
     entries: [
       { version: '', date: '', tag: 'novo',     text: 'Cards de partida mostram itens, keystone, CS/m e nível final de cada campeão.' },
       { version: '', date: '', tag: 'novo',     text: 'Resumo do jogador no topo do perfil — winrate, KDA médio, CS/m e campeão mais jogado.' },

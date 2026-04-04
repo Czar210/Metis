@@ -2,7 +2,7 @@
 riot_service.py — Ponte entre o jogador real e o banco do Metis.
 
 Fluxo:
-  1. Riot API (RiotWatcher/LolWatcher) → busca PUUID + últimas partidas ranqueadas
+  1. Riot API (RiotWatcher/LolWatcher) → busca PUUID + ícone de perfil + últimas partidas (todas as filas)
   2. Para cada partida nova → puxa match data + timeline
   3. Camada Prata (process_matches / process_timelines) → limpa e classifica
   4. Supabase → persiste nas tabelas players, matches, match_participants, etc.
@@ -15,6 +15,7 @@ Responsabilidades:
 
 import os
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from riotwatcher import LolWatcher, RiotWatcher, ApiError
@@ -22,6 +23,15 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 
 load_dotenv()
+
+SYNC_COOLDOWN_SECONDS = 300  # 5 minutos entre sincronizações por jogador
+
+
+class SyncCooldownError(Exception):
+    """Levantada quando uma sincronização é solicitada antes do cooldown expirar."""
+    def __init__(self, retry_after: int):
+        self.retry_after = retry_after
+        super().__init__(f"Cooldown ativo — aguarde {retry_after}s")
 
 
 def _normalizar_patch(game_version: str) -> str:
@@ -59,9 +69,12 @@ def _get_routing_region(server: str) -> str:
 
 
 def _match_exists(supabase: Client, match_id: str) -> bool:
-    """Checa se a partida já está salva no Supabase."""
-    result = supabase.table("matches").select("match_id").eq("match_id", match_id).execute()
-    return len(result.data) > 0
+    """Checa se a partida já foi processada (clean ou dirty)."""
+    clean = supabase.table("matches").select("match_id").eq("match_id", match_id).limit(1).execute()
+    if clean and clean.data:
+        return True
+    dirty = supabase.table("matches_dirty").select("match_id").eq("match_id", match_id).limit(1).execute()
+    return bool(dirty and dirty.data)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -145,6 +158,7 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
         "game_duration": game_duration,
         "queue_id": info.get("queueId"),
         "end_type": end_type,
+        "game_end_timestamp": info.get("gameEndTimestamp"),
     }
     supabase.table("matches").upsert(match_payload).execute()
 
@@ -162,6 +176,7 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
             "puuid": puuid,
             "game_name": p.get("riotIdGameName", "Desconhecido"),
             "tag_line": p.get("riotIdTagline", "UNK"),
+            "profile_icon_id": p.get("profileIcon"),
         })
 
         challenges = p.get("challenges", {})
@@ -296,6 +311,11 @@ def atualizar_historico(
 
     Retorna um relatório com o resultado de cada partida.
     """
+    if not game_name.strip():
+        raise ValueError("game_name não pode ser vazio")
+    if not tag_line.strip():
+        raise ValueError("tag_line não pode ser vazio")
+
     if not RIOT_API_KEY:
         raise RuntimeError("RIOT_API_KEY não encontrada no .env")
 
@@ -304,23 +324,52 @@ def atualizar_historico(
     supabase = _get_supabase()
     routing = _get_routing_region(server)
 
-    # ── 1. Buscar PUUID ──────────────────────────────────────
+    # ── 0. Verificar cooldown (antes de chamar a Riot API) ───
+    # Usamos limit(1) em vez de maybe_single() para evitar 406 quando há
+    # múltiplos registros com o mesmo game_name+tag_line (ex: duplicata de PUUID).
+    existing_rows = (
+        supabase.table("players")
+        .select("last_synced_at, puuid")
+        .ilike("game_name", game_name)
+        .ilike("tag_line", tag_line)
+        .order("last_synced_at", desc=True, nullsfirst=False)
+        .limit(1)
+        .execute()
+    )
+    existing_row = existing_rows.data[0] if (existing_rows and existing_rows.data) else None
+    if existing_row and existing_row.get("last_synced_at"):
+        raw_ts = existing_row["last_synced_at"]
+        last = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
+        elapsed = (datetime.now(timezone.utc) - last).total_seconds()
+        if elapsed < SYNC_COOLDOWN_SECONDS:
+            raise SyncCooldownError(int(SYNC_COOLDOWN_SECONDS - elapsed))
+
+    # ── 1. Buscar PUUID + ícone de perfil ───────────────────
     account = riot_watcher.account.by_riot_id(routing, game_name, tag_line)
     puuid = account["puuid"]
 
-    # Atualiza/cria o jogador com server
+    # Summoner API retorna profileIconId (platform endpoint, não routing)
+    try:
+        summoner = lol_watcher.summoner.by_puuid(server.lower(), puuid)
+        profile_icon_id = summoner.get("profileIconId")
+    except Exception:
+        profile_icon_id = None
+
+    # Atualiza/cria o jogador com server, ícone e marca last_synced_at
     supabase.table("players").upsert({
         "puuid": puuid,
         "game_name": game_name,
         "tag_line": tag_line,
         "server": server,
+        "profile_icon_id": profile_icon_id,
+        "last_synced_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
 
-    # ── 2. Buscar lista de partidas ranqueadas ────────────────
-    # type="ranked" retorna SoloQ (420) + Flex (440) + ARAM ranked etc.
-    # O filtro por queue_id exato é feito em _processar_e_salvar() via RANKED_QUEUE_IDS.
+    # ── 2. Buscar histórico completo (todas as filas) ────────
+    # Sem filtro de type/queue: SoloQ e Flex vão para matches (clean),
+    # o resto vai para matches_dirty. A separação é feita em _processar_e_salvar().
     match_ids: list[str] = lol_watcher.match.matchlist_by_puuid(
-        routing, puuid, count=count, type="ranked"
+        routing, puuid, count=count
     )
     logger.info(f"[historico] {game_name}#{tag_line} — {len(match_ids)} partidas encontradas na Riot API")
 

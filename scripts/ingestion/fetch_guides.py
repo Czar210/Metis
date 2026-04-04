@@ -306,11 +306,15 @@ def run_wisdom_ingestion(champions=None, guides_per_champion=2, headless=False, 
     print(f"\n🏛️  Iniciando ingestão de guias — {total} campeão(s) / {guides_per_champion} guia(s) cada.")
     print(f"  Total máx de guias: {total * guides_per_champion}\n")
 
+    launch_args = ["--no-sandbox", "--disable-dev-shm-usage"] if headless else []
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
+        browser = p.chromium.launch(headless=headless, args=launch_args)
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 800},
+            locale="pt-BR",
         )
         page = context.new_page()
 

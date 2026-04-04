@@ -61,11 +61,41 @@ def extrair_dados_timeline(timeline_json_data: dict) -> tuple[str | None, list, 
                 continue
             killer_id = event.get("killerId")
             position = event.get("position", {})
+
+            secondary_participant_id = None
+            assisting_participant_ids = None
+            details = None
+
+            if e_type == "CHAMPION_KILL":
+                victim_id = event.get("victimId")
+                secondary_participant_id = id_to_puuid.get(victim_id) if victim_id else None
+                assist_ids = event.get("assistingParticipantIds", [])
+                assisting_participant_ids = [
+                    id_to_puuid[a] for a in assist_ids if a in id_to_puuid
+                ] or None
+
+            elif e_type == "ELITE_MONSTER_KILL":
+                details = {
+                    "monsterType": event.get("monsterType"),
+                    "monsterSubType": event.get("monsterSubType"),
+                }
+
+            elif e_type == "BUILDING_KILL":
+                details = {
+                    "buildingType": event.get("buildingType"),
+                    "laneType": event.get("laneType"),
+                    "towerType": event.get("towerType"),
+                    "teamId": event.get("teamId"),
+                }
+
             events_payload.append({
                 "match_id": match_id,
                 "timestamp": event.get("timestamp", 0),
                 "event_type": e_type,
                 "primary_participant_id": id_to_puuid.get(killer_id) if killer_id else None,
+                "secondary_participant_id": secondary_participant_id,
+                "assisting_participant_ids": assisting_participant_ids,
+                "details": details,
                 "position_x": position.get("x"),
                 "position_y": position.get("y"),
             })

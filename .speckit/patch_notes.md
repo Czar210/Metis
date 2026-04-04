@@ -2,6 +2,126 @@
 
 *Diário de mudanças significativas no ecossistema e na stack do projeto.*
 
+## v0.7.2 — process_timelines com eventos completos + fix Mobafire CI (2026-04-03)
+
+### Scripts — process_timelines.py
+- `extrair_dados_timeline()` agora extrai dados completos por tipo de evento:
+  - **CHAMPION_KILL:** `secondary_participant_id` (PUUID da vítima via `victimId`) + `assisting_participant_ids` (array de PUUIDs dos assistentes)
+  - **ELITE_MONSTER_KILL:** `details` JSONB com `monsterType` e `monsterSubType`
+  - **BUILDING_KILL:** `details` JSONB com `buildingType`, `laneType`, `towerType` e `teamId`
+- Migration: colunas `secondary_participant_id TEXT`, `assisting_participant_ids TEXT[]`, `details JSONB` adicionadas à tabela `critical_events` (nullable — compatível com timelines já processadas)
+
+### Scripts — fetch_guides.py + fetch_guides.yml (Mobafire)
+- **BUG-015 resolvido:** `fetch_guides.yml` referenciava `secrets.CLOUDFLARE_R2_ACCOUNT_ID` (inexistente) — o correto é `secrets.R2_ACCOUNT_ID`, alinhado com todos os outros workflows do projeto. R2 client nunca conectava em CI.
+- `CLOUDFLARE_R2_BUCKET_NAME` hardcoded como `"metis"` (igual ao `process_matches.yml`) — remove dependência de secret desnecessário.
+- **BUG-016 resolvido:** `chromium.launch()` sem `--no-sandbox` crashava silenciosamente no container Ubuntu do GitHub Actions. Adicionado `args=["--no-sandbox", "--disable-dev-shm-usage"]` quando `headless=True`. Adicionados `viewport` e `locale` ao contexto para reduzir detecção de headless pelo Mobafire.
+
+---
+
+## v0.7.1 — Bugfixes: ordenação do histórico + data real de partida (2026-04-03)
+
+### Backend
+- **BUG-013 resolvido:** `GET /api/v1/player/history` ordenava por `matches.created_at` (timestamp de inserção no Supabase) — partidas mais antigas synced primeiro ficavam no topo. Corrigido para ordenar por `match_participants.match_id desc` (coluna direta, sem foreign_table — PostgREST não respeitava o order no join).
+- **BUG-014 resolvido:** `'NoneType' object has no attribute 'data'` no sync — `execute()` do Supabase retornava `None` em `_match_exists()` e no check de cooldown. Adicionados null guards (`if clean and clean.data`).
+- **Migration:** `game_end_timestamp BIGINT` adicionado à tabela `matches` para armazenar o timestamp real do fim da partida (epoch ms da Riot API).
+- `riot_service.py` popula `game_end_timestamp` com `info.gameEndTimestamp` em `_processar_e_salvar`.
+
+### Frontend
+- **`MatchCard`** usa `game_end_timestamp` no lugar de `created_at` para o label de data relativa ("há 2h", "há 3 dias"). Partidas antigas sem o campo mostram `—`.
+
+---
+
+## v0.7.0 — Endpoints de Campeão + Página de Campeão + Fix de ícones (2026-04-03)
+
+### Backend
+- **`GET /api/v1/champion/{champion}/overview`** — stats médias do campeão (winrate, KDA, DPM, CS/m, KP, gold) com filtros role/server/patch/min_matches; retorna `stats=null` sem 404 quando há dados insuficientes
+- **`GET /api/v1/champion/{champion}/builds`** — itens mais frequentes via view `champion_item_stats`, ordenados por pick_count; filtros patch/min_picks
+- **`GET /api/v1/champion/{champion}/matchups`** — winrate do campeão contra cada oponente na mesma lane (2 queries + agregação Python); filtros role/patch/min_matches
+- **`GET /api/v1/champion/{champion}/synergies`** — winrate com aliados na mesma partida; mesma estratégia do matchups; exclui auto-sinergia
+- Arquivos novos: `backend/api/routes/champion.py` + `backend/services/champion_service.py`
+- Router registrado em `backend/main.py`
+- Testes: `tests/test_champion_api.py` — 18 testes cobrindo os 4 endpoints
+
+### Frontend
+- **`/champions/[champion]`** — página de campeão com tabs Overview / Builds / Matchups / Sinergias; filtros globais role/server/patch; ícone via DDragon CDN; fetch paralelo dos 4 endpoints
+- **`StatsTable`** — nome do campeão na Tier List agora é link clicável para `/champions/{champion}`
+- **`MatchCard`** — botão "Campeão" (BarChart2) adicionado nos botões laterais → `/champions/{champion_name}`
+
+### Bugfix
+- Ícones de role e elo (Tier List) estavam sendo servidos como arquivos stub de 111–162 bytes; substituídos por assets reais baixados do CommunityDragon CDN
+
+---
+
+## v0.6.7 — Bugfix: API travando + maybe_single() + ícone Zaras (2026-04-03)
+
+### Backend — riot_service.py
+- **BUG-009 resolvido:** rotas `/sync` e `/update-history` trocadas de `async def` para `def` — FastAPI passa para thread pool, event loop não trava durante sync (era 60s+ bloqueado)
+- **BUG-010 resolvido:** cooldown check em `atualizar_historico` trocou `.maybe_single()` por `.limit(1).order(last_synced_at)` — evita 406 quando há múltiplos registros com o mesmo Riot ID
+- **BUG-011 resolvido:** `_match_exists()` trocou `.maybe_single()` por `.limit(1)` nas tabelas `matches` e `matches_dirty` — evita NoneType crash em caso de 406
+
+### Banco — Zaras#0210
+- **Ícone populado:** `profile_icon_id = 7` (era null), agora `/players/Zaras%230210` exibe o avatar corretamente
+- **Diagnóstico de PUUID duplicado** (BUG-012): dois registros — `BgAPcGAE...` (legítimo, BR1) e `dtGYQZ8cj4D...` (fantasma, sem server). Pendente aval para limpeza.
+
+### Diagnóstico do sistema (checagem completa)
+- Backend: ✅ UP · Tierlist: ✅ 58 campeões · Admin endpoint: ✅ estruturalmente OK
+- Banco: 308 players, 37 matches, 370 participants, 2 dirty, 0 timelines (histórico pré-feature)
+- Últimas 15 partidas do Zaras são Arena (queue 1700) — filtradas corretamente por `wrong_queue`
+
+---
+
+## v0.6.6 — Rate Limit de Sync + Painel Admin (2026-04-03)
+
+### Backend
+- **`SyncCooldownError`** em `riot_service.py` — cooldown de 5 min por jogador (verificado por `game_name + tag_line` antes de chamar a Riot API); `last_synced_at` gravado no upsert de `players`
+- **`GET /api/v1/admin/stats`** — novo endpoint protegido; valida JWT via `supabase.auth.get_user(token)`, exige `app_metadata.is_admin = true`; retorna: `players_total`, `matches_clean`, `matches_dirty_total`, `matches_dirty_by_reason`, `participants_total`, `timelines_saved`, `synced_last_24h`, `synced_last_7d`
+- `player.py` — captura `SyncCooldownError` nos endpoints `/sync` e `/update-history`, retorna HTTP 429 com `{ retry_after_seconds }`
+
+### Banco de dados
+- **Coluna `last_synced_at TIMESTAMPTZ`** adicionada em `players` (migration `add_last_synced_at_to_players`)
+- **Usuário admin** criado: `admin@metis.gg` / `nimda`, `app_metadata.is_admin = true`
+
+### Frontend
+- **`/admin`** — dashboard protegido (requer sessão via middleware + `is_admin` no componente): 8 cards de stats, breakdown de dirty matches com barras de proporção, botão de logout
+- **`/auth`** — campo email aceita `"admin"` e mapeia silenciosamente para `admin@metis.gg`
+- **`/players/[puuid]`** — botão "Ver partidas novas" exibe countdown reativo (`2m 47s`), desabilitado durante cooldown; cooldown persiste em `localStorage` entre reloads; ativado tanto após sync bem-sucedido quanto em resposta a 429 do backend
+- **`middleware.ts`** — `/admin` adicionado às rotas que exigem sessão
+
+---
+
+## v0.6.5 — Timeline da Partida (CS/m, Gold, XP) (2026-04-03)
+
+### Backend — match.py
+- **`GET /api/v1/match/{match_id}/timeline`** — novo endpoint com lazy-cache:
+  - Cache hit: retorna `match_timelines.frames` sem chamar a Riot API
+  - Cache miss: busca `server` do jogador via `match_participants → players`, chama Riot API (`match.by_id` para ordem dos PUUIDs + `match.timeline_by_match`), parseia, salva e retorna
+  - Respostas: 404 (partida inexistente), 422 (sem server), 500 (sem `RIOT_API_KEY`), 502 (erro Riot API)
+- Helper `_parse_timeline_frames(frames_raw, puuids_ordered)` — parsing puro extraído para reutilização
+- Helper `_get_routing_region(server)` — copiado de `riot_service.py` para evitar acoplamento circular
+
+### Frontend — TimelineChart.tsx [NEW]
+- Componente SVG puro (`viewBox 600x190`, responsivo com `width="100%"`)
+- Tabs: **CS/m | Ouro | XP** com troca reativa
+- Uma linha por participante; time azul = tons de azul, time vermelho = tons de vermelho
+- Jogador destacado (via `highlightedPuuid`) recebe linha mais grossa e opacidade total
+- Grid horizontal com labels formatados (gold: `12.3k`, xp: `8k`, cspm: `7.5`)
+- Labels do eixo X em minutos (step adaptativo: 3 / 5 / 10 min)
+- Legenda com cor e nome de cada jogador; jogador destacado em negrito
+
+### Frontend — `/matches/[match_id]/page.tsx`
+- Seção colapsável "Timeline da Partida" abaixo do scoreboard (visível apenas quando `has_timeline = true`)
+- Fetch lazy: só busca `/timeline` ao abrir pela primeira vez; re-aberturas usam cache de estado
+- Estados: carregando, erro, e chart renderizado
+
+### Testes
+- `tests/test_match_api.py` — 10 novos testes em `TestMatchTimeline` (30 total no arquivo):
+  cache hit / cache miss / salva no banco / frames parseados / 404 / 422 / 500 / 502
+
+### Totais acumulados
+- **247 testes passando** (10 novos nesta versão)
+
+---
+
 ## v0.6.4 — Histórico Rico: Items, Runas, CS/m + Resumo do Jogador (2026-04-03)
 
 ### Banco de dados

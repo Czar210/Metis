@@ -5,6 +5,32 @@
 
 ---
 
+## 🗺️ Roadmap de Features — Itens 1 a 12 (César + Claude)
+
+Evolução da plataforma de dados e UX, executada em sessões de pair-programming.
+
+| # | Feature | Versão | Status |
+|---|---------|--------|--------|
+| 1 | `GET /api/v1/player/history` — histórico paginado com nested select | v0.6.0 | ✅ |
+| 2 | `MatchCard` reescrito — items, keystone, CS/m, data relativa, patch | v0.6.4 | ✅ |
+| 3 | `GET /api/v1/stats/tierlist` — tier list global com filtros | v0.6.0 | ✅ |
+| 4 | `matches_dirty` + filtro SoloQ/Flex + paginação `/history` | v0.6.3 | ✅ |
+| 5 | `process_matches.py` + `riot_service.py` — 12 campos enriquecidos (items, runas, CS/m, etc.) | v0.6.4 | ✅ |
+| 6 | `backfill_enriched_fields.py` — backfill dos campos antigos via R2 | v0.6.4 | ✅ |
+| 7 | `GET /api/v1/match/{match_id}` — scoreboard com blue/red team + max_damage | v0.6.4 | ✅ |
+| 8 | `/matches/[match_id]` — página de scoreboard completa no frontend | v0.6.4 | ✅ |
+| 9 | `GET /api/v1/match/{match_id}/timeline` — lazy-cache da Riot API | v0.6.5 | ✅ |
+| 10 | `TimelineChart.tsx` — gráfico SVG CS/m / Ouro / XP com tabs | v0.6.5 | ✅ |
+| 11 | Endpoints de campeão — `/overview`, `/builds`, `/matchups`, `/synergies` | v0.7.0 | ✅ |
+| 12 | `/champions/[champion]` — página de campeão com builds e matchups | v0.7.0 | ✅ |
+
+**Extras desta sessão (fora da lista original):**
+- Rate limit de sync (5 min cooldown + countdown no frontend) — v0.6.6
+- Painel admin `/admin` + conta `admin@metis.gg` — v0.6.6
+- Player page: auto-resolve Riot ID, ícone do invocador, UX de sync melhorada — v0.6.4
+
+---
+
 ## 🧑‍💻 Equipe e Perfis de Atuação
 
 | Membro | Papel | Foco |
@@ -50,6 +76,32 @@ Cards na coluna [Revisão] com todas as checklists completas:
 - [x] Retorno JSON estruturado com winrate, KDA, gold, DPM
 - [x] `?elo=` aceito mas documentado como sem efeito (sem rank por partida no schema)
 - [x] Arquivos: `backend/services/stats_service.py` + `backend/api/routes/stats.py`
+
+---
+
+## 🔄 Tickets Ativos — v0.7.0 (Em fila)
+
+### [Done ✅] Endpoints de Campeão — Backend (Item 11)
+**Arquivo:** `backend/api/routes/champion.py` [NEW] + `backend/services/champion_service.py` [NEW]
+
+- [x] `GET /api/v1/champion/{champion}/overview` — stats médias do campeão (winrate, KDA, DPM, CS/m, gold) por role/patch/server
+- [x] `GET /api/v1/champion/{champion}/builds` — itens mais frequentes com winrate por item (via view `champion_item_stats`)
+- [x] `GET /api/v1/champion/{champion}/matchups` — winrate contra cada oponente na mesma lane
+- [x] `GET /api/v1/champion/{champion}/synergies` — winrate com aliados na mesma partida
+- [x] Registrar router em `main.py`
+- [x] Testes pytest — `tests/test_champion_api.py` (18 testes)
+
+### [Done ✅] Página de Campeão — Frontend (Item 12)
+**Arquivo:** `frontend/src/app/champions/[champion]/page.tsx` [NEW]
+
+- [x] Fetch em `GET /api/v1/champion/{champion}/overview` → card de stats (8 métricas)
+- [x] Fetch em `GET /api/v1/champion/{champion}/builds` → tabela de itens com winrate
+- [x] Fetch em `GET /api/v1/champion/{champion}/matchups` → tabela de matchups (ícone, winrate, games)
+- [x] Fetch em `GET /api/v1/champion/{champion}/synergies` → tabela de sinergias
+- [x] Filtros: role (botões), server (select), patch (input)
+- [x] Botão "Campeão" nos MatchCards → `/champions/{champion}`
+- [x] Nome clicável na Tier List → `/champions/{champion}`
+- [x] Ícone do campeão via Data Dragon CDN
 
 ---
 
@@ -141,6 +193,45 @@ Cards na coluna [Revisão] com todas as checklists completas:
 - [x] Backend: `GET /api/v1/stats/tierlist` + `buscar_tierlist()` em `stats_service.py`
 - [ ] Cores percentil (top/bottom 25%) por coluna — pendente
 - [ ] Badge "baixa amostra" para campeões com poucos dados no filtro — pendente
+
+---
+
+## 🎯 Visão Beta v1.0.0 — O que define a saída do Alpha
+
+> Registrado em 2026-04-03. Dois pilares precisam estar entregues para declarar Beta.
+
+### Pilar 1 — Profundidade Analítica
+
+**Stats filtráveis com contexto cruzado**
+- [ ] Filtros combinados na página de campeão: winrate/KDA com build específica **dentro** de um matchup específico (ex: "Ahri com Luden contra Zed mid no patch 16.x")
+- [ ] Backend: extensão de `champion_service.py` com filtro por `item_id` cruzado com `opponent_champion`
+
+**Tela de partida com mapa interativo**
+- [ ] Mapa do Summoner's Rift com eventos plotados (mortes, dragões, Barão, torres)
+- [ ] Cada evento clicável: timestamp + quem matou + quem morreu + assistentes
+- [ ] Dados disponíveis: `critical_events` já coleta tudo desde v0.7.2 (vítima, assistentes, tipo de monstro/torre, posição X/Y)
+- [ ] Slider de tempo: ver onde cada jogador estava no mapa em momentos-chave
+- [ ] Dados disponíveis: `participant_snapshots` (10/15/20 min) com gold, level, CS
+
+**Gap de ouro temporal**
+- [ ] Gráfico de diferença de ouro entre blue/red team ao longo do tempo
+- [ ] Extensão do `TimelineChart.tsx` (já tem tabs CS/m, Ouro, XP)
+- [ ] Dados disponíveis: `total_gold` nos snapshots por minuto já coletados
+
+**Timeline de eventos da partida**
+- [ ] Feed cronológico de eventos (kill, dragão, torre, Barão) com ícones e timestamps
+- [ ] Destaque para o jogador sendo analisado (mortes, abates, participações)
+
+### Pilar 2 — IA Premium (M4)
+
+- [ ] Mobafire scraper rodando via Action → guias no R2 (**desbloqueado com fix de hoje**)
+- [ ] `vectorize_guides.py` → guias vetorizados em `guides_gold` (OpenRAG + pgvector)
+- [ ] `rag_service.py` → busca semântica via RPC `match_documents`
+- [ ] `llm_service.py` (André) → prompt engineering + Llama 3 via Ollama
+- [ ] `/api/v1/chat` com IA real (hoje é skeleton)
+- [ ] Gate premium funcional com análise tática por partida e por jogador
+
+**Condição de entrada na Beta:** ambos os pilares entregues. Não há versão intermediária.
 
 ---
 

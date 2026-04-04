@@ -1,6 +1,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { Eye, MessageSquare } from 'lucide-react'
+import { Eye, MessageSquare, BarChart2 } from 'lucide-react'
 import { championIconUrl, roleIconPath, DDRAGON_VERSION } from '@/lib/ddragon'
 import { runeIconUrl } from '@/lib/runes'
 
@@ -30,7 +30,7 @@ export type MatchData = {
     game_duration: number
     queue_id: number
     end_type: string
-    created_at: string
+    game_end_timestamp: number | null
   }
 }
 
@@ -46,8 +46,9 @@ function formatGold(gold: number): string {
   return gold >= 1000 ? `${(gold / 1000).toFixed(1)}k` : String(gold)
 }
 
-function formatRelativeDate(isoStr: string): string {
-  const diff = Date.now() - new Date(isoStr).getTime()
+function formatRelativeDate(gameEndTimestamp: number | null): string {
+  if (!gameEndTimestamp) return '—'
+  const diff = Date.now() - gameEndTimestamp
   const mins  = Math.floor(diff / 60_000)
   const hours = Math.floor(diff / 3_600_000)
   const days  = Math.floor(diff / 86_400_000)
@@ -55,7 +56,7 @@ function formatRelativeDate(isoStr: string): string {
   if (mins  < 60)  return `há ${mins}m`
   if (hours < 24)  return `há ${hours}h`
   if (days  <  7)  return `há ${days} dia${days > 1 ? 's' : ''}`
-  return new Date(isoStr).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+  return new Date(gameEndTimestamp).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
 }
 
 function csColor(cspm: number): string {
@@ -92,7 +93,7 @@ export function MatchCard({ match, puuid }: Props) {
   const roleIcon    = roleIconPath(match.team_position)
   const queueLabel  = QUEUE_LABEL[meta.queue_id] ?? 'Ranqueada'
   const endLabel    = END_TYPE_LABEL[meta.end_type] ?? ''
-  const dateLabel   = formatRelativeDate(meta.created_at)
+  const dateLabel   = formatRelativeDate(meta.game_end_timestamp)
 
   const accent = win
     ? 'border-blue-500/30 bg-blue-500/5'
@@ -218,6 +219,14 @@ export function MatchCard({ match, puuid }: Props) {
           >
             <MessageSquare className="w-3 h-3" />
             <span className="hidden sm:block">Analisar</span>
+          </Link>
+          <Link
+            href={`/champions/${match.champion_name}`}
+            className="flex items-center gap-1 text-[11px] border border-metis-border text-metis-text-dim
+                       hover:border-metis-accent hover:text-metis-accent px-2.5 py-1.5 rounded-lg transition-colors"
+          >
+            <BarChart2 className="w-3 h-3" />
+            <span className="hidden sm:block">Campeão</span>
           </Link>
         </div>
       </div>

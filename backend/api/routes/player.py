@@ -12,7 +12,7 @@ from riotwatcher import ApiError
 import os
 from supabase import create_client
 
-from backend.services.riot_service import atualizar_historico
+from backend.services.riot_service import atualizar_historico, SyncCooldownError
 
 
 def _get_supabase():
@@ -29,21 +29,21 @@ router = APIRouter(prefix="/api/v1/player", tags=["Player"])
 
 class UpdateHistoryRequest(BaseModel):
     """Corpo da requisição para atualizar o histórico de um jogador."""
-    nick: str = Field(..., examples=["Faker"], description="Nome de invocador (Riot ID)")
-    tag: str = Field(..., examples=["KR1"], description="Tag do Riot ID")
+    nick: str = Field(..., min_length=1, examples=["Faker"], description="Nome de invocador (Riot ID)")
+    tag: str = Field(..., min_length=1, examples=["KR1"], description="Tag do Riot ID")
     server: str = Field(..., examples=["KR"], description="Servidor (BR1, NA1, KR, EUW1...)")
     count: int = Field(
-        default=10,
+        default=50,
         ge=1,
-        le=20,
-        description="Quantidade de partidas para buscar (1-20)",
+        le=100,
+        description="Quantidade de partidas para buscar (1-100)",
     )
 
 
 # ── Endpoints ─────────────────────────────────────────────────
 
 @router.post("/update-history")
-async def update_history(req: UpdateHistoryRequest):
+def update_history(req: UpdateHistoryRequest):
     """
     🔄 Atualizar Histórico de Partidas
 
@@ -63,6 +63,15 @@ async def update_history(req: UpdateHistoryRequest):
         )
         return resultado
 
+    except SyncCooldownError as err:
+        raise HTTPException(
+            status_code=429,
+            detail={"message": "Sincronização em cooldown.", "retry_after_seconds": err.retry_after},
+        )
+
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
     except ApiError as err:
         status = getattr(getattr(err, "response", None), "status_code", None)
         if status == 429:
@@ -78,7 +87,6 @@ async def update_history(req: UpdateHistoryRequest):
         raise HTTPException(status_code=502, detail=f"Erro na Riot API: {err}")
 
     except RuntimeError as err:
-        # Variáveis de ambiente faltando
         raise HTTPException(status_code=500, detail=str(err))
 
     except Exception as err:
@@ -88,10 +96,10 @@ class SyncRequest(BaseModel):
     """Corpo da requisição para sincronizar o jogador pelo Riot ID unificado."""
     riot_id: str = Field(..., examples=["Zaras#0210", "Monochaco#BR1"], description="Nome completo com tag")
     server: str = Field(default="BR1", examples=["BR1", "EUW1", "NA1"], description="Servidor")
-    count: int = Field(default=10, ge=1, le=20, description="Quantidade de partidas")
+    count: int = Field(default=50, ge=1, le=100, description="Quantidade de partidas")
 
 @router.post("/sync")
-async def sync_player(req: SyncRequest):
+def sync_player(req: SyncRequest):
     """
     🔄 Sincronizar Jogador (atalho)
     Faz exatamente a mesma coisa que update-history, mas recebe o riot_id 
@@ -113,6 +121,15 @@ async def sync_player(req: SyncRequest):
             count=req.count,
         )
         return resultado
+
+    except SyncCooldownError as err:
+        raise HTTPException(
+            status_code=429,
+            detail={"message": "Sincronização em cooldown.", "retry_after_seconds": err.retry_after},
+        )
+
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
 
     except ApiError as err:
         status = getattr(getattr(err, "response", None), "status_code", None)
@@ -155,10 +172,10 @@ def player_history(
                 "kill_participation, damage_per_minute, "
                 "total_cs, cs_per_minute, champion_level, "
                 "items, rune_keystone, summoner1_id, summoner2_id, "
-                "matches(match_id, game_version, game_duration, queue_id, end_type, created_at)"
+                "matches(match_id, game_version, game_duration, queue_id, end_type, game_end_timestamp)"
             )
             .eq("puuid", puuid)
-            .order("created_at", desc=True, foreign_table="matches")
+            .order("match_id", desc=True)
             .range(offset, offset + limit - 1)
             .execute()
         )

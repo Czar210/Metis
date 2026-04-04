@@ -5,6 +5,18 @@
 ## Blockers Abertos (Resolver ANTES de prosseguir)
 - Nenhum no momento.
 
+### [2026-04-03] BUG-009 — `riot_service.py` — `async def` bloqueante no event loop
+- Rotas `/sync` e `/update-history` declaradas como `async def` mas chamam `atualizar_historico()`, que é bloqueante e usa `time.sleep(1.2)` por partida. Para 50 partidas = 60s+ de event loop travado. Toda a API ficava sem resposta durante um sync. **Resolvido** trocando ambas as rotas de `async def` para `def` em `player.py` (FastAPI roda em thread pool).
+
+### [2026-04-03] BUG-010 — `riot_service.py` — `maybe_single()` retorna 406 com PUUID duplicado
+- `maybe_single()` na verificação de cooldown (`atualizar_historico`) retorna HTTP 406 quando há múltiplos registros para o mesmo `game_name + tag_line` (ex: Zaras tem 2 PUUIDs no banco). Isso impedia qualquer sync do jogador. **Resolvido** substituindo `.maybe_single()` por `.limit(1).order("last_synced_at", desc=True, nullsfirst=False)` para pegar o registro mais recente de forma segura.
+
+### [2026-04-03] BUG-011 — `riot_service.py` — `_match_exists` usa `maybe_single()` → 406 + NoneType
+- A função `_match_exists` também usava `.maybe_single()` para checar existência de match nas tabelas `matches` e `matches_dirty`. Quando PostgREST retorna 406, o client retorna `None` e o `clean.data` explode com `AttributeError: 'NoneType' object has no attribute 'data'`. **Resolvido** trocando ambas as chamadas para `.limit(1)` com checagem de `bool(result.data)`.
+
+### [2026-04-03] BUG-012 — Banco — PUUIDs duplicados (4 pares)
+- 4 pares de jogadores com `game_name+tag_line` idênticos mas PUUIDs distintos (Zaras, Takida, monochaco, Wišadel). Causa: jogadores distintos que trocaram de Riot ID ao longo do tempo — ambos aparecem nos dados de partidas processadas. Em nenhum par os dois PUUIDs apareceram na mesma partida. **Resolvido** — deletados os 4 PUUIDs fantasmas (critério: menos match_participants) e seus 19 registros de match_participants associados. Banco sem duplicatas.
+
 ### [2026-04-03] BUG-008 — `requirements.txt` — encoding UTF-16 corrompido
 - Arquivo gerado com BOM UTF-16 LE — cada caractere aparecia separado por espaço, `pip install` falhava silenciosamente em ambientes novos. **Resolvido** com `pip freeze` redirecionado via Python (UTF-8 sem BOM).
 

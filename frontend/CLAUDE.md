@@ -118,7 +118,7 @@ Toda feature visível ao usuário deve ser registrada em **dois lugares**:
 1. `.speckit/patch_notes.md` — linguagem técnica, para o time
 2. `src/app/changelog/page.tsx` — linguagem de produto, para usuários (sem jargão técnico)
 
-Versão atual: **Alpha v0.6.1**
+Versão atual: **Alpha v0.7.1**
 
 ## NUNCA
 - Não use `@/lib/supabase/client` em Server Components
