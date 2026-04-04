@@ -52,6 +52,7 @@ jobs:
 
       - name: 🚀 Executar Infiltrador do Mobafire (todos os 172 campeões)
         env:
+          PYTHONPATH: ${{ github.workspace }}
           CLOUDFLARE_R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
