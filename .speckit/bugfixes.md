@@ -5,6 +5,17 @@
 ## Blockers Abertos (Resolver ANTES de prosseguir)
 - Nenhum no momento.
 
+### [2026-04-04] BUG-017 — GitHub Actions — secrets com nomes errados + PYTHONPATH ausente + case-sensitive path
+Três bugs distintos que impediam todos os workflows de rodar em CI:
+
+1. **PYTHONPATH ausente:** `python -m scripts.*` falhava com `No module named scripts.*` porque o runner não sabia onde estava a raiz do projeto. **Resolvido** adicionando `PYTHONPATH: ${{ github.workspace }}` em todos os 6 workflows.
+
+2. **Case-sensitive path:** `scripts/Processing/` (P maiúsculo) estava indexado no git mas o Python no Linux procurava `scripts/processing/` (p minúsculo). Windows é case-insensitive e nunca detectou o problema. **Resolvido** com `git rm --cached scripts/Processing/*.py` + `git add scripts/processing/*.py`.
+
+3. **Nomes de secrets errados:** Workflows foram refatorados para `secrets.R2_ACCOUNT_ID` mas os secrets reais no GitHub sempre foram `CLOUDFLARE_R2_ACCOUNT_ID`, `CLOUDFLARE_R2_ACCESS_KEY_ID`, `CLOUDFLARE_R2_SECRET_ACCESS_KEY`. **Resolvido** revertendo os workflows para os nomes corretos.
+
+4. **Supabase secrets ausentes:** `SUPABASE_URL` e `SUPABASE_KEY` não existiam no GitHub. **Resolvido** criando os dois secrets manualmente.
+
 ### [2026-04-03] BUG-009 — `riot_service.py` — `async def` bloqueante no event loop
 - Rotas `/sync` e `/update-history` declaradas como `async def` mas chamam `atualizar_historico()`, que é bloqueante e usa `time.sleep(1.2)` por partida. Para 50 partidas = 60s+ de event loop travado. Toda a API ficava sem resposta durante um sync. **Resolvido** trocando ambas as rotas de `async def` para `def` em `player.py` (FastAPI roda em thread pool).
 

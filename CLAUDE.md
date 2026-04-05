@@ -132,16 +132,29 @@ Metis/
 
 ## 8. Variáveis de Ambiente Esperadas
 
+### No `.env` local (backend/) e no Railway
 | Variável | Uso |
 |----------|-----|
 | `RIOT_API_KEY` | RiotWatcher — ingestão de partidas |
-| `SUPABASE_URL` | Conexão Supabase |
-| `SUPABASE_KEY` | Chave anon/service_role |
-| `R2_ACCESS_KEY_ID` | Cloudflare R2 |
-| `R2_SECRET_ACCESS_KEY` | Cloudflare R2 |
-| `R2_BUCKET_NAME` | Nome do bucket Bronze |
-| `R2_ENDPOINT_URL` | Endpoint S3-compatible do R2 |
+| `SUPABASE_URL` | Conexão Supabase (ex: `https://ebwplwizjsevhcowyfhg.supabase.co`) |
+| `SUPABASE_KEY` | service_role key do Supabase |
+| `CLOUDFLARE_R2_ACCOUNT_ID` | Cloudflare R2 |
+| `CLOUDFLARE_R2_ACCESS_KEY_ID` | Cloudflare R2 |
+| `CLOUDFLARE_R2_SECRET_ACCESS_KEY` | Cloudflare R2 |
+| `CLOUDFLARE_R2_BUCKET_NAME` | Nome do bucket (= `metis`) |
 | `CORS_ORIGINS` | Origens permitidas (produção: domínio Vercel) |
+
+### No GitHub Actions (Settings → Secrets → Repository secrets)
+> **Use exatamente estes nomes** — validados em 2026-04-04. Nomes diferentes causam secrets vazios silenciosamente.
+
+| Secret | Workflows que usam |
+|--------|-------------------|
+| `RIOT_API_KEY` | fetch_high_elo_matches, fetch_pro_matches |
+| `SUPABASE_URL` | process_matches, process_timelines |
+| `SUPABASE_KEY` | process_matches, process_timelines |
+| `CLOUDFLARE_R2_ACCOUNT_ID` | todos os 6 workflows |
+| `CLOUDFLARE_R2_ACCESS_KEY_ID` | todos os 6 workflows |
+| `CLOUDFLARE_R2_SECRET_ACCESS_KEY` | todos os 6 workflows |
 
 > `PINECONE_API_KEY` = **REMOVIDA**. Se aparecer em algum arquivo, é resíduo a ser limpo.
 

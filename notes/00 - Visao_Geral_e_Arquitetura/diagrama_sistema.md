@@ -367,14 +367,16 @@ gantt
 | `process_timelines` | `0 15 * * *` — diário | 60 min | `scripts/processing/process_timelines.py` |
 
 ### Secrets necessários no GitHub
-| Secret | Usado por |
-|--------|-----------|
-| `RIOT_API_KEY` | fetch_high_elo, fetch_pro_matches |
+> **ATENÇÃO:** Use exatamente estes nomes — já foram validados contra os secrets reais do repositório.
+
+| Secret (nome exato no GitHub) | Usado por |
+|-------------------------------|-----------|
+| `RIOT_API_KEY` | fetch_high_elo_matches, fetch_pro_matches |
 | `SUPABASE_URL` | process_matches, process_timelines |
 | `SUPABASE_KEY` | process_matches, process_timelines |
-| `R2_ACCOUNT_ID` | todos os workflows |
-| `R2_ACCESS_KEY_ID` | todos os workflows |
-| `R2_SECRET_ACCESS_KEY` | todos os workflows |
+| `CLOUDFLARE_R2_ACCOUNT_ID` | todos os workflows |
+| `CLOUDFLARE_R2_ACCESS_KEY_ID` | todos os workflows |
+| `CLOUDFLARE_R2_SECRET_ACCESS_KEY` | todos os workflows |
 
 ---
 
