@@ -28,9 +28,9 @@ jobs:
       - name: Executar Trator de Ingestão
         env:
           PYTHONPATH: ${{ github.workspace }}
-          CLOUDFLARE_R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_R2_ACCOUNT_ID }}
+          CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
           CLOUDFLARE_R2_BUCKET_NAME: "metis"
           RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
           MAX_PLAYERS_PER_TIER: "200"  # 200 players ≈ 2h30m — dentro do timeout de 280min
