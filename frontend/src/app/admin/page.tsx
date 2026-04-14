@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
   Users, Trophy, Trash2, Clock, Database,
-  TrendingUp, AlertTriangle, BarChart3,
+  TrendingUp, AlertTriangle, BarChart3, RefreshCw,
 } from 'lucide-react'
 import { Header } from '@/components/ui/Header'
 import { apiFetch } from '@/lib/api'
@@ -117,12 +117,32 @@ export default function AdminPage() {
 
       <main className="max-w-5xl mx-auto px-6 py-10 space-y-8">
 
-        {/* Título */}
-        <div>
-          <h1 className="text-xl font-bold text-metis-text">Visão Geral do Sistema</h1>
-          <p className="text-sm text-metis-text-dim mt-1">
-            Dados ao vivo do Supabase — atualizado agora
-          </p>
+        {/* Título + ações */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-metis-text">Visao Geral do Sistema</h1>
+            <p className="text-sm text-metis-text-dim mt-1">
+              Dados ao vivo do Supabase
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              try {
+                const { data: { session } } = await supabase.auth.getSession()
+                if (!session) return
+                const res = await apiFetch('/api/v1/admin/refresh-cache', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${session.access_token}` },
+                })
+                const d = await res.json()
+                alert(`Cache atualizado: ${d.cleared} entradas removidas`)
+              } catch { alert('Erro ao atualizar cache') }
+            }}
+            className="flex items-center gap-2 text-xs bg-metis-accent hover:bg-metis-accent-hover text-white px-4 py-2 rounded-lg transition-colors font-medium"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Atualizar Tier List
+          </button>
         </div>
 
         {/* Cards principais */}

@@ -56,6 +56,7 @@ export default function ChampionsPage() {
   const [elo, setElo] = useState('')
   const [search, setSearch] = useState('')
   const [patches, setPatches] = useState<string[]>([])
+  const [showUnpopular, setShowUnpopular] = useState(false)
 
   useEffect(() => {
     apiFetch('/api/v1/stats/patches')
@@ -243,8 +244,30 @@ export default function ChampionsPage() {
           </div>
         ) : (
           <>
-            <p className="text-xs text-metis-text-dim mb-3">{data.length} campeões encontrados</p>
-            <StatsTable data={data} searchQuery={search} />
+            {(() => {
+              const popular = data.filter(c => c.total_matches >= 30 && (c.pickrate ?? 0) >= 5)
+              const unpopular = data.filter(c => c.total_matches < 30 || (c.pickrate ?? 0) < 5)
+              const displayed = showUnpopular ? data : popular
+
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs text-metis-text-dim">
+                      {popular.length} campeoes {unpopular.length > 0 && `(${unpopular.length} impopulares)`}
+                    </p>
+                    {unpopular.length > 0 && (
+                      <button
+                        onClick={() => setShowUnpopular(v => !v)}
+                        className="text-xs text-metis-text-dim hover:text-metis-accent transition-colors"
+                      >
+                        {showUnpopular ? 'Esconder impopulares' : `Ver impopulares (${unpopular.length})`}
+                      </button>
+                    )}
+                  </div>
+                  <StatsTable data={displayed} searchQuery={search} />
+                </>
+              )
+            })()}
           </>
         )}
       </main>

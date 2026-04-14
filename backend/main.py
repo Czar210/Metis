@@ -258,6 +258,16 @@ def chat_usage(supabase_token: str):
     }
 
 
+@app.post("/api/v1/admin/refresh-cache")
+def refresh_cache():
+    """Invalida o cache da tier list e patches. Chamar apos ETL."""
+    from backend.services.stats_service import _cache
+    count = len(_cache)
+    _cache.clear()
+    logger.info(f"[cache] Invalidado manualmente — {count} entradas removidas")
+    return {"status": "ok", "cleared": count}
+
+
 @app.get("/api/v1/health")
 def health_check():
-    return {"status": "online", "system": "Metis", "version": "p-0.9.0"}
+    return {"status": "online", "system": "Metis", "version": "p-0.9.2"}

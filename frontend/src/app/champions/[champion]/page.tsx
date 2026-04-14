@@ -99,7 +99,8 @@ export default function ChampionPage() {
   const [patch, setPatch]   = useState('')
   const [patches, setPatches] = useState<string[]>([])
 
-  const [overview,   setOverview]   = useState<Overview | null>(null)
+  const [overview,       setOverview]       = useState<Overview | null>(null)
+  const [overviewAll,   setOverviewAll]   = useState<Overview | null>(null)  // sem filtro de role — pra calcular % de pickrate
   const [builds,     setBuilds]     = useState<BuildItem[]>([])
   const [matchups,   setMatchups]   = useState<Matchup[]>([])
   const [synergies,  setSynergies]  = useState<Synergy[]>([])
@@ -136,14 +137,33 @@ export default function ChampionPage() {
       setBuilds(bd)
       setMatchups(mu)
       setSynergies(sy)
+
+      // Buscar total sem filtro de role pra calcular % de pickrate na role
+      if (role) {
+        const allParams = new URLSearchParams({ min_matches: '1' })
+        if (server) allParams.set('server', server)
+        if (patch) allParams.set('patch', patch)
+        const allRes = await apiFetch(`${base}/overview?${allParams}`)
+        if (allRes.ok) setOverviewAll(await allRes.json())
+      } else {
+        setOverviewAll(ov)
+      }
     } catch {
-      setError('Não foi possível carregar dados do campeão. O backend pode estar offline.')
+      setError('Nao foi possivel carregar dados do campeao.')
     } finally {
       setLoading(false)
     }
   }, [champion, role, server, patch])
 
   useEffect(() => { fetchAll() }, [fetchAll])
+
+  // Calcular se a role selecionada e impopular (<5% das partidas do campeao)
+  const isUnpopularRole = (() => {
+    if (!role || !overview || !overviewAll) return false
+    const totalAll = overviewAll.total_matches || 1
+    const totalRole = overview.total_matches || 0
+    return totalRole / totalAll < 0.05
+  })()
 
   useEffect(() => {
     apiFetch('/api/v1/stats/patches')
@@ -183,6 +203,11 @@ export default function ChampionPage() {
               {overview && (
                 <p className="text-xs text-metis-text-dim">
                   {overview.total_matches} partidas no banco Metis
+                  {isUnpopularRole && (
+                    <span className="ml-2 text-amber-400 font-semibold">
+                      — Role impopular ({'<'}5% dos jogos)
+                    </span>
+                  )}
                 </p>
               )}
             </div>
@@ -266,12 +291,22 @@ export default function ChampionPage() {
             <p className="text-sm text-metis-text-dim">{error}</p>
           </div>
         ) : (
-          <>
+          <div className={isUnpopularRole ? 'opacity-40 grayscale pointer-events-none relative' : ''}>
+            {isUnpopularRole && (
+              <div className="absolute inset-0 z-10 flex items-start justify-center pt-8 pointer-events-auto">
+                <div className="bg-metis-surface border border-amber-500/30 rounded-xl px-6 py-4 text-center max-w-sm">
+                  <p className="text-sm font-semibold text-amber-400 mb-1">Role impopular</p>
+                  <p className="text-xs text-metis-text-dim">
+                    {champion} tem menos de 5% das partidas nessa role. Os dados podem nao ser representativos.
+                  </p>
+                </div>
+              </div>
+            )}
             {tab === 'overview'  && <OverviewTab  overview={overview} />}
             {tab === 'builds'    && <BuildsTab    builds={builds} version={DDRAGON_VERSION} />}
             {tab === 'matchups'  && <MatchupsTab  matchups={matchups} />}
             {tab === 'synergies' && <SynergiesTab synergies={synergies} />}
-          </>
+          </div>
         )}
       </main>
     </div>

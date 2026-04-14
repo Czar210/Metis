@@ -2,6 +2,34 @@
 
 *Diário de mudanças significativas no ecossistema e na stack do projeto.*
 
+## p-0.9.3 — Filtro de Impopulares, Compressao, Admin Refresh, ETL Invertido (2026-04-14)
+
+### Banco de Dados
+- **Coluna `challenges` JSONB removida** do `match_participants` — economiza ~15 MB (54% da tabela)
+- Campos uteis ja extraidos em colunas proprias: `solo_kills`, `damage_per_minute`, `kill_participation`, `early_laning_phase_gold_exp_advantage`
+- Tamanho por partida nova: ~57 KB (era ~80 KB) — **28% menor**
+- Partidas por GB: ~18.000 (era ~13.000)
+
+### Backend
+- **`POST /api/v1/admin/refresh-cache`** — invalida o cache da tier list manualmente
+- `recommendation_service.py` atualizado pra ler colunas diretas em vez do challenges JSONB
+
+### Frontend — Tier List
+- **Filtro de impopulares**: por padrao mostra so campeoes com >=30 partidas E >=5% pickrate na role
+- **Toggle "Ver impopulares"** pra mostrar os que ficaram fora
+
+### Frontend — Pagina de Campeao
+- **Role impopular cinza**: se o campeao tem <5% das partidas naquela role, todo o conteudo fica cinza + grayscale com aviso
+
+### Frontend — Admin
+- **Botao "Atualizar Tier List"** no painel admin — limpa cache de 24h
+
+### Scripts
+- **ETL invertido**: processa do mais recente pro mais antigo (ordena por LastModified DESC)
+- **`--refresh-cache`** flag no `local_etl.py` — invalida cache do backend apos processar
+
+---
+
 ## p-0.9.2 — Bans, Pickrate, Banrate, ETL Local (2026-04-14)
 
 ### Banco de Dados

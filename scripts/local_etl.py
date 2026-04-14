@@ -58,15 +58,17 @@ def get_supabase():
 
 
 def list_r2_matches(s3, bucket: str, prefix: str = "matches/") -> list[str]:
-    """Lista TODOS os match JSONs no R2 (com paginacao)."""
+    """Lista TODOS os match JSONs no R2 (com paginacao). Mais recentes primeiro."""
     try:
         paginator = s3.get_paginator("list_objects_v2")
-        keys = []
+        items = []
         for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
             for obj in page.get("Contents", []):
                 if obj["Key"].endswith(".json.gz"):
-                    keys.append(obj["Key"])
-        return keys
+                    items.append((obj["Key"], obj.get("LastModified")))
+        # Ordenar por data de modificacao DESC (mais recente primeiro)
+        items.sort(key=lambda x: x[1] or "", reverse=True)
+        return [k for k, _ in items]
     except Exception as e:
         logger.error(f"Erro ao listar R2: {e}")
         return []
@@ -99,6 +101,9 @@ def main():
     parser.add_argument("--bucket", default="metis", help="Nome do bucket R2 (default: metis)")
     parser.add_argument("--only-matches", action="store_true", help="Processar so partidas (sem timelines)")
     parser.add_argument("--only-timelines", action="store_true", help="Processar so timelines (sem partidas)")
+    parser.add_argument("--refresh-cache", action="store_true", help="Invalidar cache da tier list no backend apos processar")
+    parser.add_argument("--api-url", default="http://localhost:8000", help="URL do backend (default: localhost:8000)")
+    parser.add_argument("--api-key", default=os.environ.get("METIS_API_KEY", ""), help="API key do backend")
     args = parser.parse_args()
 
     s3 = get_r2_client()
@@ -173,6 +178,24 @@ def main():
                 tl_err += 1
 
         logger.info(f"=== Timelines concluido: {tl_ok} salvas, {tl_err} erros ===")
+
+    # ── Refresh cache ────────────────────────────────────────────
+    if args.refresh_cache and args.api_key:
+        logger.info("Invalidando cache da tier list...")
+        try:
+            import requests
+            res = requests.post(
+                f"{args.api_url}/api/v1/admin/refresh-cache",
+                headers={"X-API-Key": args.api_key},
+                timeout=10,
+            )
+            if res.ok:
+                data = res.json()
+                logger.info(f"Cache invalidado: {data.get('cleared', 0)} entradas removidas")
+            else:
+                logger.warning(f"Falha ao invalidar cache: HTTP {res.status_code}")
+        except Exception as e:
+            logger.warning(f"Nao foi possivel invalidar cache: {e}")
 
 
 if __name__ == "__main__":
