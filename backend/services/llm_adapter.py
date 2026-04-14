@@ -24,16 +24,17 @@ class GeminiAdapter(LLMAdapter):
     """Google Gemini Flash Lite via API."""
 
     def __init__(self):
-        self.api_key = os.environ.get("GEMINI_API_KEY")
+        self.api_key = os.environ.get("GEMINI_KEY")
         if not self.api_key:
-            raise RuntimeError("GEMINI_API_KEY nao configurada")
+            raise RuntimeError("GEMINI_KEY nao configurada")
 
     def generate(self, prompt: str, system_prompt: str | None = None) -> str:
         import google.generativeai as genai
 
         genai.configure(api_key=self.api_key)
+        model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite")
         model = genai.GenerativeModel(
-            "gemini-2.0-flash-lite",
+            model_name,
             system_instruction=system_prompt or METIS_SYSTEM_PROMPT,
         )
         response = model.generate_content(
@@ -73,13 +74,13 @@ def get_llm(model: str | None = None) -> LLMAdapter:
     Factory: retorna o adapter adequado.
 
     Prioridade:
-      1. Se GEMINI_API_KEY existe → GeminiAdapter
+      1. Se GEMINI_KEY existe → GeminiAdapter
       2. Senao → OllamaAdapter (local)
     """
     if model and model.startswith("ollama:"):
         return OllamaAdapter(model=model.split(":", 1)[1])
 
-    if os.environ.get("GEMINI_API_KEY"):
+    if os.environ.get("GEMINI_KEY"):
         try:
             return GeminiAdapter()
         except Exception as e:

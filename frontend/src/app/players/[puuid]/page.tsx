@@ -72,8 +72,9 @@ export default function PlayerPage() {
   const [showAllNemeses, setShowAllNemeses] = useState(false)
   const [nameHistory, setNameHistory] = useState<{ old_game_name: string; old_tag_line: string; changed_at: string }[]>([])
 
-  type Recommendation = { champion: string; role: string; role_label: string; similarity: number; confidence: number; winrate: number; games_in_db: number; times_played: number; reasons?: string[] }
+  type Recommendation = { champion: string; role: string; role_label: string; similarity: number; confidence: number; winrate: number; games_in_db: number; times_played: number; reasons?: string[]; player_profile?: number[]; champion_profile?: number[] }
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
+  const [selectedRec, setSelectedRec] = useState<string | null>(null)
 
   // ── Cooldown: carrega do localStorage e inicia countdown ──────────────────
   const cooldownKey = `sync_cooldown_${resolvedPuuid ?? rawParam}`
@@ -785,36 +786,73 @@ export default function PlayerPage() {
             </h2>
             <div className="bg-metis-surface border border-metis-border rounded-xl overflow-hidden">
               {recommendations.map((r, i) => (
-                <Link
-                  key={`${r.champion}-${r.role}`}
-                  href={`/champions/${r.champion}`}
-                  className={`flex items-center gap-3 px-3 py-3 hover:bg-metis-bg/40 transition-colors ${i > 0 ? 'border-t border-metis-border/50' : ''}`}
-                >
-                  <div className="relative w-9 h-9 rounded-lg overflow-hidden border border-metis-accent/30 flex-shrink-0">
-                    <Image src={championIconUrl(r.champion, DDRAGON_VERSION)} alt={r.champion} fill className="object-cover" unoptimized />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-medium text-metis-text">{r.champion}</span>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-metis-border/50 text-metis-text-dim">{r.role_label}</span>
+                <div key={`${r.champion}-${r.role}`}>
+                  <button
+                    onClick={() => setSelectedRec(selectedRec === `${r.champion}-${r.role}` ? null : `${r.champion}-${r.role}`)}
+                    className={`w-full flex items-center gap-3 px-3 py-3 hover:bg-metis-bg/40 transition-colors text-left ${i > 0 ? 'border-t border-metis-border/50' : ''}`}
+                  >
+                    <div className="relative w-9 h-9 rounded-lg overflow-hidden border border-metis-accent/30 flex-shrink-0">
+                      <Image src={championIconUrl(r.champion, DDRAGON_VERSION)} alt={r.champion} fill className="object-cover" unoptimized />
                     </div>
-                    <p className="text-[10px] text-metis-text-dim">
-                      {r.winrate}% WR · {r.games_in_db}j
-                      {r.times_played > 0 && ` · jogou ${r.times_played}x`}
-                    </p>
-                    {r.reasons && r.reasons.length > 0 && (
-                      <p className="text-[9px] text-metis-accent mt-0.5">{r.reasons.join(' · ')}</p>
-                    )}
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-bold text-metis-accent">{r.confidence}%</p>
-                    <p className="text-[10px] text-metis-text-dim">match</p>
-                  </div>
-                </Link>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium text-metis-text">{r.champion}</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-metis-border/50 text-metis-text-dim">{r.role_label}</span>
+                      </div>
+                      <p className="text-[10px] text-metis-text-dim">
+                        {r.winrate}% WR · {r.games_in_db}j
+                        {r.times_played > 0 && ` · jogou ${r.times_played}x`}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className={`text-sm font-bold ${
+                        r.confidence >= 80 ? 'text-green-400' :
+                        r.confidence >= 60 ? 'text-metis-accent' :
+                        r.confidence >= 40 ? 'text-amber-400' : 'text-metis-text-dim'
+                      }`}>{r.confidence}%</p>
+                      <p className="text-[10px] text-metis-text-dim">match</p>
+                    </div>
+                  </button>
+
+                  {/* Detalhes expandidos com radar chart */}
+                  {selectedRec === `${r.champion}-${r.role}` && r.player_profile && r.champion_profile && (
+                    <div className="px-3 pb-4 border-t border-metis-border/30">
+                      {/* Radar SVG */}
+                      <div className="flex justify-center py-3">
+                        <RadarChart
+                          playerProfile={r.player_profile}
+                          championProfile={r.champion_profile}
+                          labels={['AGR', 'MAP', 'EFC', 'PRS', 'SBV', 'UTL', 'ERL', 'CST']}
+                        />
+                      </div>
+                      {/* Legenda */}
+                      <div className="flex justify-center gap-4 text-[10px] mb-2">
+                        <span className="flex items-center gap-1"><span className="w-2.5 h-0.5 bg-metis-accent rounded" /> Voce</span>
+                        <span className="flex items-center gap-1"><span className="w-2.5 h-0.5 bg-amber-400 rounded" /> {r.champion}</span>
+                      </div>
+                      {/* Dimensoes detalhadas */}
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {['Agressividade', 'Mapa', 'Eficiencia', 'Pressao', 'Sobrevivencia', 'Utilidade', 'Early Game', 'Consistencia'].map((label, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5">
+                            <span className="text-[9px] text-metis-text-dim w-20 truncate">{label}</span>
+                            <div className="flex-1 bg-metis-border/30 rounded-full h-1.5 overflow-hidden">
+                              <div className="h-full bg-metis-accent/70 rounded-full" style={{ width: `${((r.player_profile?.[idx] ?? 0) / 10) * 100}%` }} />
+                            </div>
+                            <span className="text-[9px] text-metis-text-dim w-6 text-right">{(r.player_profile?.[idx] ?? 0).toFixed(1)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Reasons */}
+                      {r.reasons && r.reasons.length > 0 && (
+                        <p className="text-[9px] text-metis-accent mt-2 text-center">{r.reasons.join(' · ')}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
             <p className="text-[10px] text-metis-muted mt-1.5 text-center">
-              Baseado em similaridade de cosseno com seu perfil de jogo
+              8 dimensoes · similaridade de cosseno + distancia euclidiana
             </p>
           </section>
         )}
@@ -884,5 +922,68 @@ export default function PlayerPage() {
         </div>{/* fim grid */}
       </main>
     </div>
+  )
+}
+
+// ── Radar Chart SVG ─────────────────────────────────────────────
+
+function RadarChart({ playerProfile, championProfile, labels }: {
+  playerProfile: number[]
+  championProfile: number[]
+  labels: string[]
+}) {
+  const n = labels.length
+  const cx = 90, cy = 90, r = 70
+  const angleStep = (2 * Math.PI) / n
+
+  function point(idx: number, val: number): [number, number] {
+    const angle = angleStep * idx - Math.PI / 2
+    const dist = (val / 10) * r
+    return [cx + dist * Math.cos(angle), cy + dist * Math.sin(angle)]
+  }
+
+  function polygon(values: number[]): string {
+    return values.map((v, i) => point(i, v).join(',')).join(' ')
+  }
+
+  // Grid rings
+  const rings = [2.5, 5, 7.5, 10]
+
+  return (
+    <svg viewBox="0 0 180 180" className="w-44 h-44">
+      {/* Grid */}
+      {rings.map(rv => (
+        <polygon
+          key={rv}
+          points={Array.from({ length: n }, (_, i) => point(i, rv).join(',')).join(' ')}
+          fill="none" stroke="rgb(var(--metis-border))" strokeWidth="0.5" opacity="0.4"
+        />
+      ))}
+      {/* Axes */}
+      {labels.map((_, i) => {
+        const [px, py] = point(i, 10)
+        return <line key={i} x1={cx} y1={cy} x2={px} y2={py} stroke="rgb(var(--metis-border))" strokeWidth="0.5" opacity="0.3" />
+      })}
+      {/* Champion polygon */}
+      <polygon
+        points={polygon(championProfile)}
+        fill="rgba(251,191,36,0.15)" stroke="rgba(251,191,36,0.7)" strokeWidth="1.5"
+      />
+      {/* Player polygon */}
+      <polygon
+        points={polygon(playerProfile)}
+        fill="rgba(59,130,246,0.15)" stroke="rgba(59,130,246,0.8)" strokeWidth="1.5"
+      />
+      {/* Labels */}
+      {labels.map((label, i) => {
+        const [px, py] = point(i, 12)
+        return (
+          <text key={i} x={px} y={py} textAnchor="middle" dominantBaseline="central"
+            className="fill-metis-text-dim" style={{ fontSize: '7px' }}>
+            {label}
+          </text>
+        )
+      })}
+    </svg>
   )
 }
