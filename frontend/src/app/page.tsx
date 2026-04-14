@@ -76,7 +76,15 @@ export default function HomePage() {
 
   async function loadTopChamps() {
     try {
-      const res = await apiFetch('/api/v1/stats/tierlist?min_matches=5')
+      // Busca o patch mais recente e usa como filtro padrao
+      const patchRes = await apiFetch('/api/v1/stats/patches')
+      const patches: string[] = patchRes.ok ? await patchRes.json() : []
+      const latestPatch = patches[0] ?? ''
+
+      const params = new URLSearchParams({ min_matches: '3' })
+      if (latestPatch) params.set('patch', latestPatch)
+
+      const res = await apiFetch(`/api/v1/stats/tierlist?${params}`)
       if (!res.ok) return
       const data: TopChampion[] = await res.json()
       setTopChamps(data.slice(0, 6))

@@ -13,6 +13,7 @@ Responsabilidades:
   - NÃO duplicar partidas que já existem no Supabase.
 """
 
+import json
 import os
 import time
 from datetime import datetime, timezone
@@ -82,6 +83,26 @@ def _match_exists(supabase: Client, match_id: str) -> bool:
 # ══════════════════════════════════════════════════════════════
 
 # Filas ranqueadas aceitas: SoloQ (420) e Flex (440)
+# ── Champion ID → Name map (lazy loaded do JSON estatico) ────────────────────
+
+_champion_id_map: dict[int, str] | None = None
+
+def _get_champion_id_map() -> dict[int, str]:
+    global _champion_id_map
+    if _champion_id_map is not None:
+        return _champion_id_map
+    try:
+        path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "static", "champion.json")
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+        data = raw.get("data", raw)
+        _champion_id_map = {int(v["key"]): v["id"] for v in data.values() if "key" in v}
+    except Exception as e:
+        logger.warning(f"[bans] Erro ao carregar champion.json: {e}")
+        _champion_id_map = {}
+    return _champion_id_map
+
+
 RANKED_QUEUE_IDS = {420, 440}
 
 import logging
@@ -151,6 +172,22 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
 
     end_type = _classificar_tipo_final(info)
 
+    # ── Extrair bans ────────────────────────────────────────────
+    bans = []
+    champ_id_to_name = _get_champion_id_map()
+
+    for team in info.get("teams", []):
+        team_id = team.get("teamId", 0)
+        for ban in team.get("bans", []):
+            champ_id = ban.get("championId", 0)
+            if champ_id > 0:
+                bans.append({
+                    "team_id": team_id,
+                    "champion_id": champ_id,
+                    "champion_name": champ_id_to_name.get(champ_id, f"Champion_{champ_id}"),
+                    "pick_turn": ban.get("pickTurn", 0),
+                })
+
     # ── 1. Tabela: matches ────────────────────────────────────
     match_payload = {
         "match_id": match_id,
@@ -159,6 +196,7 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
         "queue_id": info.get("queueId"),
         "end_type": end_type,
         "game_end_timestamp": info.get("gameEndTimestamp"),
+        "bans": bans,
     }
     supabase.table("matches").upsert(match_payload).execute()
 
@@ -217,7 +255,7 @@ def _processar_e_salvar(supabase: Client, match_data: dict) -> dict[str, Any]:
             "damage_per_minute": challenges.get("damagePerMinute", 0.0),
             "kill_participation": challenges.get("killParticipation", 0.0),
             "early_laning_phase_gold_exp_advantage": challenges.get("earlyLaningPhaseGoldExpAdvantage", 0.0),
-            "challenges": challenges,
+            # challenges JSONB removido pra economizar espaço (~15MB/6k rows)
             # ── Novos campos ───────────────────────────────────
             "team_id":         p.get("teamId"),
             "items":           items,

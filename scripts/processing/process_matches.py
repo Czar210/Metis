@@ -159,7 +159,7 @@ def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
             "damage_per_minute": challenges.get("damagePerMinute", 0.0),
             "kill_participation": challenges.get("killParticipation", 0.0),
             "early_laning_phase_gold_exp_advantage": challenges.get("earlyLaningPhaseGoldExpAdvantage", 0.0),
-            "challenges": challenges,
+            # challenges JSONB removido pra economizar espaco
             # ── Campos enriquecidos (v0.6.4) ──────────────────────────────────
             "team_id":         p.get("teamId"),
             "items":           items,

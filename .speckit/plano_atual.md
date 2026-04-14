@@ -162,6 +162,39 @@ Para 1.0.0:
 
 ---
 
+## Visao v1.1.0 — Compressao de dados (implementar cedo)
+
+> Implementar JA na 1.1.0 pra economizar espaço antes de acumular muitos dados.
+
+- [ ] Separar `challenges` JSONB do `match_participants` pra tabela propria (`participant_challenges`)
+  - `match_participants` fica leve (~15 KB/partida em vez de ~42 KB)
+  - `participant_challenges` carregado sob demanda (so quando o usuario abre detalhes)
+- [ ] Comprimir `runes_raw` — guardar so os IDs de runas (array de ints) em vez do JSONB completo
+- [ ] Comprimir `match_timelines.frames` — guardar so os minutos-chave (5, 10, 15, 20, 25) em vez de todos
+- [ ] Economia estimada: ~40% de reducao (de ~80 KB pra ~48 KB por partida)
+- [ ] De 104k partidas/8GB pra ~170k partidas/8GB
+
+## Visao v1.2.0 — Rotacao e Archival
+
+> Implementar quando o banco passar de 6 GB.
+
+- [ ] Rotacao automatica: deletar `match_participants` e `critical_events` com mais de 3 meses
+- [ ] Manter `matches` (metadata) pra sempre — so deletar os dados pesados
+- [ ] Archival: mover dados antigos pro R2 em formato comprimido (Parquet ou JSONL.gz)
+- [ ] Script de restore: poder recuperar dados archivados se necessario
+- [ ] Monitoramento: alerta quando banco passar de 7 GB
+
+## Numeros de referencia (custos DB)
+
+- **~80 KB por partida** (com tudo: participants, events, snapshots, timelines)
+- **~13.000 partidas por GB**
+- **Pipeline atual: ~1.000 partidas/dia** → ~2.4 GB/mes
+- **Supabase Pro (8 GB, $25/mes):** aguenta ~3.3 meses sem rotacao
+- **Com compressao (v1.1.0):** aguenta ~5.5 meses
+- **Com rotacao (v1.2.0):** infinito (mantem janela de 3 meses)
+
+---
+
 ## Times e Responsabilidades (0.9.0)
 
 | Bloco | Cesar | Andre | Takida |

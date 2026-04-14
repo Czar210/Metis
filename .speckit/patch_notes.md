@@ -2,6 +2,79 @@
 
 *Diário de mudanças significativas no ecossistema e na stack do projeto.*
 
+## p-0.9.2 — Bans, Pickrate, Banrate, ETL Local (2026-04-14)
+
+### Banco de Dados
+- **Coluna `bans` JSONB** na tabela `matches` — armazena bans de ambos os times (team_id, champion_name, champion_id, pick_turn)
+- **View `champion_ban_stats`** — agregacao de bans por campeao pra queries rapidas
+- **Index GIN** na coluna bans pra performance
+
+### Backend
+- **Extracao de bans** no `riot_service.py` — parseia `info.teams[].bans` usando mapa estatico `champion.json` (172 campeoes)
+- **Pickrate** na tierlist — `total_matches / total_unique_matches * 100` por campeao+role
+- **Banrate** na tierlist — `ban_count / total_unique_matches * 100` por campeao
+- **KDA** calculado no backend — `(kills + assists) / max(deaths, 0.1)`
+- **Cache 24h** nas queries de tierlist e patches (in-memory com TTL)
+
+### Frontend — Tier List
+- **Colunas atualizadas**: Tier, Winrate, Pickrate, Banrate, KDA, Partidas
+- **Auto-seleciona patch mais recente** ao abrir (home e tier list)
+- **Banrate** mostra `—` quando nao ha dados de ban (partidas antigas)
+
+### Frontend — Match Detail
+- **Secao de bans** acima das tabs — icones dos campeoes banidos em grayscale (Azul vs Vermelho)
+
+### Scripts
+- **`scripts/local_etl.py`** — script pra rodar limpeza de partidas localmente no PC
+  - `python scripts/local_etl.py --count 50 --skip-existing`
+  - Baixa do R2, processa (Bronze → Prata) e envia pro Supabase
+
+---
+
+## p-0.9.1 — Tier por Role, Auto-Patch (2026-04-14)
+
+### Backend
+- **Tier badges POR ROLE** — agrupamento por (champion, role), percentil calculado dentro de cada role
+- Viktor Mid pode ser S+ enquanto Viktor Top e B
+- **Cache 24h** na tierlist e patches
+
+### Frontend
+- **Role icon + label** na tabela da tier list ao lado do nome do campeao
+- **Auto-seleciona patch mais recente** como filtro padrao ao abrir
+
+---
+
+## p-0.9.0 — Guardrail LoL, Token Limits, Chat Seguro (2026-04-14)
+
+### Backend — Chat
+- **Guardrail real** — classificador LLM (~88 tokens) verifica se a mensagem e sobre LoL ANTES de gerar resposta
+- Se off-topic: rejeita imediatamente sem gastar tokens da resposta completa
+- **Personalidade Metis**: calma, analitica, nunca toxica, transforma derrotas em aprendizado, nunca fala de receitas/politica/etc
+- **Limites de tokens por tier**: Doador 5k, Premium 30k, Pro 100k tokens/dia — reset meia-noite UTC
+- **Contagem de tokens real** via `usage_metadata` do Gemini
+- **Autenticacao por usuario**: chat exige `supabase_token` — sem login = 401, tier free = 403
+- **Endpoint `/api/v1/chat/usage`** — retorna uso de tokens atual do usuario
+
+### Frontend — Chat
+- **Barra de uso de tokens** no topo do chat (verde → amber 70% → vermelho 90%)
+- Input desabilitado ao atingir 100% do limite
+- Gate atualizado: redireciona pra `/pricing` em vez de texto generico
+
+### Seguranca (v0.8.2)
+- **API key middleware** (`X-API-Key`) em todos os endpoints exceto /health
+- **Erros sanitizados** — mensagens genericas pro cliente, detalhes so no log
+- **CORS restrito** — GET/POST/OPTIONS + headers especificos
+- **Gemini key segura** — configurada no SDK init, nunca armazenada no objeto
+- **.gitignore reforçado** — `.env*`, `*.key`, `*.pem`
+
+### Outras (v0.8.1, v0.8.3)
+- **Recomendacoes 8D** (modelo Neo-Artemis) com radar chart expandivel
+- **Mapa completo de runas** (~70 runas, todas as arvores + stat shards)
+- **Gemini 2.5 Flash** como modelo padrao (migrado de google-generativeai pra google-genai SDK)
+- **Conta Pro** `puczaras@metis.gg` setada no Supabase
+
+---
+
 ## v0.8.0 — Mega Update: Header, Tier List, Player Page, Match Detail, Itens, IA, Pricing (2026-04-14)
 
 ### Frontend — Infraestrutura

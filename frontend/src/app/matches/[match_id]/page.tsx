@@ -41,6 +41,13 @@ type Participant = {
   damage_per_minute?: number | null
 }
 
+type Ban = {
+  team_id: number
+  champion_id: number
+  champion_name: string
+  pick_turn: number
+}
+
 type MatchMeta = {
   match_id: string
   game_version: string
@@ -48,6 +55,7 @@ type MatchMeta = {
   queue_id: number
   end_type: string
   created_at: string
+  bans?: Ban[]
 }
 
 type MatchDetails = {
@@ -421,6 +429,33 @@ export default function MatchPage() {
             </div>
           </div>
         </div>
+
+        {/* Bans */}
+        {meta.bans && meta.bans.length > 0 && (
+          <div className="flex items-center gap-4 mb-4 bg-metis-surface border border-metis-border rounded-lg px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-blue-400 font-semibold uppercase">Bans Azul</span>
+              <div className="flex gap-1">
+                {meta.bans.filter(b => b.team_id === 100).map((b, i) => (
+                  <div key={i} className="relative w-7 h-7 rounded overflow-hidden border border-blue-500/30 grayscale opacity-60">
+                    <Image src={championIconUrl(b.champion_name, DDRAGON_VERSION)} alt={b.champion_name} fill className="object-cover" unoptimized />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="w-px h-6 bg-metis-border" />
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-red-400 font-semibold uppercase">Bans Verm</span>
+              <div className="flex gap-1">
+                {meta.bans.filter(b => b.team_id === 200).map((b, i) => (
+                  <div key={i} className="relative w-7 h-7 rounded overflow-hidden border border-red-500/30 grayscale opacity-60">
+                    <Image src={championIconUrl(b.champion_name, DDRAGON_VERSION)} alt={b.champion_name} fill className="object-cover" unoptimized />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-1 mb-4 border-b border-metis-border">

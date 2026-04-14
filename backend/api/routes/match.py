@@ -160,7 +160,7 @@ def get_match_details(match_id: str):
                 "total_cs, cs_per_minute, champion_level, "
                 "items, rune_keystone, rune_primary, rune_secondary, runes_raw, summoner1_id, summoner2_id, "
                 "players(game_name, tag_line), "
-                "matches(match_id, game_version, game_duration, queue_id, end_type, created_at)"
+                "matches(match_id, game_version, game_duration, queue_id, end_type, created_at, bans)"
             )
             .eq("match_id", match_id)
             .execute()

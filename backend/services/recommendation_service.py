@@ -53,7 +53,18 @@ def _safe(val, default=0.0) -> float:
 
 
 def _challenge(row: dict, key: str, default=0.0) -> float:
-    """Extrai um campo do challenges JSONB."""
+    """Extrai um campo — primeiro tenta coluna direta, depois challenges JSONB (legado)."""
+    # Colunas diretas (preferido)
+    col_map = {
+        "soloKills": "solo_kills",
+        "damageDealtToBuildings": "damage_dealt_to_buildings",
+        "earlyLaningPhaseGoldExpAdvantage": "early_laning_phase_gold_exp_advantage",
+    }
+    if key in col_map:
+        val = row.get(col_map[key])
+        if val is not None:
+            return _safe(val, default)
+    # Fallback: challenges JSONB (dados antigos)
     ch = row.get("challenges")
     if isinstance(ch, dict):
         return _safe(ch.get(key), default)
@@ -161,7 +172,7 @@ def buscar_recomendacoes(
         .select(
             "kills, deaths, assists, cs_per_minute, damage_per_minute, "
             "vision_score, kill_participation, gold_earned, "
-            "damage_dealt_to_buildings, champion_name, team_position, win, challenges"
+            "damage_dealt_to_buildings, early_laning_phase_gold_exp_advantage, solo_kills, champion_name, team_position, win"
         )
         .eq("puuid", puuid)
         .execute()

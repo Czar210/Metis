@@ -60,7 +60,14 @@ export default function ChampionsPage() {
   useEffect(() => {
     apiFetch('/api/v1/stats/patches')
       .then(r => r.ok ? r.json() : [])
-      .then(setPatches)
+      .then((data: string[]) => {
+        setPatches(data)
+        // Auto-selecionar patch mais recente como filtro padrao
+        if (data.length > 0 && !patchFrom && !patchTo) {
+          setPatchFrom(data[0])
+          setPatchTo(data[0])
+        }
+      })
       .catch(() => {})
   }, [])
 

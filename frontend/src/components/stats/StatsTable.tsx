@@ -4,10 +4,12 @@ import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
-import { championIconUrl, DDRAGON_VERSION } from '@/lib/ddragon'
+import { championIconUrl, roleIconPath, DDRAGON_VERSION } from '@/lib/ddragon'
 
 export type ChampionStat = {
   champion: string
+  role?: string
+  role_label?: string
   total_matches: number
   winrate: number
   avg_kills: number
@@ -16,9 +18,12 @@ export type ChampionStat = {
   avg_gold: number
   avg_damage_per_minute: number
   tier?: string
+  pickrate?: number
+  banrate?: number
+  kda?: number
 }
 
-type SortKey = 'champion' | 'total_matches' | 'winrate' | 'kda' | 'avg_damage_per_minute'
+type SortKey = 'champion' | 'total_matches' | 'winrate' | 'pickrate' | 'banrate' | 'kda'
 type SortDir = 'asc' | 'desc'
 
 const TIER_STYLE: Record<string, { color: string; bg: string }> = {
@@ -60,14 +65,15 @@ type Props = {
 }
 
 const COLUMNS: { key: SortKey; label: string; hideOnMobile?: boolean }[] = [
-  { key: 'winrate',                label: 'Winrate' },
-  { key: 'total_matches',         label: 'Partidas' },
-  { key: 'kda',                   label: 'KDA', hideOnMobile: true },
-  { key: 'avg_damage_per_minute', label: 'DPM', hideOnMobile: true },
+  { key: 'winrate',        label: 'Winrate' },
+  { key: 'pickrate',       label: 'Pickrate' },
+  { key: 'banrate',        label: 'Banrate', hideOnMobile: true },
+  { key: 'kda',            label: 'KDA' },
+  { key: 'total_matches',  label: 'Partidas', hideOnMobile: true },
 ]
 
 function getKda(c: ChampionStat): number {
-  return c.avg_deaths > 0 ? (c.avg_kills + c.avg_assists) / c.avg_deaths : 99
+  return c.kda ?? (c.avg_deaths > 0 ? (c.avg_kills + c.avg_assists) / c.avg_deaths : 99)
 }
 
 export function StatsTable({ data, searchQuery }: Props) {
@@ -93,6 +99,10 @@ export function StatsTable({ data, searchQuery }: Props) {
       av = getKda(a); bv = getKda(b)
     } else if (sortKey === 'champion') {
       av = a.champion; bv = b.champion
+    } else if (sortKey === 'pickrate') {
+      av = a.pickrate ?? 0; bv = b.pickrate ?? 0
+    } else if (sortKey === 'banrate') {
+      av = a.banrate ?? 0; bv = b.banrate ?? 0
     } else {
       av = a[sortKey]; bv = b[sortKey]
     }
@@ -150,9 +160,11 @@ export function StatsTable({ data, searchQuery }: Props) {
               const kda = getKda(c)
               const kdaStr = kda >= 99 ? 'Perfect' : kda.toFixed(2)
 
+              const roleIcon = c.role ? roleIconPath(c.role) : null
+
               return (
                 <tr
-                  key={c.champion}
+                  key={`${c.champion}-${c.role ?? i}`}
                   className={`border-b border-metis-border/50 hover:bg-metis-bg/40 transition-colors ${
                     i % 2 === 0 ? '' : 'bg-metis-bg/20'
                   }`}
@@ -160,7 +172,7 @@ export function StatsTable({ data, searchQuery }: Props) {
                   {/* # */}
                   <td className="px-3 py-3 text-center text-xs text-metis-text-dim font-medium">{i + 1}</td>
 
-                  {/* Champion */}
+                  {/* Champion + role icon */}
                   <td className="px-3 py-3">
                     <Link href={`/champions/${c.champion}`} className="flex items-center gap-3 group">
                       <div className="relative w-8 h-8 rounded-md overflow-hidden flex-shrink-0 border border-metis-border">
@@ -172,9 +184,19 @@ export function StatsTable({ data, searchQuery }: Props) {
                           unoptimized
                         />
                       </div>
-                      <span className="font-medium text-metis-text group-hover:text-metis-accent transition-colors">
-                        {c.champion}
-                      </span>
+                      <div className="min-w-0">
+                        <span className="font-medium text-metis-text group-hover:text-metis-accent transition-colors block">
+                          {c.champion}
+                        </span>
+                        {c.role_label && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            {roleIcon && (
+                              <Image src={roleIcon} alt={c.role_label} width={10} height={10} unoptimized className="opacity-50" />
+                            )}
+                            <span className="text-[10px] text-metis-muted">{c.role_label}</span>
+                          </div>
+                        )}
+                      </div>
                     </Link>
                   </td>
 
@@ -186,21 +208,21 @@ export function StatsTable({ data, searchQuery }: Props) {
                   {/* Winrate */}
                   <td className="px-4 py-3"><WinrateCell value={c.winrate} /></td>
 
-                  {/* Partidas */}
-                  <td className="px-4 py-3 text-metis-text-dim">{c.total_matches}</td>
+                  {/* Pickrate */}
+                  <td className="px-4 py-3 text-metis-text-dim">{(c.pickrate ?? 0).toFixed(1)}%</td>
+
+                  {/* Banrate */}
+                  <td className="px-4 py-3 text-metis-text-dim hidden sm:table-cell">
+                    {(c.banrate ?? 0) > 0 ? `${(c.banrate ?? 0).toFixed(1)}%` : '—'}
+                  </td>
 
                   {/* KDA */}
-                  <td className="px-4 py-3 text-metis-text-dim hidden sm:table-cell">
-                    <span>{kdaStr}</span>
-                    <span className="text-xs text-metis-muted ml-1.5">
-                      {c.avg_kills.toFixed(1)}/{c.avg_deaths.toFixed(1)}/{c.avg_assists.toFixed(1)}
-                    </span>
+                  <td className="px-4 py-3 text-metis-text-dim">
+                    <span className="font-medium">{kdaStr}</span>
                   </td>
 
-                  {/* DPM */}
-                  <td className="px-4 py-3 text-metis-text-dim hidden sm:table-cell">
-                    {Math.round(c.avg_damage_per_minute)}
-                  </td>
+                  {/* Partidas */}
+                  <td className="px-4 py-3 text-metis-text-dim hidden sm:table-cell">{c.total_matches}</td>
                 </tr>
               )
             })}
