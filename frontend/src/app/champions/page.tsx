@@ -1,17 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import Image from 'next/image'
-import { Swords, Search, Sparkles, Users, Home } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { StatsTable, type ChampionStat } from '@/components/stats/StatsTable'
-import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
+import { Header } from '@/components/ui/Header'
 import { emblemPath } from '@/lib/ddragon'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
 
 const ROLES = [
-  { value: '', label: 'Todas', icon: null },
+  { value: '', label: 'Todas as Roles', icon: null },
   { value: 'TOP',     label: 'Top',     icon: '/roles/position-top.png' },
   { value: 'JUNGLE',  label: 'Jungle',  icon: '/roles/position-jungle.png' },
   { value: 'MIDDLE',  label: 'Mid',     icon: '/roles/position-middle.png' },
@@ -20,7 +19,7 @@ const ROLES = [
 ]
 
 const SERVERS = [
-  { value: '', label: 'Todas' },
+  { value: '', label: 'Todas as Regioes' },
   { value: 'BR1', label: 'BR' },
   { value: 'NA1', label: 'NA' },
   { value: 'EUW1', label: 'EUW' },
@@ -33,17 +32,17 @@ const SERVERS = [
 ]
 
 const ELOS = [
-  { value: '', label: 'Todos', emblem: null },
-  { value: 'IRON', label: 'Iron', emblem: 'Iron' },
-  { value: 'BRONZE', label: 'Bronze', emblem: 'Bronze' },
-  { value: 'SILVER', label: 'Silver', emblem: 'Silver' },
-  { value: 'GOLD', label: 'Gold', emblem: 'Gold' },
-  { value: 'PLATINUM', label: 'Platinum', emblem: 'Platinum' },
-  { value: 'EMERALD', label: 'Emerald', emblem: 'Emerald' },
-  { value: 'DIAMOND', label: 'Diamond', emblem: 'Diamond' },
-  { value: 'MASTER', label: 'Master', emblem: 'Master' },
-  { value: 'GRANDMASTER', label: 'Grandmaster', emblem: 'Grandmaster' },
-  { value: 'CHALLENGER', label: 'Challenger', emblem: 'Challenger' },
+  { value: '', label: 'Todos', emblem: null, scale: '4.5' },
+  { value: 'IRON', label: 'Iron', emblem: 'Iron', scale: '4.9' },
+  { value: 'BRONZE', label: 'Bronze', emblem: 'Bronze', scale: '4.7' },
+  { value: 'SILVER', label: 'Silver', emblem: 'Silver', scale: '4.7' },
+  { value: 'GOLD', label: 'Gold', emblem: 'Gold', scale: '4.5' },
+  { value: 'PLATINUM', label: 'Platinum', emblem: 'Platinum', scale: '4.5' },
+  { value: 'EMERALD', label: 'Emerald', emblem: 'Emerald', scale: '4.5' },
+  { value: 'DIAMOND', label: 'Diamond', emblem: 'Diamond', scale: '4.5' },
+  { value: 'MASTER', label: 'Master', emblem: 'Master', scale: '4.5' },
+  { value: 'GRANDMASTER', label: 'Grandmaster', emblem: 'Grandmaster', scale: '5' },
+  { value: 'CHALLENGER', label: 'Challenger', emblem: 'Challenger', scale: '4.5' },
 ]
 
 export default function ChampionsPage() {
@@ -53,9 +52,29 @@ export default function ChampionsPage() {
 
   const [role, setRole] = useState('')
   const [server, setServer] = useState('')
-  const [patch, setPatch] = useState('')
+  const [patchFrom, setPatchFrom] = useState('')
+  const [patchTo, setPatchTo] = useState('')
   const [elo, setElo] = useState('')
   const [search, setSearch] = useState('')
+  const [patches, setPatches] = useState<string[]>([])
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/v1/stats/patches`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setPatches)
+      .catch(() => {})
+  }, [])
+
+  // Filtra patches selecionados no range (patches vem ordenado desc: 16.7, 16.6, ...)
+  const selectedPatches = (() => {
+    if (!patchFrom && !patchTo) return []
+    const fromIdx = patchFrom ? patches.indexOf(patchFrom) : patches.length - 1
+    const toIdx = patchTo ? patches.indexOf(patchTo) : 0
+    if (fromIdx === -1 || toIdx === -1) return []
+    const start = Math.min(fromIdx, toIdx)
+    const end = Math.max(fromIdx, toIdx)
+    return patches.slice(start, end + 1)
+  })()
 
   useEffect(() => {
     async function load() {
@@ -65,7 +84,8 @@ export default function ChampionsPage() {
         const params = new URLSearchParams({ min_matches: '1' })
         if (role) params.set('role', role)
         if (server) params.set('server', server)
-        if (patch) params.set('patch', patch)
+        if (selectedPatches.length === 1) params.set('patch', selectedPatches[0])
+        else if (selectedPatches.length > 1) params.set('patches', selectedPatches.join(','))
 
         const res = await fetch(`${API_URL}/api/v1/stats/tierlist?${params}`)
         if (!res.ok) throw new Error(`Erro ${res.status}`)
@@ -78,33 +98,11 @@ export default function ChampionsPage() {
       }
     }
     load()
-  }, [role, server, patch])
+  }, [role, server, patchFrom, patchTo])
 
   return (
     <div className="min-h-screen bg-metis-bg text-metis-text">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-metis-border bg-metis-surface">
-        <Link href="/" className="flex items-center gap-2">
-          <Swords className="w-5 h-5 text-metis-accent" />
-          <span className="font-bold text-metis-text tracking-tight">Metis</span>
-        </Link>
-        <div className="flex items-center gap-2">
-          <ThemeSwitcher />
-          <div className="w-px h-4 bg-metis-border mx-1" />
-          <Link href="/" className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors px-2 py-1.5">
-            <Home className="w-3.5 h-3.5" />
-            <span className="hidden sm:block">Início</span>
-          </Link>
-          <Link href="/changelog" className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors px-2 py-1.5">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden sm:block">O que é novo</span>
-          </Link>
-          <Link href="/team" className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors px-2 py-1.5">
-            <Users className="w-3.5 h-3.5" />
-            <span className="hidden sm:block">Equipe</span>
-          </Link>
-        </div>
-      </header>
+      <Header />
 
       <main className="max-w-5xl mx-auto px-4 py-8">
         <div className="mb-6">
@@ -166,39 +164,58 @@ export default function ChampionsPage() {
             ))}
           </select>
 
-          {/* Patch */}
-          <input
-            type="text"
-            value={patch}
-            onChange={e => setPatch(e.target.value)}
-            placeholder="Patch (ex: 15.1)"
-            className="bg-metis-bg border border-metis-border rounded-lg px-3 py-2 text-sm text-metis-text placeholder-metis-muted outline-none focus:border-metis-accent transition-colors w-36"
-          />
+          {/* Patch range */}
+          <div className="flex items-center gap-2">
+            <select
+              value={patchFrom}
+              onChange={e => setPatchFrom(e.target.value)}
+              className="bg-metis-bg border border-metis-border rounded-lg px-3 py-2 text-sm text-metis-text outline-none focus:border-metis-accent transition-colors"
+            >
+              <option value="">Patch inicial</option>
+              {patches.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+            <span className="text-metis-text-dim text-sm">a</span>
+            <select
+              value={patchTo}
+              onChange={e => setPatchTo(e.target.value)}
+              className="bg-metis-bg border border-metis-border rounded-lg px-3 py-2 text-sm text-metis-text outline-none focus:border-metis-accent transition-colors"
+            >
+              <option value="">Patch final</option>
+              {patches.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
 
-          {/* Elo — no-op, UI pronta */}
-          <div className="flex gap-1 flex-wrap items-center">
+          {/* Elo */}
+          <div className="flex gap-2 flex-wrap items-center">
             {ELOS.map(e => (
               <button
                 key={e.value}
                 onClick={() => setElo(e.value)}
                 title={e.label}
-                className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg text-xs font-medium transition-colors min-w-[56px] ${
                   elo === e.value
-                    ? 'bg-metis-accent text-white'
-                    : 'bg-metis-bg border border-metis-border text-metis-text-dim hover:text-metis-text'
+                    ? 'bg-metis-accent/20 border border-metis-accent text-metis-accent'
+                    : 'bg-metis-bg border border-metis-border text-metis-text-dim hover:text-metis-text hover:border-metis-text-dim'
                 }`}
               >
                 {e.emblem ? (
-                  <Image
-                    src={emblemPath(e.emblem)}
-                    alt={e.label}
-                    width={18}
-                    height={18}
-                    unoptimized
-                  />
-                ) : (
-                  e.label
-                )}
+                  <div className="w-12 h-10 relative overflow-hidden flex-shrink-0">
+                    <Image
+                      src={emblemPath(e.emblem)}
+                      alt={e.label}
+                      width={200}
+                      height={200}
+                      unoptimized
+                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[45%]"
+                      style={{ transform: `translate(-50%, -45%) scale(${e.scale})` }}
+                    />
+                  </div>
+                ) : null}
+                <span>{e.label}</span>
               </button>
             ))}
             {elo && (

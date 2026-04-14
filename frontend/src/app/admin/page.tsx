@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import {
-  Swords, Users, Trophy, Trash2, Clock, Database,
-  TrendingUp, AlertTriangle, BarChart3, LogOut,
+  Users, Trophy, Trash2, Clock, Database,
+  TrendingUp, AlertTriangle, BarChart3,
 } from 'lucide-react'
+import { Header } from '@/components/ui/Header'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
 
@@ -62,16 +62,12 @@ export default function AdminPage() {
   const [stats, setStats]     = useState<AdminStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
-  const [adminName, setAdminName] = useState('Admin')
-
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
 
       if (!user) { router.replace('/auth'); return }
       if (!user.app_metadata?.is_admin) { router.replace('/'); return }
-
-      setAdminName(user.email?.split('@')[0] ?? 'Admin')
 
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.replace('/auth'); return }
@@ -91,36 +87,7 @@ export default function AdminPage() {
     load()
   }, [])
 
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    router.replace('/')
-  }
-
-  // ── Header ────────────────────────────────────────────────
-  const header = (
-    <header className="flex items-center justify-between px-6 py-4 border-b border-metis-border bg-metis-surface">
-      <div className="flex items-center gap-3">
-        <Link href="/" className="flex items-center gap-2">
-          <Swords className="w-5 h-5 text-metis-accent" />
-          <span className="font-bold text-metis-text tracking-tight">Metis</span>
-        </Link>
-        <span className="text-metis-border">·</span>
-        <span className="text-xs font-semibold text-amber-400 uppercase tracking-widest">
-          Painel Admin
-        </span>
-      </div>
-      <div className="flex items-center gap-4">
-        <span className="text-xs text-metis-text-dim">{adminName}</span>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-red-400 transition-colors"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          Sair
-        </button>
-      </div>
-    </header>
-  )
+  const header = <Header />
 
   if (loading) return (
     <div className="min-h-screen bg-metis-bg text-metis-text">

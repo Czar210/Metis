@@ -19,12 +19,13 @@ app = FastAPI(
     version="0.1.0"
 )
 
-from backend.api.routes import player, stats, match, admin, champion
+from backend.api.routes import player, stats, match, admin, champion, item
 app.include_router(player.router)
 app.include_router(stats.router)
 app.include_router(match.router)
 app.include_router(admin.router)
 app.include_router(champion.router)
+app.include_router(item.router)
 
 # ── CORS ──────────────────────────────────────────────────────────────
 # Origens permitidas: variável de ambiente ou padrões de desenvolvimento.
@@ -82,17 +83,22 @@ async def ingest_matches(req: MatchRequest):
     return resultado
 
 @app.post("/api/v1/chat")
-async def chat(req: ChatRequest):
+def chat(req: ChatRequest):
     """
-    Endpoint do chat interativo com a IA Metis.
-    Recebe a mensagem do usuário e retorna a resposta do agente.
-    TODO: Integrar com Ollama (Llama 3) + pipeline RAG (Pinecone).
+    Chat interativo com a IA Metis.
+    Usa Gemini Flash Lite (API) ou Ollama (local) via adapter.
     """
-    # Esqueleto — será substituído pela chamada ao rag_service → Langflow (OpenRAG) → Ollama (Llama 3)
-    return {
-        "resposta": f"[Metis IA] Recebi sua mensagem: '{req.mensagem}'. Agente ainda não conectado.",
-        "status": "skeleton"
-    }
+    from backend.services.llm_adapter import get_llm
+    try:
+        llm = get_llm()
+        resposta = llm.generate(req.mensagem)
+        return {"resposta": resposta, "status": "ok"}
+    except Exception as err:
+        logger.error(f"[chat] Erro: {err}")
+        return {
+            "resposta": "Desculpe, não consegui processar sua mensagem. Tente novamente.",
+            "status": "error",
+        }
 
 @app.get("/api/v1/health")
 def health_check():

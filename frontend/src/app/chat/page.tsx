@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ChatMessage, type Message } from '@/components/ui/ChatMessage'
 import { ChatInput } from '@/components/ui/ChatInput'
-import { LogOut, Swords, Lock } from 'lucide-react'
+import { Swords, Lock } from 'lucide-react'
 import Link from 'next/link'
+import { Header } from '@/components/ui/Header'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
 
@@ -94,24 +95,7 @@ export default function ChatPage() {
   if (!isPremium) {
     return (
       <div className="min-h-screen flex flex-col bg-metis-bg">
-        <header className="flex items-center justify-between px-4 py-3 border-b border-metis-border bg-metis-surface">
-          <div className="flex items-center gap-2">
-            <Swords className="w-5 h-5 text-metis-accent" />
-            <span className="font-semibold text-metis-text">Metis</span>
-          </div>
-          <div className="flex items-center gap-3">
-            {userEmail && (
-              <span className="text-xs text-metis-text-dim hidden sm:block">{userEmail}</span>
-            )}
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:block">Sair</span>
-            </button>
-          </div>
-        </header>
+        <Header />
 
         <div className="flex-1 flex items-center justify-center px-4">
           <div className="max-w-sm text-center">
@@ -138,25 +122,7 @@ export default function ChatPage() {
   // Chat premium
   return (
     <div className="min-h-screen flex flex-col bg-metis-bg">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-metis-border bg-metis-surface">
-        <div className="flex items-center gap-2">
-          <Swords className="w-5 h-5 text-metis-accent" />
-          <span className="font-semibold text-metis-text">Metis</span>
-        </div>
-        <div className="flex items-center gap-3">
-          {userEmail && (
-            <span className="text-xs text-metis-text-dim hidden sm:block">{userEmail}</span>
-          )}
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden sm:block">Sair</span>
-          </button>
-        </div>
-      </header>
+      <Header />
 
       {/* Messages */}
       <main className="flex-1 overflow-y-auto chat-scroll px-4 py-6">

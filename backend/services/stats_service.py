@@ -14,6 +14,18 @@ from collections import defaultdict
 from typing import Any
 
 
+def buscar_patches_disponiveis(db_client) -> list[str]:
+    """Retorna lista de patches distintos ordenados do mais recente ao mais antigo."""
+    result = db_client.table("matches").select("game_version").execute()
+    rows = result.data or []
+    patches = sorted(
+        {r["game_version"] for r in rows if r.get("game_version")},
+        key=lambda v: [int(x) for x in v.split(".")[:2]] if v else [0, 0],
+        reverse=True,
+    )
+    return patches
+
+
 def buscar_stats_campeao(
     db_client,
     champion: str,
@@ -94,6 +106,7 @@ def buscar_tierlist(
     role: str | None = None,
     server: str | None = None,
     patch: str | None = None,
+    patch_list: list[str] | None = None,
     min_matches: int = 1,
 ) -> list[dict[str, Any]]:
     """
@@ -127,6 +140,12 @@ def buscar_tierlist(
             r for r in rows
             if (r.get("matches") or {}).get("game_version") == patch
         ]
+    elif patch_list:
+        patch_set = set(patch_list)
+        rows = [
+            r for r in rows
+            if (r.get("matches") or {}).get("game_version") in patch_set
+        ]
 
     # Agrupamento por campeão
     buckets: dict[str, list[dict]] = defaultdict(list)
@@ -158,4 +177,37 @@ def buscar_tierlist(
         })
 
     result_list.sort(key=lambda x: x["winrate"], reverse=True)
+
+    # ── Tier badges por percentil de winrate ──────────────────────────────────
+    if result_list:
+        winrates = sorted([c["winrate"] for c in result_list])
+        n = len(winrates)
+
+        def percentile(p: float) -> float:
+            k = (n - 1) * p
+            f = int(k)
+            c = f + 1 if f + 1 < n else f
+            return winrates[f] + (k - f) * (winrates[c] - winrates[f])
+
+        p95 = percentile(0.95)
+        p80 = percentile(0.80)
+        p60 = percentile(0.60)
+        p40 = percentile(0.40)
+        p20 = percentile(0.20)
+
+        for c in result_list:
+            wr = c["winrate"]
+            if wr >= p95:
+                c["tier"] = "S+"
+            elif wr >= p80:
+                c["tier"] = "S"
+            elif wr >= p60:
+                c["tier"] = "A"
+            elif wr >= p40:
+                c["tier"] = "B"
+            elif wr >= p20:
+                c["tier"] = "C"
+            else:
+                c["tier"] = "D"
+
     return result_list

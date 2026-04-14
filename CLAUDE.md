@@ -13,7 +13,7 @@ Metis é uma aliada estratégica para jogadores de League of Legends. Combina um
 | Membro | Papel | Foco Técnico |
 |--------|-------|--------------|
 | **César (Tech Lead)** | Data Architect, CI/CD, Code Reviewer | Python/Polars, GitHub Actions, Supabase SQL, Cloudflare R2, Railway |
-| **André** | Backend & AI Engineer | FastAPI, Prompt Engineering, Llama 3, OpenRAG |
+| **André** | Backend & AI Engineer | FastAPI, Prompt Engineering, Llama 3, Gemma 4, Gemini Flash Lite, OpenRAG |
 | **Takida** | Frontend & UX | Next.js (App Router), Tailwind CSS, Supabase Auth |
 
 César revisa e aprova o código dos outros. Trate-o com abstração estruturada e zero enrolação.
@@ -30,7 +30,8 @@ César revisa e aprova o código dos outros. Trate-o com abstração estruturada
 | Busca Vetorial | **pgvector (nativo Supabase)** | ⚠️ NÃO é Pinecone |
 | RAG Orchestration | **OpenRAG** (Langflow + Docling + OpenSearch) | Substitui Pinecone |
 | Data Lake Bronze | Cloudflare R2 (S3-compatible) | Dados brutos .gz |
-| LLM | Llama 3 via Ollama | Exposto via Cloudflare Tunnel |
+| LLM (Local) | Llama 3 + Gemma 4 via Ollama | Exposto via Cloudflare Tunnel |
+| LLM (API) | Gemini Flash Lite (Google) | Via API + RAG próprio |
 | CI/CD | GitHub Actions | Automação de ingestão e ETL |
 | Processamento | Python Polars | Mais rápido que Pandas |
 
@@ -143,6 +144,7 @@ Metis/
 | `CLOUDFLARE_R2_SECRET_ACCESS_KEY` | Cloudflare R2 |
 | `CLOUDFLARE_R2_BUCKET_NAME` | Nome do bucket (= `metis`) |
 | `CORS_ORIGINS` | Origens permitidas (produção: domínio Vercel) |
+| `GEMINI_API_KEY` | Google Gemini Flash Lite — LLM via API (produção) |
 
 ### No GitHub Actions (Settings → Secrets → Repository secrets)
 > **Use exatamente estes nomes** — validados em 2026-04-04. Nomes diferentes causam secrets vazios silenciosamente.

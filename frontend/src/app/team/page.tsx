@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { Swords, ExternalLink, ChevronRight } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
+import { Header } from '@/components/ui/Header'
 
 type Member = {
   name: string
@@ -84,23 +85,7 @@ const TEAM: Member[] = [
 export default function TeamPage() {
   return (
     <div className="min-h-screen bg-metis-bg text-metis-text">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-metis-border bg-metis-surface">
-        <Link href="/" className="flex items-center gap-2">
-          <Swords className="w-5 h-5 text-metis-accent" />
-          <span className="font-bold text-metis-text tracking-tight">Metis</span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/changelog"
-            className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors"
-          >
-            O que é novo
-            <ChevronRight className="w-3 h-3" />
-          </Link>
-          <span className="text-xs text-metis-text-dim">Equipe</span>
-        </div>
-      </header>
+      <Header />
 
       <main className="max-w-5xl mx-auto px-4 py-12">
         {/* Hero */}

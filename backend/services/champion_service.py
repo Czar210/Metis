@@ -177,11 +177,17 @@ def buscar_matchups(
         if champ["win"]:
             buckets[opp]["champ_wins"] += 1
 
+    # Winrate geral do campeão (para normalização)
+    total_champ_games = len(champ_rows)
+    total_champ_wins = sum(1 for r in champ_rows if r.get("win"))
+    champ_overall_wr = round(total_champ_wins / total_champ_games * 100, 2) if total_champ_games else 50.0
+
     result = [
         {
             "opponent": name,
             "games": d["games"],
             "winrate": round(d["champ_wins"] / d["games"] * 100, 2),
+            "winrate_diff": round(d["champ_wins"] / d["games"] * 100 - champ_overall_wr, 2),
         }
         for name, d in buckets.items()
         if d["games"] >= min_matches

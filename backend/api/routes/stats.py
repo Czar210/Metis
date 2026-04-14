@@ -9,7 +9,7 @@ import os
 from fastapi import APIRouter, HTTPException, Query
 from supabase import create_client
 
-from backend.services.stats_service import buscar_stats_campeao, buscar_tierlist
+from backend.services.stats_service import buscar_stats_campeao, buscar_tierlist, buscar_patches_disponiveis
 
 router = APIRouter(prefix="/api/v1/stats", tags=["Stats"])
 
@@ -54,26 +54,41 @@ def champion_stats(
         raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
 
 
+@router.get("/patches")
+def patches():
+    """Retorna lista de patches disponíveis no banco, do mais recente ao mais antigo."""
+    try:
+        db = _get_supabase()
+        return buscar_patches_disponiveis(db)
+    except RuntimeError as err:
+        raise HTTPException(status_code=500, detail=str(err))
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+
+
 @router.get("/tierlist")
 def tierlist(
     role: str | None = Query(default=None, description="Posição (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY)"),
     server: str | None = Query(default=None, description="Servidor (BR1, NA1, KR, EUW1...)"),
-    patch: str | None = Query(default=None, description="Patch (ex: 15.1)"),
+    patch: str | None = Query(default=None, description="Patch único (ex: 15.1)"),
+    patches: str | None = Query(default=None, description="Range de patches separados por vírgula (ex: 16.5,16.6,16.7)"),
     min_matches: int = Query(default=5, ge=1, description="Mínimo de partidas para incluir campeão"),
 ):
     """
     🏆 Tier List Global
 
     Retorna todos os campeões com estatísticas agregadas, ordenados por winrate.
-    Filtros opcionais: role, server, patch.
+    Filtros opcionais: role, server, patch (único) ou patches (range comma-separated).
     """
     try:
         db = _get_supabase()
+        patch_list = patches.split(",") if patches else None
         return buscar_tierlist(
             db_client=db,
             role=role,
             server=server,
             patch=patch,
+            patch_list=patch_list,
             min_matches=min_matches,
         )
     except RuntimeError as err:
