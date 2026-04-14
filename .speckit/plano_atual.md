@@ -1,6 +1,6 @@
 # Metis - Plano Atual (Milestones Tracker)
 
-*Sincronizado com Trello Oficial — última sync: 2026-04-03*
+*Sincronizado com Trello Oficial — última sync: 2026-04-13*
 *Colunas do Trello: [PUC Zaras] | [André] | [Takis] | [Depende de Outras Tarefas] | [Pegue Suas Tarefas] | [Revisão]*
 
 ---
@@ -36,7 +36,7 @@ Evolução da plataforma de dados e UX, executada em sessões de pair-programmin
 | Membro | Papel | Foco |
 |--------|-------|------|
 | **César (PUC Zaras)** | Tech Lead, Data Architect, CI/CD | Python/Polars, GitHub Actions, Supabase SQL, R2 |
-| **André** | Backend & AI Engineer | FastAPI, Prompt Engineering, Llama 3, OpenRAG |
+| **André** | Backend & AI Engineer | FastAPI, Prompt Engineering, Llama 3, Gemma 4, Gemini Flash Lite, OpenRAG |
 | **Takida (Takis)** | Frontend & UX | Next.js App Router, Tailwind, Supabase Auth |
 | **César + Claude** | Revisão & Validação | Code review, testes, qualidade |
 
@@ -132,10 +132,12 @@ Cards na coluna [Revisão] com todas as checklists completas:
 
 ---
 
-### [André] Prompt Engineering com o Llama 3
+### [André] Prompt Engineering — Multi-LLM (Llama 3 + Gemma 4 + Gemini Flash Lite)
 **Arquivos:** `backend/services/llm_service.py` + `backend/prompts/system_prompt.txt`
+**Stack LLM atualizado (2026-04-13):** Llama 3 e Gemma 4 via Ollama (local) + Gemini Flash Lite via API Google (cloud) + RAG próprio
 - [ ] Escrever `system_prompt.txt` ("Você é Metis, o estrategista. Nunca alucine. Responda APENAS com base no contexto.")
 - [ ] Criar `llm_service.py` montando: System Prompt + Contexto (do RAG) + Pergunta do Usuário
+- [ ] Suporte multi-modelo: Ollama (Llama 3 / Gemma 4) para uso local + Gemini Flash Lite via API para produção
 - [ ] Configurar `temperature=0.1` (respostas analíticas e determinísticas)
 - [ ] Retornar string gerada para a rota `POST /api/v1/chat`
 
@@ -227,7 +229,7 @@ Cards na coluna [Revisão] com todas as checklists completas:
 - [ ] Mobafire scraper rodando via Action → guias no R2 (**desbloqueado com fix de hoje**)
 - [ ] `vectorize_guides.py` → guias vetorizados em `guides_gold` (OpenRAG + pgvector)
 - [ ] `rag_service.py` → busca semântica via RPC `match_documents`
-- [ ] `llm_service.py` (André) → prompt engineering + Llama 3 via Ollama
+- [ ] `llm_service.py` (André) → prompt engineering multi-LLM (Llama 3 + Gemma 4 via Ollama, Gemini Flash Lite via API)
 - [ ] `/api/v1/chat` com IA real (hoje é skeleton)
 - [ ] Gate premium funcional com análise tática por partida e por jogador
 
@@ -261,6 +263,140 @@ Cards na coluna [Revisão] com todas as checklists completas:
 ---
 
 ## 🆓 [Pegue Suas Tarefas]
+
+*Sync Trello: 2026-04-13*
+
+### Tela de Detalhes da Partida
+**Tags:** Frontend, Análise de Dados, API/Backend
+**Referência visual:** OP.GG match detail (tabs: Visão Geral, Pontuação OP, Análise de Equipe, Build, Etc.)
+**Status:** Aberto (0%)
+
+**Scoreboard principal:**
+- [ ] Ordenar jogadores de cada time por role: TOP → JG → MID → ADC → SUP (sempre)
+- [ ] Metis Score: pontuação própria do Metis baseada na performance média da partida (KDA, CS, visão, dano, ouro — normalizado)
+
+**Tab: Análise de Equipe** (estilo OP.GG)
+- [ ] Gráficos donut comparando Equipe Vencedora vs Perdedora
+- [ ] Seções: Abates do Campeão, Ouro, Dano, Vigias Colocadas, Dano Recebido, CS
+- [ ] Barras horizontais por jogador com ícone do campeão + valor individual
+- [ ] Total de cada time no centro do donut
+
+**Tab: Timeline interativa**
+- [ ] Mapa do Summoner's Rift com eventos plotados (kills, dragões, torres, Barão)
+- [ ] Feed cronológico lateral com eventos: kill (quem matou + quem morreu + assistentes), dragão, torre, monstro do Vazio
+- [ ] Gráfico de diferença de ouro (blue vs red) ao longo do tempo com slider
+- [ ] Hover em evento: tooltip mostrando o estado de cada jogador naquele momento (gold, level, CS, itens)
+- [ ] Checkboxes para filtrar tipos de evento: Abates, Torres
+- [ ] Ícones dos jogadores no topo para filtrar por participante
+- [ ] Dados disponíveis: `critical_events` (vítima, assistentes, tipo, posição X/Y) + `participant_snapshots`
+
+**Tab: Build**
+- [ ] Build de itens de cada jogador com timestamps (quando comprou cada item)
+- [ ] Ordem de habilidades (skill order por nível)
+- [ ] Runas detalhadas: árvore primária + secundária + fragmentos (Precisão, Dominação, Fragmentos)
+- [ ] Dados disponíveis: `items` JSONB, `runes_raw` JSONB em `match_participants`
+
+### Detalhes do Jogador na Tela de Jogador
+**Tags:** Frontend, API/Backend
+**Referência visual:** OP.GG player profile
+**Status:** Aberto (0%)
+
+**Busca inteligente:**
+- [ ] Input único aceita formato `Zaras#0210` — parseia automaticamente nick e tag pelo `#`
+- [ ] Se o usuário digitar tudo no campo de nome (ex: `Zaras#0210`), capturar `#0210` como tag e o resto como nick
+- [ ] Manter compatibilidade com campos separados (nick + tag) como alternativa
+
+**Stats por campeão (Season atual):**
+- [ ] Lista de campeões jogados com: CS médio (CS/m), KDA, winrate %, número de jogos
+- [ ] Filtro por fila: Ranqueada Solo, Ranqueada Flex
+- [ ] Filtro por temporada (S2026, etc.)
+- [ ] Link "Mostrar mais + Temporadas anteriores"
+
+**Maestria:**
+- [ ] Top 4 campeões com maior maestria: ícone, nível de maestria, pontos
+- [ ] Dados: Riot API maestria endpoint
+
+**Jogou recentemente com (últimas partidas):**
+- [ ] Lista de jogadores que apareceram nas últimas partidas do jogador (mínimo 3 jogos juntos)
+- [ ] Mostrar: nick#tag, servidor, W/L juntos, nível, winrate % juntos
+- [ ] Lógica: cruzar `match_participants` por PUUID — agrupar aliados que compartilham ≥3 partidas recentes
+
+**Nemesis — Adversários Recorrentes:**
+- [ ] Tela/seção de jogadores enfrentados mais de 1 vez (comparação por PUUID no time oposto)
+- [ ] Mostrar: nick#tag, vezes enfrentados, W/L contra, campeões usados por ambos
+- [ ] Lógica: cruzar `match_participants` — jogadores com mesmo `match_id` mas `team_id` diferente, agrupados por PUUID com count ≥ 2
+
+### Gemini Flash Lite como Modelo Usável
+**Tags:** IA/RAG, API/Backend
+**Status:** Aberto
+- [ ] Configurar integração com API Google (Gemini Flash Lite)
+- [ ] Adicionar `GEMINI_API_KEY` às env vars (local + Railway + GitHub Secrets)
+- [ ] Criar adapter/abstração em `llm_service.py` para alternar entre Ollama (local) e Gemini (API)
+- [ ] Testar latência e qualidade de resposta com o RAG existente
+- [ ] Atualizar `requirements.txt` com SDK Google (ex: `google-generativeai`)
+
+### Interface — Ajustes Visuais
+**Tags:** Frontend
+**Status:** Aberto (0%)
+- [ ] Light mode + cor do tier S+ amarelo (página inicial)
+- [ ] Passar a `#` pro lado da Tag
+- [ ] Aumentar o tamanho dos elementos muito pequenos ou que dependem de movimentação
+
+### Tier List — Melhorias
+**Tags:** Frontend
+**Status:** Aberto (0%)
+- [ ] Patch Notes selecionável em DROPDOWN (não input livre)
+- [ ] Botões de Elo funcionais (filtro real, não UI-only)
+- [ ] Badge de Tier na tela de Tierlist (S+, S, A, B, C, D)
+- [ ] Melhorar as estatísticas que são mostradas
+
+### Botões — Fixes de Navegação
+**Tags:** Frontend
+**Status:** Aberto (0%)
+- [ ] Arrumar os ícones dos botões de elo
+- [ ] Programar os filtros (tornar funcionais)
+- [ ] Fix: ao clicar em chat Metis, o botão superior direito "Metis" para de voltar à página principal
+- [ ] O botão METIS tem que ser clicável em TODAS as telas pra voltar pro menu
+- [ ] Tirar o botão "Início" — usar só o botão Metis (superior esquerdo) sempre
+
+### Barra Superior — Redesign
+**Tags:** Frontend
+**Status:** Aberto (0%)
+- [ ] Aumentar o tamanho da barra superior
+- [ ] Dar uma cor melhor
+- [ ] Botões maiores
+
+### Página de Campeões — Expansão Analítica
+**Tags:** Frontend, Análise de Dados
+**Status:** Aberto (0%)
+- [ ] Matchup com duas opções: Matchup de Lane (Lane vs Lane)
+- [ ] Status de Lane geral aos X minutos: XP, Gold, Gold Lead, CS — geral e contra personagens específicos
+- [ ] Counter: winrate vs todos os campeões (independente da lane) + valor normalizado baseado na winrate média daquele campeão no mesmo patch
+- [ ] Filtro por patch: ver todas as estatísticas por patch e selecionar entre X patches
+
+### Versão Paga — Monetização
+**Tags:** IA/RAG, Frontend
+**Status:** Aberto (0%)
+- [ ] Criar os tiers de pagamento
+- [ ] Criar os planos (free vs premium vs ?)
+- [ ] Criar o sistema de depósito / gateway de pagamento + lugar pra receber
+
+### Tela de Estatísticas de Itens
+**Tags:** Frontend, Análise de Dados
+**Status:** Aberto (0%)
+- [ ] Winrate de itens feitos em ordem (ranking de melhores itens lendários + melhores fragmentos/componentes)
+- [ ] Criar títulos com IA pra combos de itens (aka "Build") baseado pra que o item serve
+
+### Recomendações de Campeão Via Perfil e Elo
+**Tags:** IA/RAG, Frontend, Análise de Dados
+**Status:** Aberto (0%)
+**Descrição:** Recomendar campeão baseado em dados do jogador usando similaridade de cosseno para encontrar a maior winrate esperada + build ideal.
+- [ ] Modelo de similaridade: perfil do jogador → campeões com maior winrate provável
+- [ ] Output: "Pessoas com seu perfil de jogo tendem a jogar bem com X, Y, Z"
+- [ ] Output: "Pessoas do seu elo tendem a jogar com X, A, B"
+- [ ] Output: "Você deveria jogar com X com 79% de certeza"
+- [ ] Backend: endpoint + service com cálculo de similaridade de cosseno
+- [ ] Frontend: tela de recomendação com cards dos campeões sugeridos
 
 ### Data Lake Local (Estruturação)
 **Status:** Aberto / Sem dono definido

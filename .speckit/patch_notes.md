@@ -2,6 +2,95 @@
 
 *Diário de mudanças significativas no ecossistema e na stack do projeto.*
 
+## v0.8.0 — Mega Update: Header, Tier List, Player Page, Match Detail, Itens, IA, Pricing (2026-04-14)
+
+### Frontend — Infraestrutura
+- **Header compartilhado** (`Header.tsx`): extraido de 9 paginas, logo Metis clicavel em todas as telas, removido botao "Inicio"
+- **Barra superior** maior (py-4, text-sm, icones w-4), botoes maiores
+- **Light mode** melhorado: text-dim mais escuro, bordas mais visiveis
+- **Cor S+ gold** (amber-400) nos tier badges
+
+### Frontend — Tier List
+- **Tier badges** (S+/S/A/B/C/D) calculados por percentil dinamico no backend
+- **Tabela simplificada**: #, Campeao, Tier, Winrate, Partidas, KDA, DPM
+- **Dropdown de patch** (busca patches reais do banco via `GET /api/v1/stats/patches`)
+- **Range de patch** com dois selects (patch inicial + patch final)
+- **Emblemas de elo** maiores com scale por elo (zoom 4.5x, overflow hidden)
+- **Labels claros**: "Todas as Roles", "Todas as Regioes"
+
+### Frontend — Pagina de Campeao
+- **Dropdown de patch** substituiu input livre
+- **Winrate normalizado** nos matchups (coluna "vs Media")
+
+### Frontend — Player Page
+- **Busca inteligente**: input unico `Nick#Tag` na home
+- **Autocomplete** com debounce 300ms, icone do jogador, servidor, nome antigo
+- **Seletor de servidor** na busca
+- **Layout expandido** (max-w-7xl), grid 2 colunas (sidebar 380px + historico)
+- **2 resumos lado a lado**: ultimas 20 partidas + temporada completa
+- **Campeoes jogados** com filtros: temporada (S1/S2/S3-2026), patch, role
+- **Melhor campeao** da temporada destacado acima da tabela
+- **Jogou recentemente com**: aliados com >=2 jogos, W/D, icone circular, "ver todos"
+- **Nemesis**: oponentes >=2x, campeoes usados, "ver todos"
+- **Recomendacoes de campeao por lane** via similaridade de cosseno (Diana JG != Diana Mid)
+- **Nomes antigos**: historico de nicks detectado no sync, redirect por nome antigo
+- **Badge de elo** ao lado do nick, PUUID escondido
+- **Supervisao**: icone do jogador + nome (sem PUUID) na home
+
+### Frontend — Match Page
+- **Layout 85%** da tela
+- **Ordenacao por role** (TOP > JG > MID > ADC > SUP) sempre
+- **Metis Score** por role (pesos variam: ADC pesa mais dano, SUP pesa mais visao)
+- **Cores de elo** no Metis Score: gradient 2 tons (Iron stone+cinza, GM vermelho+metalico, Challenger ciano+dourado)
+- **3 tabs**: Scoreboard, Analise de Equipe, Build
+- **Tab Analise de Equipe**: donut charts SVG (kills, gold, dano, visao, CS) + barras por jogador
+- **Tab Build**: items com ordem (1o-6o + trinket), summoner spells com nome PT-BR, runas completas (primaria + secundaria com cores de arvore)
+
+### Frontend — Itens
+- **Nova pagina `/items`** com tabela de itens: icone, nome, picks, winrate
+- **Filtros**: busca por nome, role, patch, ordenacao por popularidade ou winrate
+- **Link "Itens"** no header
+
+### Frontend — Pricing
+- **Nova pagina `/pricing`** com 4 tiers: Free (Silver), Doador (Emerald), Premium (Master), Pro (Challenger)
+- **Emblemas de elo** no topo de cada card
+- **Toggle mensal/anual** (20% off)
+- **Tabela comparativa** de beneficios
+- **FAQ** com 5 perguntas
+- **Link "Planos"** no header
+
+### Backend — Novos Endpoints
+- `GET /api/v1/stats/patches` — patches disponiveis no banco
+- `GET /api/v1/stats/tierlist` — agora aceita `patches` (comma-separated) e retorna `tier`
+- `GET /api/v1/player/search` — busca por nome atual e antigo, com "formerly"
+- `GET /api/v1/player/name-history` — historico de nomes
+- `GET /api/v1/player/seasons` — temporadas disponiveis
+- `GET /api/v1/player/champion-stats` — filtros: role, patch, season
+- `GET /api/v1/player/frequent-allies` — aliados com >=N jogos juntos
+- `GET /api/v1/player/nemesis` — oponentes enfrentados >=N vezes
+- `GET /api/v1/player/recommendations` — recomendacoes por lane com reasons
+- `GET /api/v1/items/ranking` — ranking global de itens com winrate
+- `POST /api/v1/chat` — agora usa LLM real (Gemini Flash Lite ou Ollama)
+
+### Backend — Servicos Novos
+- `llm_adapter.py` — adapter multi-LLM: GeminiAdapter + OllamaAdapter + system prompt Metis
+- `player_service.py` — champion-stats, frequent-allies, nemesis
+- `recommendation_service.py` — recomendacoes por lane via similaridade de cosseno 6D
+- `item_service.py` — ranking de itens agregado de match_participants
+
+### Banco de Dados (Supabase)
+- **`player_name_history`** — historico de nomes (puuid, old_game_name, old_tag_line, changed_at)
+- **`user_riot_accounts`** — vinculo conta Riot <-> usuario Metis
+- **`subscriptions`** — plano (free/donor/premium/pro), status, pagamento, vencimento
+- **`payment_history`** — historico de pagamentos
+- **`user_badges`** — badges publicas no perfil
+- **Deteccao automatica** de mudanca de nome no sync
+
+### Dependencias
+- `google-generativeai` instalado para Gemini Flash Lite
+
+---
+
 ## v0.7.2 — process_timelines com eventos completos + fix Mobafire CI (2026-04-03)
 
 ### Scripts — process_timelines.py

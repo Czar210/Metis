@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Swords, ArrowLeft, Sparkles, Users, Home } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { championIconUrl, emblemPath, DDRAGON_VERSION } from '@/lib/ddragon'
-import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
+import { Header } from '@/components/ui/Header'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
 
@@ -41,6 +41,7 @@ type Matchup = {
   opponent: string
   games: number
   winrate: number
+  winrate_diff?: number
 }
 
 type Synergy = {
@@ -97,6 +98,7 @@ export default function ChampionPage() {
   const [role, setRole]     = useState('')
   const [server, setServer] = useState('')
   const [patch, setPatch]   = useState('')
+  const [patches, setPatches] = useState<string[]>([])
 
   const [overview,   setOverview]   = useState<Overview | null>(null)
   const [builds,     setBuilds]     = useState<BuildItem[]>([])
@@ -144,35 +146,16 @@ export default function ChampionPage() {
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
-  // ── Header ───────────────────────────────────────────────────
-  const header = (
-    <header className="flex items-center justify-between px-4 py-3 border-b border-metis-border bg-metis-surface">
-      <Link href="/" className="flex items-center gap-2">
-        <Swords className="w-5 h-5 text-metis-accent" />
-        <span className="font-bold text-metis-text tracking-tight">Metis</span>
-      </Link>
-      <div className="flex items-center gap-2">
-        <ThemeSwitcher />
-        <div className="w-px h-4 bg-metis-border mx-1" />
-        <Link href="/" className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors px-2 py-1.5">
-          <Home className="w-3.5 h-3.5" />
-          <span className="hidden sm:block">Início</span>
-        </Link>
-        <Link href="/changelog" className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors px-2 py-1.5">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span className="hidden sm:block">O que é novo</span>
-        </Link>
-        <Link href="/team" className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors px-2 py-1.5">
-          <Users className="w-3.5 h-3.5" />
-          <span className="hidden sm:block">Equipe</span>
-        </Link>
-      </div>
-    </header>
-  )
+  useEffect(() => {
+    fetch(`${API_URL}/api/v1/stats/patches`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setPatches)
+      .catch(() => {})
+  }, [])
 
   return (
     <div className="min-h-screen bg-metis-bg text-metis-text">
-      {header}
+      <Header />
 
       <main className="max-w-5xl mx-auto px-4 py-8">
 
@@ -238,13 +221,16 @@ export default function ChampionPage() {
           </select>
 
           {/* Patch */}
-          <input
-            type="text"
+          <select
             value={patch}
             onChange={e => setPatch(e.target.value)}
-            placeholder="Patch (ex: 15.1)"
-            className="bg-metis-bg border border-metis-border rounded-lg px-3 py-2 text-sm text-metis-text placeholder-metis-muted outline-none focus:border-metis-accent transition-colors w-36"
-          />
+            className="bg-metis-bg border border-metis-border rounded-lg px-3 py-2 text-sm text-metis-text outline-none focus:border-metis-accent transition-colors"
+          >
+            <option value="">Todos os patches</option>
+            {patches.map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
         </div>
 
         {/* Tabs */}
@@ -404,36 +390,46 @@ function MatchupsTab({ matchups }: { matchups: Matchup[] }) {
               <th className="px-4 py-3 text-left text-xs font-medium text-metis-text-dim uppercase tracking-wide">Oponente</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-metis-text-dim uppercase tracking-wide">Partidas</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-metis-text-dim uppercase tracking-wide">Winrate</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-metis-text-dim uppercase tracking-wide hidden sm:table-cell">vs Media</th>
             </tr>
           </thead>
           <tbody>
-            {matchups.map((m, i) => (
-              <tr
-                key={m.opponent}
-                className={`border-b border-metis-border/50 hover:bg-metis-bg/40 transition-colors ${
-                  i % 2 === 0 ? '' : 'bg-metis-bg/20'
-                }`}
-              >
-                <td className="px-4 py-3">
-                  <Link href={`/champions/${m.opponent}`} className="flex items-center gap-3 group">
-                    <div className="relative w-8 h-8 rounded-md overflow-hidden border border-metis-border flex-shrink-0">
-                      <Image
-                        src={championIconUrl(m.opponent, DDRAGON_VERSION)}
-                        alt={m.opponent}
-                        fill
-                        className="object-cover"
-                        unoptimized
-                      />
-                    </div>
-                    <span className="font-medium text-metis-text group-hover:text-metis-accent transition-colors">
-                      {m.opponent}
-                    </span>
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-metis-text-dim">{m.games}</td>
-                <td className="px-4 py-3"><WinrateBadge value={m.winrate} /></td>
-              </tr>
-            ))}
+            {matchups.map((m, i) => {
+              const diff = m.winrate_diff ?? 0
+              const diffColor = diff > 2 ? 'text-green-400' : diff < -2 ? 'text-red-400' : 'text-metis-text-dim'
+              const diffSign = diff > 0 ? '+' : ''
+
+              return (
+                <tr
+                  key={m.opponent}
+                  className={`border-b border-metis-border/50 hover:bg-metis-bg/40 transition-colors ${
+                    i % 2 === 0 ? '' : 'bg-metis-bg/20'
+                  }`}
+                >
+                  <td className="px-4 py-3">
+                    <Link href={`/champions/${m.opponent}`} className="flex items-center gap-3 group">
+                      <div className="relative w-8 h-8 rounded-md overflow-hidden border border-metis-border flex-shrink-0">
+                        <Image
+                          src={championIconUrl(m.opponent, DDRAGON_VERSION)}
+                          alt={m.opponent}
+                          fill
+                          className="object-cover"
+                          unoptimized
+                        />
+                      </div>
+                      <span className="font-medium text-metis-text group-hover:text-metis-accent transition-colors">
+                        {m.opponent}
+                      </span>
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-metis-text-dim">{m.games}</td>
+                  <td className="px-4 py-3"><WinrateBadge value={m.winrate} /></td>
+                  <td className={`px-4 py-3 font-medium hidden sm:table-cell ${diffColor}`}>
+                    {diffSign}{diff.toFixed(1)}%
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

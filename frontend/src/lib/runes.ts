@@ -30,3 +30,21 @@ export function runeIconUrl(keystoneId: number, version: string): string | null 
   if (!path) return null
   return `https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/${path}.png`
 }
+
+// Arvores de runas (style IDs)
+export const RUNE_TREES: Record<number, { name: string; color: string }> = {
+  8000: { name: 'Precisao',    color: 'text-yellow-400' },
+  8100: { name: 'Dominacao',   color: 'text-red-400' },
+  8200: { name: 'Feiticaria',  color: 'text-blue-400' },
+  8300: { name: 'Inspiracao',  color: 'text-cyan-400' },
+  8400: { name: 'Determinacao', color: 'text-green-400' },
+}
+
+// Gera URL pra qualquer runa/perk (nao so keystones)
+export function perkIconUrl(perkId: number): string {
+  // Keystones tem path especifico
+  const kp = KEYSTONE_PATHS[perkId]
+  if (kp) return `https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/${kp}.png`
+  // Fallback generico via community dragon (funciona pra todas as runas)
+  return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/perk-images/styles/runesicon.png`
+}

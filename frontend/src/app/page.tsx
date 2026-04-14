@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Swords, Search, Star, LogOut, MessageSquare, BarChart2, Sparkles, Users, TrendingUp, ChevronRight } from 'lucide-react'
+import { Search, Star, TrendingUp, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
+import { Header } from '@/components/ui/Header'
 import { championIconUrl, DDRAGON_VERSION } from '@/lib/ddragon'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
@@ -14,6 +14,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
 type WatchedPlayer = {
   puuid: string
   label: string | null
+  players?: { game_name: string; tag_line: string; profile_icon_id: number | null } | null
 }
 
 type TopChampion = {
@@ -28,7 +29,7 @@ type TopChampion = {
 type Tier = { label: string; color: string; bg: string }
 
 function getTier(winrate: number): Tier {
-  if (winrate >= 54) return { label: 'S+', color: 'text-yellow-300', bg: 'bg-yellow-400/10 border-yellow-400/30' }
+  if (winrate >= 54) return { label: 'S+', color: 'text-amber-400',  bg: 'bg-amber-400/10 border-amber-400/30' }
   if (winrate >= 52) return { label: 'S',  color: 'text-orange-300', bg: 'bg-orange-400/10 border-orange-400/30' }
   if (winrate >= 50) return { label: 'A',  color: 'text-green-400',  bg: 'bg-green-400/10  border-green-400/30'  }
   if (winrate >= 48) return { label: 'B',  color: 'text-blue-400',   bg: 'bg-blue-400/10   border-blue-400/30'   }
@@ -39,8 +40,10 @@ export default function HomePage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [gameName, setGameName] = useState('')
-  const [tagLine, setTagLine] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [searchServer, setSearchServer] = useState('')
+  const [suggestions, setSuggestions] = useState<{ puuid: string; game_name: string; tag_line: string; server: string; profile_icon_id: number | null; formerly?: string }[]>([])
+  const [inputFocused, setInputFocused] = useState(false)
   const [user, setUser] = useState<{ email?: string; id: string } | null>(null)
   const [watched, setWatched] = useState<WatchedPlayer[]>([])
   const [loadingWatched, setLoadingWatched] = useState(false)
@@ -60,9 +63,15 @@ export default function HomePage() {
     setLoadingWatched(true)
     const { data } = await supabase
       .from('watched_players')
-      .select('puuid, label')
+      .select('puuid, label, players(game_name, tag_line, profile_icon_id)')
       .order('created_at', { ascending: false })
-    setWatched((data as WatchedPlayer[]) ?? [])
+    // Supabase retorna players como objeto (FK unique) ou null
+    const mapped = (data ?? []).map((d: Record<string, unknown>) => ({
+      puuid: d.puuid as string,
+      label: d.label as string | null,
+      players: d.players as WatchedPlayer['players'] ?? null,
+    }))
+    setWatched(mapped)
     setLoadingWatched(false)
   }
 
@@ -77,88 +86,37 @@ export default function HomePage() {
     }
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    setUser(null)
-    setWatched([])
-  }
+  // Autocomplete debounce
+  useEffect(() => {
+    const q = searchInput.trim()
+    if (q.length < 2) { setSuggestions([]); return }
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ q })
+        if (searchServer) params.set('server', searchServer)
+        const res = await fetch(`${API_URL}/api/v1/player/search?${params}`)
+        if (res.ok) setSuggestions(await res.json())
+      } catch { /* silencioso */ }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchInput, searchServer])
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
-    const name = gameName.trim()
-    const tag = tagLine.trim().replace(/^#/, '')
-    if (!name) return
-    const query = tag ? `${name}#${tag}` : name
-    router.push(`/players/${encodeURIComponent(query)}`)
+    const raw = searchInput.trim()
+    if (!raw) return
+    setSuggestions([])
+    router.push(`/players/${encodeURIComponent(raw)}`)
+  }
+
+  function handleSelectSuggestion(s: { game_name: string; tag_line: string }) {
+    setSuggestions([])
+    router.push(`/players/${encodeURIComponent(`${s.game_name}#${s.tag_line}`)}`)
   }
 
   return (
     <div className="min-h-screen bg-metis-bg text-metis-text">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-metis-border bg-metis-surface">
-        <div className="flex items-center gap-2">
-          <Swords className="w-5 h-5 text-metis-accent" />
-          <span className="font-bold text-metis-text tracking-tight">Metis</span>
-          <span className="text-[10px] text-metis-text-dim border border-metis-border rounded px-1 py-0.5 ml-1 hidden sm:inline">
-            Alpha v0.6.4
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Sempre visíveis */}
-          <ThemeSwitcher />
-          <div className="w-px h-4 bg-metis-border mx-1" />
-          <Link
-            href="/champions"
-            className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors px-2 py-1.5"
-          >
-            <BarChart2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:block">Tier List</span>
-          </Link>
-          <Link
-            href="/changelog"
-            className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors px-2 py-1.5"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden sm:block">O que é novo</span>
-          </Link>
-          <Link
-            href="/team"
-            className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors px-2 py-1.5"
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span className="hidden sm:block">Equipe</span>
-          </Link>
-          <div className="w-px h-4 bg-metis-border mx-1" />
-
-          {/* Auth */}
-          {user ? (
-            <>
-              <span className="text-xs text-metis-text-dim hidden sm:block">{user.email}</span>
-              <Link
-                href="/chat"
-                className="flex items-center gap-1.5 text-xs bg-metis-accent hover:bg-metis-accent-hover text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                Chat Metis
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:block">Sair</span>
-              </button>
-            </>
-          ) : (
-            <Link
-              href="/auth"
-              className="text-xs bg-metis-accent hover:bg-metis-accent-hover text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
-            >
-              Entrar
-            </Link>
-          )}
-        </div>
-      </header>
+      <Header />
 
       <main className="max-w-3xl mx-auto px-4 py-10">
         {/* Hero */}
@@ -172,38 +130,83 @@ export default function HomePage() {
         {/* Search */}
         <form onSubmit={handleSearch} className="mb-10">
           <div className="flex gap-2 items-stretch">
-            {/* Campo Nome */}
-            <div className="flex-1 flex items-center bg-metis-surface border border-metis-border rounded-lg px-4 focus-within:border-metis-accent transition-colors">
-              <input
-                type="text"
-                value={gameName}
-                onChange={e => setGameName(e.target.value)}
-                placeholder="Nome do invocador"
-                className="flex-1 bg-transparent py-2.5 text-sm text-metis-text placeholder-metis-muted outline-none"
-              />
-              <span className="text-metis-text-dim font-bold text-sm select-none">#</span>
+            <div className="relative flex-1">
+              <div className="flex items-center bg-metis-surface border border-metis-border rounded-lg px-4 focus-within:border-metis-accent transition-colors">
+                <Search className="w-4 h-4 text-metis-text-dim flex-shrink-0 mr-2" />
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setTimeout(() => setInputFocused(false), 250)}
+                  placeholder="Nome#Tag  ex: Zaras#0210"
+                  className="flex-1 bg-transparent py-2.5 text-sm text-metis-text placeholder-metis-muted outline-none"
+                />
+              </div>
+
+              {/* Autocomplete dropdown */}
+              {inputFocused && suggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-metis-surface border border-metis-border rounded-lg overflow-hidden shadow-xl z-50">
+                  {suggestions.map(s => (
+                    <button
+                      key={s.puuid}
+                      type="button"
+                      onMouseDown={() => handleSelectSuggestion(s)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-metis-bg/50 transition-colors text-left"
+                    >
+                      {s.profile_icon_id ? (
+                        <Image
+                          src={`https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/profileicon/${s.profile_icon_id}.png`}
+                          alt="" width={28} height={28} className="rounded border border-metis-border flex-shrink-0" unoptimized
+                        />
+                      ) : (
+                        <div className="w-7 h-7 rounded bg-metis-bg border border-metis-border flex items-center justify-center text-[10px] text-metis-text-dim flex-shrink-0">
+                          {s.game_name.charAt(0)}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div>
+                          <span className="text-sm font-medium text-metis-text">{s.game_name}</span>
+                          <span className="text-metis-text-dim">#{s.tag_line}</span>
+                        </div>
+                        {s.formerly && (
+                          <p className="text-[10px] text-metis-muted">antes: {s.formerly}</p>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-metis-text-dim border border-metis-border rounded px-1.5 py-0.5 uppercase">{s.server}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            {/* Campo Tag */}
-            <div className="w-28 flex items-center bg-metis-surface border border-metis-border rounded-lg px-3 focus-within:border-metis-accent transition-colors">
-              <input
-                type="text"
-                value={tagLine}
-                onChange={e => setTagLine(e.target.value.replace(/^#/, ''))}
-                placeholder="TAG"
-                maxLength={5}
-                className="w-full bg-transparent py-2.5 text-sm text-metis-text placeholder-metis-muted outline-none uppercase"
-              />
-            </div>
+
+            {/* Servidor */}
+            <select
+              value={searchServer}
+              onChange={e => setSearchServer(e.target.value)}
+              className="bg-metis-surface border border-metis-border rounded-lg px-3 py-2.5 text-sm text-metis-text outline-none focus:border-metis-accent transition-colors"
+            >
+              <option value="">Servidor</option>
+              <option value="BR1">BR</option>
+              <option value="NA1">NA</option>
+              <option value="EUW1">EUW</option>
+              <option value="KR">KR</option>
+              <option value="EUNE1">EUNE</option>
+              <option value="JP1">JP</option>
+              <option value="LA1">LAN</option>
+              <option value="LA2">LAS</option>
+              <option value="OC1">OCE</option>
+            </select>
+
             <button
               type="submit"
-              className="flex items-center gap-2 bg-metis-accent hover:bg-metis-accent-hover text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex-shrink-0"
+              className="flex items-center gap-2 bg-metis-accent hover:bg-metis-accent-hover text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors flex-shrink-0"
             >
-              <Search className="w-4 h-4" />
               Buscar
             </button>
           </div>
           <p className="text-[11px] text-metis-text-dim mt-1.5 ml-1">
-            Ex: <span className="text-metis-text font-medium">PUCZaras</span> # <span className="text-metis-text font-medium">0210</span> — ou cole o PUUID diretamente no campo nome
+            Digite e veja sugestoes, ou escreva <span className="text-metis-text font-medium">Zaras#0210</span> direto
           </p>
         </form>
 
@@ -315,26 +318,42 @@ export default function HomePage() {
               </p>
             ) : (
               <ul className="flex flex-col gap-2">
-                {watched.map(p => (
-                  <li key={p.puuid}>
-                    <Link
-                      href={`/players/${encodeURIComponent(p.puuid)}`}
-                      className="flex items-center justify-between bg-metis-surface border border-metis-border rounded-lg px-4 py-3 hover:border-metis-accent transition-colors group"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-metis-text group-hover:text-metis-accent transition-colors">
-                          {p.label ?? p.puuid}
-                        </p>
-                        {p.label && (
-                          <p className="text-xs text-metis-text-dim font-mono mt-0.5 truncate max-w-xs">
-                            {p.puuid}
-                          </p>
+                {watched.map(p => {
+                  const pi = p.players
+                  const displayName = pi ? `${pi.game_name}#${pi.tag_line}` : p.label ?? p.puuid.slice(0, 12)
+                  const iconUrl = pi?.profile_icon_id
+                    ? `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/profileicon/${pi.profile_icon_id}.png`
+                    : null
+                  const href = pi
+                    ? `/players/${encodeURIComponent(`${pi.game_name}#${pi.tag_line}`)}`
+                    : `/players/${encodeURIComponent(p.puuid)}`
+
+                  return (
+                    <li key={p.puuid}>
+                      <Link
+                        href={href}
+                        className="flex items-center gap-3 bg-metis-surface border border-metis-border rounded-lg px-4 py-3 hover:border-metis-accent transition-colors group"
+                      >
+                        {iconUrl ? (
+                          <Image src={iconUrl} alt="" width={36} height={36} className="rounded-lg border border-metis-border flex-shrink-0" unoptimized />
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-metis-bg border border-metis-border flex items-center justify-center text-xs font-bold text-metis-text-dim flex-shrink-0">
+                            {displayName.charAt(0)}
+                          </div>
                         )}
-                      </div>
-                      <Star className="w-4 h-4 text-metis-accent flex-shrink-0" />
-                    </Link>
-                  </li>
-                ))}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-metis-text group-hover:text-metis-accent transition-colors truncate">
+                            {displayName}
+                          </p>
+                          {p.label && (
+                            <p className="text-xs text-metis-accent mt-0.5">{p.label}</p>
+                          )}
+                        </div>
+                        <Star className="w-4 h-4 text-metis-accent flex-shrink-0" />
+                      </Link>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </section>

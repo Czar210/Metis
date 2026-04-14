@@ -355,6 +355,29 @@ def atualizar_historico(
     except Exception:
         profile_icon_id = None
 
+    # ── Detectar mudanca de nome ─────────────────────────────
+    try:
+        existing = (
+            supabase.table("players")
+            .select("game_name, tag_line")
+            .eq("puuid", puuid)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            old = existing.data[0]
+            old_name = old.get("game_name", "")
+            old_tag = old.get("tag_line", "")
+            if old_name and (old_name != game_name or old_tag != tag_line):
+                supabase.table("player_name_history").insert({
+                    "puuid": puuid,
+                    "old_game_name": old_name,
+                    "old_tag_line": old_tag,
+                }).execute()
+                logger.info(f"[nome] {old_name}#{old_tag} -> {game_name}#{tag_line}")
+    except Exception as e:
+        logger.warning(f"[nome] Erro ao verificar historico de nomes: {e}")
+
     # Atualiza/cria o jogador com server, ícone e marca last_synced_at
     supabase.table("players").upsert({
         "puuid": puuid,

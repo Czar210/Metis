@@ -17,11 +17,11 @@
 
 /* ── Modo claro ─────────────────────────────────────────────── */
 [data-mode="light"] {
-  --metis-bg:           248 250 252;
+  --metis-bg:           245 247 250;
   --metis-surface:      255 255 255;
-  --metis-border:       226 232 240;
+  --metis-border:       203 213 225;
   --metis-text:         15 23 42;
-  --metis-text-dim:     100 116 139;
+  --metis-text-dim:     71 85 105;
   --metis-muted:        148 163 184;
   --metis-accent:       37 99 235;
   --metis-accent-hover: 29 78 216;
@@ -69,6 +69,14 @@
 [data-mode="light"][data-color="gold"] {
   --metis-accent:       161 127 23;
   --metis-accent-hover: 133 104 16;
+}
+
+/* ── Cor de tier S+ (gold) ─── usada em tier badges ────────── */
+:root {
+  --metis-tier-splus: 212 175 55;
+}
+[data-mode="light"] {
+  --metis-tier-splus: 161 127 23;
 }
 
 html,

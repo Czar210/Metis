@@ -1,12 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { Swords, Sparkles, ChevronRight } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
+import { Header } from '@/components/ui/Header'
 
 type Entry = {
   version: string
   date: string
-  tag: 'novo' | 'melhoria' | 'fix'
+  tag: 'novo' | 'melhoria' | 'fix' | 'big'
   text: string
 }
 
@@ -20,10 +21,35 @@ type Release = {
 
 const RELEASES: Release[] = [
   {
+    version: 'Alpha v0.8.0',
+    date: '04/2026',
+    label: 'Big Update',
+    current: true,
+    entries: [
+      { version: '', date: '', tag: 'big',      text: 'Maior atualização desde o lançamento — nova interface, IA integrada, recomendações e monetização.' },
+      { version: '', date: '', tag: 'novo',      text: 'Busca inteligente com autocomplete — digite o nome e veja sugestões instantâneas de jogadores já cadastrados.' },
+      { version: '', date: '', tag: 'novo',      text: 'Página de Itens — ranking de todos os itens por winrate e popularidade, com filtros por role e patch.' },
+      { version: '', date: '', tag: 'novo',      text: 'Recomendações de campeão por lane — a Metis analisa seu perfil e sugere picks por posição (Diana JG ≠ Diana Mid).' },
+      { version: '', date: '', tag: 'novo',      text: 'Chat com IA Metis funcionando — conectado ao Gemini Flash Lite para respostas táticas reais.' },
+      { version: '', date: '', tag: 'novo',      text: 'Metis Score nas partidas — nota de performance por role com cores de elo (Iron a Challenger).' },
+      { version: '', date: '', tag: 'novo',      text: 'Análise de equipe na partida — gráficos comparando os times em kills, ouro, dano, visão e CS.' },
+      { version: '', date: '', tag: 'novo',      text: 'Tab de Build na partida — itens finais, feitiços e runas completas (primária + secundária) de cada jogador.' },
+      { version: '', date: '', tag: 'novo',      text: 'Jogou com / Nemesis — veja quem jogou ao seu lado ou contra você com mais frequência.' },
+      { version: '', date: '', tag: 'novo',      text: 'Histórico de nomes — se um jogador mudou de nick, o sistema detecta e mostra os nomes anteriores.' },
+      { version: '', date: '', tag: 'novo',      text: 'Página de Planos — Free, Doador, Premium e Pro com emblemas de elo (Silver a Challenger).' },
+      { version: '', date: '', tag: 'melhoria',  text: 'Tier List com badges de tier (S+ a D), dropdown de patch e emblemas de elo maiores nos filtros.' },
+      { version: '', date: '', tag: 'melhoria',  text: 'Perfil do jogador expandido — layout em 2 colunas, resumo da temporada, filtros por season/patch/role.' },
+      { version: '', date: '', tag: 'melhoria',  text: 'Matchups agora mostram winrate normalizado (vs Média) para identificar counters reais.' },
+      { version: '', date: '', tag: 'melhoria',  text: 'Header unificado em todas as páginas — logo Metis sempre volta ao menu, navegação consistente.' },
+      { version: '', date: '', tag: 'melhoria',  text: 'Scoreboard da partida ordenado por role (Top → JG → Mid → ADC → SUP).' },
+      { version: '', date: '', tag: 'melhoria',  text: 'Light mode refinado — melhor contraste e legibilidade.' },
+    ],
+  },
+  {
     version: 'Alpha v0.7.1',
     date: '04/2026',
-    label: 'Atual',
-    current: true,
+    label: '',
+    current: false,
     entries: [
       { version: '', date: '', tag: 'fix', text: 'Histórico de partidas agora sempre aparece do mais recente ao mais antigo.' },
       { version: '', date: '', tag: 'fix', text: 'Data da partida mostra quando o jogo foi jogado, não quando foi importado para o banco.' },
@@ -168,34 +194,20 @@ const TAG_STYLES: Record<Entry['tag'], string> = {
   novo: 'bg-metis-accent/15 text-metis-accent border border-metis-accent/30',
   melhoria: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
   fix: 'bg-red-500/10 text-red-400 border border-red-500/20',
+  big: 'bg-purple-500/15 text-purple-400 border border-purple-500/30',
 }
 
 const TAG_LABELS: Record<Entry['tag'], string> = {
   novo: 'novo',
   melhoria: 'melhoria',
   fix: 'fix',
+  big: 'big update',
 }
 
 export default function ChangelogPage() {
   return (
     <div className="min-h-screen bg-metis-bg text-metis-text">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-metis-border bg-metis-surface">
-        <Link href="/" className="flex items-center gap-2">
-          <Swords className="w-5 h-5 text-metis-accent" />
-          <span className="font-bold text-metis-text tracking-tight">Metis</span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-metis-text-dim">O que é novo</span>
-          <Link
-            href="/team"
-            className="flex items-center gap-1.5 text-xs text-metis-text-dim hover:text-metis-text transition-colors"
-          >
-            Equipe
-            <ChevronRight className="w-3 h-3" />
-          </Link>
-        </div>
-      </header>
+      <Header />
 
       <main className="max-w-2xl mx-auto px-4 py-12">
         {/* Hero */}

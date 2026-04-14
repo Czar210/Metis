@@ -13,6 +13,8 @@ import os
 from supabase import create_client
 
 from backend.services.riot_service import atualizar_historico, SyncCooldownError
+from backend.services.player_service import buscar_champion_stats_jogador, buscar_frequent_allies, buscar_nemesis, SEASONS
+from backend.services.recommendation_service import buscar_recomendacoes
 
 
 def _get_supabase():
@@ -188,6 +190,142 @@ def player_history(
             "has_more": len(result.data or []) == limit,
         }
 
+    except RuntimeError as err:
+        raise HTTPException(status_code=500, detail=str(err))
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+
+
+@router.get("/seasons")
+def seasons():
+    """Retorna as temporadas disponíveis."""
+    return list(SEASONS.keys())
+
+
+@router.get("/search")
+def search_players(
+    q: str = Query(..., min_length=2, description="Busca por nome (min 2 chars)"),
+    server: str | None = Query(default=None, description="Filtro de servidor"),
+):
+    """Busca jogadores por nome atual ou antigo. Retorna max 8 resultados."""
+    try:
+        db = _get_supabase()
+
+        # Busca por nome atual
+        query = db.table("players").select("puuid, game_name, tag_line, server, profile_icon_id").ilike("game_name", f"%{q}%").limit(8)
+        if server:
+            query = query.eq("server", server.upper())
+        current = query.execute().data or []
+
+        # Se poucos resultados, buscar por nomes antigos tambem
+        if len(current) < 8:
+            old_query = (
+                db.table("player_name_history")
+                .select("puuid, old_game_name, old_tag_line, players(game_name, tag_line, server, profile_icon_id)")
+                .ilike("old_game_name", f"%{q}%")
+                .limit(8 - len(current))
+            )
+            old_results = old_query.execute().data or []
+
+            # Converter para formato unificado com flag "formerly_known_as"
+            seen_puuids = {p["puuid"] for p in current}
+            for old in old_results:
+                if old["puuid"] in seen_puuids:
+                    continue
+                pi = old.get("players") or {}
+                current.append({
+                    "puuid": old["puuid"],
+                    "game_name": pi.get("game_name", "???"),
+                    "tag_line": pi.get("tag_line", ""),
+                    "server": pi.get("server"),
+                    "profile_icon_id": pi.get("profile_icon_id"),
+                    "formerly": f"{old['old_game_name']}#{old['old_tag_line']}",
+                })
+                seen_puuids.add(old["puuid"])
+
+        return current
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+
+
+@router.get("/name-history")
+def name_history(
+    puuid: str = Query(..., description="PUUID do jogador"),
+):
+    """Retorna historico de nomes de um jogador."""
+    try:
+        db = _get_supabase()
+        result = (
+            db.table("player_name_history")
+            .select("old_game_name, old_tag_line, changed_at")
+            .eq("puuid", puuid)
+            .order("changed_at", desc=True)
+            .execute()
+        )
+        return result.data or []
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+
+
+@router.get("/champion-stats")
+def champion_stats(
+    puuid: str = Query(..., description="PUUID do jogador"),
+    queue_id: int | None = Query(default=None, description="Filtro de fila (420=SoloQ, 440=Flex)"),
+    role: str | None = Query(default=None, description="Filtro de role (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY)"),
+    patch: str | None = Query(default=None, description="Filtro de patch (ex: 16.7)"),
+    season: str | None = Query(default=None, description="Filtro de temporada (ex: S1-2026)"),
+):
+    """Stats do jogador por campeão: winrate, KDA, CS/m, jogos. Filtros: fila, role, patch, temporada."""
+    try:
+        db = _get_supabase()
+        return buscar_champion_stats_jogador(db, puuid, queue_id=queue_id, role=role, patch=patch, season=season)
+    except RuntimeError as err:
+        raise HTTPException(status_code=500, detail=str(err))
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+
+
+@router.get("/frequent-allies")
+def frequent_allies(
+    puuid: str = Query(..., description="PUUID do jogador"),
+    min_games: int = Query(default=3, ge=2, description="Mínimo de jogos juntos"),
+):
+    """Jogadores que apareceram no mesmo time em ≥min_games partidas recentes."""
+    try:
+        db = _get_supabase()
+        return buscar_frequent_allies(db, puuid, min_games=min_games)
+    except RuntimeError as err:
+        raise HTTPException(status_code=500, detail=str(err))
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+
+
+@router.get("/nemesis")
+def nemesis(
+    puuid: str = Query(..., description="PUUID do jogador"),
+    min_games: int = Query(default=2, ge=2, description="Mínimo de vezes enfrentados"),
+):
+    """Oponentes enfrentados ≥min_games vezes (mesmo match, time oposto)."""
+    try:
+        db = _get_supabase()
+        return buscar_nemesis(db, puuid, min_games=min_games)
+    except RuntimeError as err:
+        raise HTTPException(status_code=500, detail=str(err))
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+
+
+@router.get("/recommendations")
+def recommendations(
+    puuid: str = Query(..., description="PUUID do jogador"),
+    role: str | None = Query(default=None, description="Filtro de role (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY)"),
+    top_n: int = Query(default=5, ge=1, le=20, description="Numero de recomendacoes"),
+    reasons: bool = Query(default=False, description="Incluir explicacoes do match"),
+):
+    """Recomenda campeoes por LANE baseado no perfil do jogador. Diana JG != Diana Mid."""
+    try:
+        db = _get_supabase()
+        return buscar_recomendacoes(db, puuid, role=role, top_n=top_n, include_reasons=reasons)
     except RuntimeError as err:
         raise HTTPException(status_code=500, detail=str(err))
     except Exception as err:

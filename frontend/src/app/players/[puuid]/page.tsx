@@ -3,12 +3,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Swords, Star, StarOff, ArrowLeft, ChevronDown, ShieldCheck, RefreshCw, UserX } from 'lucide-react'
+import { Star, StarOff, ChevronDown, ShieldCheck, RefreshCw, UserX } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { MatchCard } from '@/components/matches/MatchCard'
 import type { MatchData } from '@/components/matches/MatchCard'
-import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
+import { Header } from '@/components/ui/Header'
 import { championIconUrl, DDRAGON_VERSION } from '@/lib/ddragon'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
@@ -20,6 +20,7 @@ type PlayerInfo = {
   tag_line: string
   server: string | null
   profile_icon_id: number | null
+  tier: string | null
 }
 
 export default function PlayerPage() {
@@ -52,6 +53,27 @@ export default function PlayerPage() {
   const [matchError,     setMatchError]    = useState<string | null>(null)
   const [hasMore,        setHasMore]       = useState(false)
   const [offset,         setOffset]        = useState(0)
+
+  // ── Dados extras do jogador ─────────────────────────────────────────────
+  type ChampStat = { champion: string; games: number; wins: number; winrate: number; avg_kills: number; avg_deaths: number; avg_assists: number; avg_cs_per_minute: number }
+  type AllyData = { puuid: string; game_name: string; tag_line: string; server: string | null; games_together: number; wins_together: number; winrate: number }
+  type NemesisData = { puuid: string; game_name: string; tag_line: string; server: string | null; times_faced: number; wins_against: number; winrate_against: number; champions_used: string[] }
+
+  const [champStats, setChampStats] = useState<ChampStat[]>([])
+  const [showAllChamps, setShowAllChamps] = useState(false)
+  const [champRole, setChampRole] = useState('')
+  const [champSeason, setChampSeason] = useState('S1-2026')
+  const [champPatch, setChampPatch] = useState('')
+  const [seasons, setSeasons] = useState<string[]>([])
+  const [patchList, setPatchList] = useState<string[]>([])
+  const [allies, setAllies] = useState<AllyData[]>([])
+  const [nemeses, setNemeses] = useState<NemesisData[]>([])
+  const [showAllAllies, setShowAllAllies] = useState(false)
+  const [showAllNemeses, setShowAllNemeses] = useState(false)
+  const [nameHistory, setNameHistory] = useState<{ old_game_name: string; old_tag_line: string; changed_at: string }[]>([])
+
+  type Recommendation = { champion: string; role: string; role_label: string; similarity: number; confidence: number; winrate: number; games_in_db: number; times_played: number; reasons?: string[] }
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([])
 
   // ── Cooldown: carrega do localStorage e inicia countdown ──────────────────
   const cooldownKey = `sync_cooldown_${resolvedPuuid ?? rawParam}`
@@ -87,18 +109,32 @@ export default function PlayerPage() {
 
     supabase
       .from('players')
-      .select('puuid, game_name, tag_line, server, profile_icon_id')
+      .select('puuid, game_name, tag_line, server, profile_icon_id, tier')
       .ilike('game_name', riotName.trim())
       .ilike('tag_line',  riotTag.trim())
       .maybeSingle()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (data) {
           setResolvedPuuid(data.puuid)
-          setPlayerInfo({ game_name: data.game_name, tag_line: data.tag_line, server: data.server, profile_icon_id: data.profile_icon_id })
+          setPlayerInfo({ game_name: data.game_name, tag_line: data.tag_line, server: data.server, profile_icon_id: data.profile_icon_id, tier: data.tier ?? null })
         } else {
-          // Jogador não está no nosso banco ainda
-          setNotInDb(true)
-          setLoadingMatches(false)
+          // Nao achou pelo nome atual — tentar nome antigo
+          const { data: oldData } = await supabase
+            .from('player_name_history')
+            .select('puuid, players(game_name, tag_line, server, profile_icon_id, tier)')
+            .ilike('old_game_name', riotName.trim())
+            .ilike('old_tag_line', riotTag.trim())
+            .limit(1)
+            .maybeSingle()
+
+          if (oldData?.players) {
+            const p = oldData.players as unknown as Record<string, unknown>
+            // Redirecionar pro nome novo
+            router.replace(`/players/${encodeURIComponent(`${p.game_name}#${p.tag_line}`)}`)
+          } else {
+            setNotInDb(true)
+            setLoadingMatches(false)
+          }
         }
       })
   }, [])
@@ -108,7 +144,7 @@ export default function PlayerPage() {
     if (!resolvedPuuid || playerInfo) return
     supabase
       .from('players')
-      .select('game_name, tag_line, server, profile_icon_id')
+      .select('game_name, tag_line, server, profile_icon_id, tier')
       .eq('puuid', resolvedPuuid)
       .maybeSingle()
       .then(({ data }) => {
@@ -133,18 +169,43 @@ export default function PlayerPage() {
     })
   }, [resolvedPuuid])
 
-  // ── 4. Histórico do banco (persistente) ────────────────────────────────────
+  // ── 4. Histórico do banco (persistente) + dados extras ──────────────────────
   useEffect(() => {
     if (!resolvedPuuid) return
     loadHistory(resolvedPuuid, 0)
+
+    const p = encodeURIComponent(resolvedPuuid)
+    fetch(`${API_URL}/api/v1/player/frequent-allies?puuid=${p}&min_games=2`)
+      .then(r => r.ok ? r.json() : []).then(setAllies).catch(() => {})
+    fetch(`${API_URL}/api/v1/player/nemesis?puuid=${p}&min_games=2`)
+      .then(r => r.ok ? r.json() : []).then(setNemeses).catch(() => {})
+    fetch(`${API_URL}/api/v1/player/name-history?puuid=${p}`)
+      .then(r => r.ok ? r.json() : []).then(setNameHistory).catch(() => {})
+    fetch(`${API_URL}/api/v1/player/recommendations?puuid=${p}&top_n=6&reasons=true`)
+      .then(r => r.ok ? r.json() : []).then(setRecommendations).catch(() => {})
+    fetch(`${API_URL}/api/v1/player/seasons`)
+      .then(r => r.ok ? r.json() : []).then(setSeasons).catch(() => {})
+    fetch(`${API_URL}/api/v1/stats/patches`)
+      .then(r => r.ok ? r.json() : []).then(setPatchList).catch(() => {})
   }, [resolvedPuuid])
+
+  // ── 4b. Champion stats com filtros ─────────────────────────────────────────
+  useEffect(() => {
+    if (!resolvedPuuid) return
+    const params = new URLSearchParams({ puuid: resolvedPuuid })
+    if (champRole) params.set('role', champRole)
+    if (champPatch) params.set('patch', champPatch)
+    else if (champSeason) params.set('season', champSeason)
+    fetch(`${API_URL}/api/v1/player/champion-stats?${params}`)
+      .then(r => r.ok ? r.json() : []).then(setChampStats).catch(() => {})
+  }, [resolvedPuuid, champRole, champPatch, champSeason])
 
   async function loadHistory(puuid: string, startOffset: number) {
     setLoadingMatches(true)
     setMatchError(null)
     try {
       const res = await fetch(
-        `${API_URL}/api/v1/player/history?puuid=${encodeURIComponent(puuid)}&limit=15&offset=${startOffset}`
+        `${API_URL}/api/v1/player/history?puuid=${encodeURIComponent(puuid)}&limit=20&offset=${startOffset}`
       )
       if (!res.ok) throw new Error(`Erro ${res.status}`)
       const data = await res.json()
@@ -277,6 +338,28 @@ export default function PlayerPage() {
     }
   }, [matches])
 
+  // ── Resumo da temporada (baseado em champStats = todos os dados) ───────────
+  const seasonSummary = useMemo(() => {
+    if (!champStats.length) return null
+    const totalGames = champStats.reduce((acc, c) => acc + c.games, 0)
+    const wins = champStats.reduce((acc, c) => acc + c.wins, 0)
+    const avgKda = champStats.reduce((acc, c) => {
+      const kda = c.avg_deaths > 0 ? (c.avg_kills + c.avg_assists) / c.avg_deaths : (c.avg_kills + c.avg_assists)
+      return acc + kda * c.games
+    }, 0) / totalGames
+    const top = champStats[0]
+    return {
+      totalGames,
+      wins,
+      winrate: Math.round((wins / totalGames) * 100),
+      avgKda: avgKda.toFixed(2),
+      uniqueChamps: champStats.length,
+      topChampName: top.champion,
+      topChampGames: top.games,
+      topChampWr: Math.round(top.winrate),
+    }
+  }, [champStats])
+
   // ── Display helpers ────────────────────────────────────────────────────────
   const displayName = playerInfo
     ? `${playerInfo.game_name}#${playerInfo.tag_line}`
@@ -289,23 +372,9 @@ export default function PlayerPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-metis-bg text-metis-text">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-metis-border bg-metis-surface">
-        <div className="flex items-center gap-2">
-          <Swords className="w-5 h-5 text-metis-accent" />
-          <span className="font-bold text-metis-text tracking-tight">Metis</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <ThemeSwitcher />
-          <div className="w-px h-4 bg-metis-border" />
-          <Link href="/" className="text-xs text-metis-text-dim hover:text-metis-text transition-colors flex items-center gap-1">
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Início
-          </Link>
-        </div>
-      </header>
+      <Header />
 
-      <main className="max-w-2xl mx-auto px-4 py-10">
+      <main className="max-w-7xl mx-auto px-4 py-10">
 
         {/* ── Card do jogador ── */}
         <div className="bg-metis-surface border border-metis-border rounded-xl p-6 mb-6">
@@ -341,10 +410,15 @@ export default function PlayerPage() {
                     {playerInfo.server}
                   </span>
                 )}
+                {playerInfo?.tier && (
+                  <span className="text-[10px] font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-400 rounded px-2 py-0.5 uppercase flex-shrink-0">
+                    {playerInfo.tier}
+                  </span>
+                )}
               </div>
-              {resolvedPuuid && (
-                <p className="font-mono text-[10px] text-metis-text-dim truncate" title={resolvedPuuid}>
-                  {resolvedPuuid.slice(0, 24)}…
+              {nameHistory.length > 0 && (
+                <p className="text-[10px] text-metis-muted mt-0.5">
+                  Antes: {nameHistory.map(n => `${n.old_game_name}#${n.old_tag_line}`).join(' → ')}
                 </p>
               )}
               {watched && watchLabel && (
@@ -436,49 +510,319 @@ export default function PlayerPage() {
           </div>
         )}
 
-        {/* ── Resumo das partidas ── */}
-        {summary && (
-          <div className="bg-metis-surface border border-metis-border rounded-xl p-4 mb-6">
-            <p className="text-[10px] text-metis-text-dim uppercase tracking-wide font-medium mb-3">
-              Resumo — últimas {matches.length} partidas
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
-                <div className="flex items-center gap-2 text-sm font-bold">
-                  <span className="text-blue-400">{summary.wins}V</span>
-                  <span className="text-metis-text-dim text-xs">/</span>
-                  <span className="text-red-400">{summary.losses}D</span>
-                </div>
-                <span className={`text-lg font-bold ${
-                  summary.winrate >= 55 ? 'text-green-400' : summary.winrate >= 50 ? 'text-metis-accent' : 'text-red-400'
-                }`}>{summary.winrate}%</span>
-                <span className="text-[10px] text-metis-text-dim">Winrate</span>
-              </div>
-              <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
-                <span className="text-lg font-bold text-metis-text">{summary.avgKda}</span>
-                <span className="text-[10px] text-metis-text-dim">KDA Médio</span>
-              </div>
-              <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
-                <span className={`text-lg font-bold ${
-                  parseFloat(summary.avgCspm) >= 8 ? 'text-green-400' : parseFloat(summary.avgCspm) >= 6 ? 'text-yellow-400' : 'text-metis-text-dim'
-                }`}>{summary.avgCspm}</span>
-                <span className="text-[10px] text-metis-text-dim">CS/min médio</span>
-              </div>
-              <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
-                <div className="flex items-center gap-1.5">
-                  <div className="relative w-8 h-8 rounded-md overflow-hidden border border-metis-border flex-shrink-0">
-                    <Image src={championIconUrl(summary.topChampName, DDRAGON_VERSION)} alt={summary.topChampName} fill className="object-cover" unoptimized />
+        {/* ── Resumos lado a lado ── */}
+        {(summary || seasonSummary) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            {/* Resumo recente */}
+            {summary && (
+              <div className="bg-metis-surface border border-metis-border rounded-xl p-4">
+                <p className="text-[10px] text-metis-text-dim uppercase tracking-wide font-medium mb-3">
+                  Ultimas {matches.length} partidas
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-sm font-bold">
+                      <span className="text-blue-400">{summary.wins}V</span>
+                      <span className="text-metis-text-dim text-xs">/</span>
+                      <span className="text-red-400">{summary.losses}D</span>
+                    </div>
+                    <span className={`text-lg font-bold ${
+                      summary.winrate >= 55 ? 'text-green-400' : summary.winrate >= 50 ? 'text-metis-accent' : 'text-red-400'
+                    }`}>{summary.winrate}%</span>
+                    <span className="text-[10px] text-metis-text-dim">Winrate</span>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-metis-text truncate max-w-[72px]">{summary.topChampName}</p>
-                    <p className="text-[10px] text-metis-text-dim">{summary.topChampGames}j · {summary.topChampWr}% WR</p>
+                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
+                    <span className="text-lg font-bold text-metis-text">{summary.avgKda}</span>
+                    <span className="text-[10px] text-metis-text-dim">KDA Medio</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
+                    <span className={`text-lg font-bold ${
+                      parseFloat(summary.avgCspm) >= 8 ? 'text-green-400' : parseFloat(summary.avgCspm) >= 6 ? 'text-yellow-400' : 'text-metis-text-dim'
+                    }`}>{summary.avgCspm}</span>
+                    <span className="text-[10px] text-metis-text-dim">CS/min</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
+                    <div className="flex items-center gap-1.5">
+                      <div className="relative w-8 h-8 rounded-md overflow-hidden border border-metis-border flex-shrink-0">
+                        <Image src={championIconUrl(summary.topChampName, DDRAGON_VERSION)} alt={summary.topChampName} fill className="object-cover" unoptimized />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-metis-text truncate">{summary.topChampName}</p>
+                        <p className="text-[10px] text-metis-text-dim">{summary.topChampGames}j · {summary.topChampWr}%</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-metis-text-dim mt-0.5">Mais jogado</span>
                   </div>
                 </div>
-                <span className="text-[10px] text-metis-text-dim mt-0.5">Mais jogado</span>
               </div>
-            </div>
+            )}
+
+            {/* Resumo da temporada (todos os dados) */}
+            {seasonSummary && (
+              <div className="bg-metis-surface border border-metis-border rounded-xl p-4">
+                <p className="text-[10px] text-metis-text-dim uppercase tracking-wide font-medium mb-3">
+                  Temporada ({seasonSummary.totalGames} partidas)
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-sm font-bold">
+                      <span className="text-blue-400">{seasonSummary.wins}V</span>
+                      <span className="text-metis-text-dim text-xs">/</span>
+                      <span className="text-red-400">{seasonSummary.totalGames - seasonSummary.wins}D</span>
+                    </div>
+                    <span className={`text-lg font-bold ${
+                      seasonSummary.winrate >= 55 ? 'text-green-400' : seasonSummary.winrate >= 50 ? 'text-metis-accent' : 'text-red-400'
+                    }`}>{seasonSummary.winrate}%</span>
+                    <span className="text-[10px] text-metis-text-dim">Winrate geral</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
+                    <span className="text-lg font-bold text-metis-text">{seasonSummary.avgKda}</span>
+                    <span className="text-[10px] text-metis-text-dim">KDA Medio</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
+                    <span className="text-lg font-bold text-metis-text">{seasonSummary.uniqueChamps}</span>
+                    <span className="text-[10px] text-metis-text-dim">Campeoes</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
+                    <div className="flex items-center gap-1.5">
+                      <div className="relative w-8 h-8 rounded-md overflow-hidden border border-metis-border flex-shrink-0">
+                        <Image src={championIconUrl(seasonSummary.topChampName, DDRAGON_VERSION)} alt={seasonSummary.topChampName} fill className="object-cover" unoptimized />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-metis-text truncate">{seasonSummary.topChampName}</p>
+                        <p className="text-[10px] text-metis-text-dim">{seasonSummary.topChampGames}j · {seasonSummary.topChampWr}%</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-metis-text-dim mt-0.5">Mais jogado</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
+
+        {/* ── Layout 2 colunas: sidebar + historico ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
+
+        {/* ── Coluna esquerda: campeoes + social ── */}
+        <div>
+
+        {/* ── Stats por Campeão ── */}
+        {resolvedPuuid && (
+          <section className="mb-6">
+            <h2 className="text-sm font-semibold text-metis-text-dim uppercase tracking-wide mb-2">
+              Campeoes Jogados
+            </h2>
+
+            {/* Filtros */}
+            <div className="flex gap-1.5 flex-wrap mb-3">
+              <select value={champSeason} onChange={e => { setChampSeason(e.target.value); setChampPatch('') }}
+                className="bg-metis-bg border border-metis-border rounded px-2 py-1 text-xs text-metis-text outline-none">
+                <option value="">Geral</option>
+                {seasons.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <select value={champPatch} onChange={e => { setChampPatch(e.target.value); if (e.target.value) setChampSeason('') }}
+                className="bg-metis-bg border border-metis-border rounded px-2 py-1 text-xs text-metis-text outline-none">
+                <option value="">Patch</option>
+                {patchList.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <select value={champRole} onChange={e => setChampRole(e.target.value)}
+                className="bg-metis-bg border border-metis-border rounded px-2 py-1 text-xs text-metis-text outline-none">
+                <option value="">Role</option>
+                <option value="TOP">Top</option>
+                <option value="JUNGLE">Jungle</option>
+                <option value="MIDDLE">Mid</option>
+                <option value="BOTTOM">ADC</option>
+                <option value="UTILITY">Suporte</option>
+              </select>
+            </div>
+
+            {/* Melhor campeao */}
+            {champStats.length > 0 && champStats[0].games >= 2 && (
+              <div className="flex items-center gap-3 bg-metis-bg/50 border border-metis-border/50 rounded-lg px-3 py-2 mb-3">
+                <div className="relative w-8 h-8 rounded overflow-hidden border border-metis-accent/50 flex-shrink-0">
+                  <Image src={championIconUrl(champStats[0].champion, DDRAGON_VERSION)} alt={champStats[0].champion} fill className="object-cover" unoptimized />
+                </div>
+                <div>
+                  <p className="text-xs text-metis-text-dim">Melhor campeao</p>
+                  <p className="text-sm font-semibold text-metis-accent">{champStats[0].champion}</p>
+                </div>
+                <div className="ml-auto text-right">
+                  <p className={`text-sm font-bold ${champStats[0].winrate > 55 ? 'text-green-400' : 'text-metis-text'}`}>{champStats[0].winrate}% WR</p>
+                  <p className="text-[10px] text-metis-text-dim">{champStats[0].games} jogos</p>
+                </div>
+              </div>
+            )}
+
+            {champStats.length === 0 ? (
+              <p className="text-xs text-metis-text-dim py-4 text-center">Sem dados para os filtros selecionados.</p>
+            ) : (
+              <div className="bg-metis-surface border border-metis-border rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-metis-border">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-metis-text-dim uppercase">Campeao</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-metis-text-dim uppercase">Jogos</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-metis-text-dim uppercase">WR</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-metis-text-dim uppercase">KDA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {champStats.slice(0, showAllChamps ? undefined : 5).map((c, i) => (
+                      <tr key={c.champion} className={`border-b border-metis-border/50 ${i % 2 ? 'bg-metis-bg/20' : ''}`}>
+                        <td className="px-3 py-2">
+                          <Link href={`/champions/${c.champion}`} className="flex items-center gap-2 group">
+                            <div className="relative w-6 h-6 rounded overflow-hidden border border-metis-border flex-shrink-0">
+                              <Image src={championIconUrl(c.champion, DDRAGON_VERSION)} alt={c.champion} fill className="object-cover" unoptimized />
+                            </div>
+                            <span className="text-xs font-medium text-metis-text group-hover:text-metis-accent transition-colors truncate">{c.champion}</span>
+                          </Link>
+                        </td>
+                        <td className="px-2 py-2 text-xs text-metis-text-dim">{c.games}</td>
+                        <td className={`px-2 py-2 text-xs font-semibold ${c.winrate > 55 ? 'text-green-400' : c.winrate < 45 ? 'text-red-400' : 'text-metis-text'}`}>
+                          {c.winrate}%
+                        </td>
+                        <td className="px-2 py-2 text-xs text-metis-text-dim">
+                          {c.avg_kills}/{c.avg_deaths}/{c.avg_assists}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {champStats.length > 5 && (
+                  <button
+                    onClick={() => setShowAllChamps(v => !v)}
+                    className="w-full py-2 text-xs text-metis-text-dim hover:text-metis-accent transition-colors border-t border-metis-border"
+                  >
+                    {showAllChamps ? 'Mostrar menos' : `Ver todos (${champStats.length})`}
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ── Jogou com + Nemesis ── */}
+        {resolvedPuuid && (allies.length > 0 || nemeses.length > 0) && (
+          <div className="flex flex-col gap-4 mb-6">
+            {/* Allies */}
+            {allies.length > 0 && (
+              <section>
+                <h2 className="text-sm font-semibold text-metis-text-dim uppercase tracking-wide mb-3">
+                  Jogou com ({allies.length})
+                </h2>
+                <div className="bg-metis-surface border border-metis-border rounded-xl overflow-hidden">
+                  {allies.slice(0, showAllAllies ? undefined : 5).map((a, i) => (
+                    <Link
+                      key={a.puuid}
+                      href={`/players/${encodeURIComponent(`${a.game_name}#${a.tag_line}`)}`}
+                      className={`flex items-center gap-3 px-3 py-2.5 hover:bg-metis-bg/40 transition-colors ${i > 0 ? 'border-t border-metis-border/50' : ''}`}
+                    >
+                      <div className="w-7 h-7 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-[10px] font-bold text-blue-300 flex-shrink-0">
+                        {a.game_name.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-metis-text truncate">{a.game_name}#{a.tag_line}</p>
+                        <p className="text-[10px] text-metis-text-dim">{a.games_together}j · {a.wins_together}V {a.games_together - a.wins_together}D</p>
+                      </div>
+                      <span className={`text-xs font-semibold flex-shrink-0 ${a.winrate > 55 ? 'text-green-400' : a.winrate < 45 ? 'text-red-400' : 'text-metis-text-dim'}`}>
+                        {a.winrate}%
+                      </span>
+                    </Link>
+                  ))}
+                  {allies.length > 5 && (
+                    <button onClick={() => setShowAllAllies(v => !v)}
+                      className="w-full py-2 text-xs text-metis-text-dim hover:text-metis-accent transition-colors border-t border-metis-border">
+                      {showAllAllies ? 'Mostrar menos' : `Ver todos (${allies.length})`}
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Nemesis */}
+            {nemeses.length > 0 && (
+              <section>
+                <h2 className="text-sm font-semibold text-metis-text-dim uppercase tracking-wide mb-3">
+                  Nemesis ({nemeses.length})
+                </h2>
+                <div className="bg-metis-surface border border-metis-border rounded-xl overflow-hidden">
+                  {nemeses.slice(0, showAllNemeses ? undefined : 5).map((n, i) => (
+                    <Link
+                      key={n.puuid}
+                      href={`/players/${encodeURIComponent(`${n.game_name}#${n.tag_line}`)}`}
+                      className={`flex items-center gap-3 px-3 py-2.5 hover:bg-metis-bg/40 transition-colors ${i > 0 ? 'border-t border-metis-border/50' : ''}`}
+                    >
+                      <div className="w-7 h-7 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center text-[10px] font-bold text-red-300 flex-shrink-0">
+                        {n.game_name.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-metis-text truncate">{n.game_name}#{n.tag_line}</p>
+                        <p className="text-[10px] text-metis-text-dim">{n.times_faced}x · {n.champions_used.slice(0, 3).join(', ')}</p>
+                      </div>
+                      <span className={`text-xs font-semibold flex-shrink-0 ${n.winrate_against > 55 ? 'text-green-400' : n.winrate_against < 45 ? 'text-red-400' : 'text-metis-text-dim'}`}>
+                        {n.winrate_against}%
+                      </span>
+                    </Link>
+                  ))}
+                  {nemeses.length > 5 && (
+                    <button onClick={() => setShowAllNemeses(v => !v)}
+                      className="w-full py-2 text-xs text-metis-text-dim hover:text-metis-accent transition-colors border-t border-metis-border">
+                      {showAllNemeses ? 'Mostrar menos' : `Ver todos (${nemeses.length})`}
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
+          </div>
+        )}
+
+        {/* ── Recomendacoes de Campeao ── */}
+        {recommendations.length > 0 && (
+          <section className="mb-6">
+            <h2 className="text-sm font-semibold text-metis-text-dim uppercase tracking-wide mb-3">
+              Recomendados pra voce
+            </h2>
+            <div className="bg-metis-surface border border-metis-border rounded-xl overflow-hidden">
+              {recommendations.map((r, i) => (
+                <Link
+                  key={`${r.champion}-${r.role}`}
+                  href={`/champions/${r.champion}`}
+                  className={`flex items-center gap-3 px-3 py-3 hover:bg-metis-bg/40 transition-colors ${i > 0 ? 'border-t border-metis-border/50' : ''}`}
+                >
+                  <div className="relative w-9 h-9 rounded-lg overflow-hidden border border-metis-accent/30 flex-shrink-0">
+                    <Image src={championIconUrl(r.champion, DDRAGON_VERSION)} alt={r.champion} fill className="object-cover" unoptimized />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium text-metis-text">{r.champion}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-metis-border/50 text-metis-text-dim">{r.role_label}</span>
+                    </div>
+                    <p className="text-[10px] text-metis-text-dim">
+                      {r.winrate}% WR · {r.games_in_db}j
+                      {r.times_played > 0 && ` · jogou ${r.times_played}x`}
+                    </p>
+                    {r.reasons && r.reasons.length > 0 && (
+                      <p className="text-[9px] text-metis-accent mt-0.5">{r.reasons.join(' · ')}</p>
+                    )}
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-bold text-metis-accent">{r.confidence}%</p>
+                    <p className="text-[10px] text-metis-text-dim">match</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+            <p className="text-[10px] text-metis-muted mt-1.5 text-center">
+              Baseado em similaridade de cosseno com seu perfil de jogo
+            </p>
+          </section>
+        )}
+
+        </div>{/* fim coluna esquerda */}
+
+        {/* ── Coluna direita: historico ── */}
+        <div>
 
         {/* ── Histórico de partidas ── */}
         <section>
@@ -535,6 +879,9 @@ export default function PlayerPage() {
             </>
           )}
         </section>
+
+        </div>{/* fim coluna direita */}
+        </div>{/* fim grid */}
       </main>
     </div>
   )

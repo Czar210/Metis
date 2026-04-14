@@ -60,6 +60,76 @@ def _parse_timeline_frames(frames_raw: list, puuids_ordered: list[str]) -> list[
     return frames
 
 
+# ── Metis Score ──────────────────────────────────────────────────
+
+# Pesos por role: KDA, Damage, Gold, Vision, CS/m, KP
+_ROLE_WEIGHTS: dict[str, dict[str, float]] = {
+    "TOP":     {"kda": 0.25, "dmg": 0.15, "gold": 0.20, "vis": 0.05, "cs": 0.15, "kp": 0.10},
+    "JUNGLE":  {"kda": 0.25, "dmg": 0.10, "gold": 0.10, "vis": 0.15, "cs": 0.10, "kp": 0.25},
+    "MIDDLE":  {"kda": 0.25, "dmg": 0.20, "gold": 0.20, "vis": 0.05, "cs": 0.20, "kp": 0.25},
+    "BOTTOM":  {"kda": 0.25, "dmg": 0.30, "gold": 0.25, "vis": 0.05, "cs": 0.25, "kp": 0.10},
+    "UTILITY": {"kda": 0.25, "dmg": 0.05, "gold": 0.05, "vis": 0.30, "cs": 0.05, "kp": 0.25},
+}
+_DEFAULT_WEIGHTS = {"kda": 0.20, "dmg": 0.15, "gold": 0.15, "vis": 0.15, "cs": 0.15, "kp": 0.15}
+
+
+def _compute_metis_scores(participants: list[dict]) -> None:
+    """Calcula metis_score in-place para cada participante, normalizado contra a média da partida."""
+    n = len(participants)
+    if n == 0:
+        return
+
+    def _safe(val) -> float:
+        return float(val) if val else 0.0
+
+    # Médias da partida
+    avg_gold = sum(_safe(p.get("gold_earned")) for p in participants) / n or 1
+    avg_vis  = sum(_safe(p.get("vision_score")) for p in participants) / n or 1
+    avg_cspm = sum(_safe(p.get("cs_per_minute")) for p in participants) / n or 1
+
+    # Dano total por time (para damage share)
+    team_dmg: dict[int, float] = {}
+    for p in participants:
+        tid = p.get("team_id", 0)
+        team_dmg[tid] = team_dmg.get(tid, 0) + _safe(p.get("total_damage_dealt_to_champions"))
+
+    for p in participants:
+        kills   = _safe(p.get("kills"))
+        deaths  = _safe(p.get("deaths"))
+        assists = _safe(p.get("assists"))
+        gold    = _safe(p.get("gold_earned"))
+        damage  = _safe(p.get("total_damage_dealt_to_champions"))
+        vision  = _safe(p.get("vision_score"))
+        cspm    = _safe(p.get("cs_per_minute"))
+        kp      = _safe(p.get("kill_participation"))
+
+        role = (p.get("team_position") or "UNKNOWN").upper()
+        w = _ROLE_WEIGHTS.get(role, _DEFAULT_WEIGHTS)
+
+        # Componentes normalizados (0-1 range, capped at 2x average)
+        kda_ratio = (kills + assists) / max(deaths, 1)
+        kda_norm  = min(kda_ratio / 5.0, 1.0)  # KDA 5.0+ = score 1.0
+
+        t_dmg = team_dmg.get(p.get("team_id", 0), 1) or 1
+        dmg_norm  = min(damage / t_dmg / 0.3, 1.0)  # 30%+ do dano do time = 1.0
+
+        gold_norm = min(gold / avg_gold / 1.5, 1.0)  # 1.5x gold médio = 1.0
+        vis_norm  = min(vision / avg_vis / 1.5, 1.0)
+        cs_norm   = min(cspm / avg_cspm / 1.5, 1.0) if avg_cspm > 0 else 0
+        kp_norm   = min(kp / 0.7, 1.0)  # 70%+ KP = 1.0
+
+        raw = (
+            w["kda"]  * kda_norm +
+            w["dmg"]  * dmg_norm +
+            w["gold"] * gold_norm +
+            w["vis"]  * vis_norm +
+            w["cs"]   * cs_norm +
+            w["kp"]   * kp_norm
+        )
+
+        p["metis_score"] = round(raw * 100, 1)
+
+
 router = APIRouter(prefix="/api/v1/match", tags=["Match"])
 
 
@@ -88,7 +158,7 @@ def get_match_details(match_id: str):
                 "total_damage_dealt_to_champions, vision_score, "
                 "kill_participation, damage_per_minute, "
                 "total_cs, cs_per_minute, champion_level, "
-                "items, rune_keystone, summoner1_id, summoner2_id, "
+                "items, rune_keystone, rune_primary, rune_secondary, runes_raw, summoner1_id, summoner2_id, "
                 "players(game_name, tag_line), "
                 "matches(match_id, game_version, game_duration, queue_id, end_type, created_at)"
             )
@@ -119,6 +189,9 @@ def get_match_details(match_id: str):
         # ── Split por time ────────────────────────────────────
         blue_team = [p for p in participants if p.get("team_id") == 100]
         red_team  = [p for p in participants if p.get("team_id") == 200]
+
+        # ── Metis Score (normalizado contra média da partida, pesos por role) ──
+        _compute_metis_scores(participants)
 
         # Metadados vêm do primeiro participante (mesmos para todos)
         meta = participants[0].get("matches") or {}
