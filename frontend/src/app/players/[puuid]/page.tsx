@@ -10,8 +10,7 @@ import { MatchCard } from '@/components/matches/MatchCard'
 import type { MatchData } from '@/components/matches/MatchCard'
 import { Header } from '@/components/ui/Header'
 import { championIconUrl, DDRAGON_VERSION } from '@/lib/ddragon'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
+import { apiFetch } from '@/lib/api'
 const PAGE_SIZE = 10
 const SERVERS = ['BR1', 'NA1', 'EUW1', 'KR', 'EUNE1', 'JP1', 'LA1', 'LA2', 'OC1']
 
@@ -176,17 +175,17 @@ export default function PlayerPage() {
     loadHistory(resolvedPuuid, 0)
 
     const p = encodeURIComponent(resolvedPuuid)
-    fetch(`${API_URL}/api/v1/player/frequent-allies?puuid=${p}&min_games=2`)
+    apiFetch(`/api/v1/player/frequent-allies?puuid=${p}&min_games=2`)
       .then(r => r.ok ? r.json() : []).then(setAllies).catch(() => {})
-    fetch(`${API_URL}/api/v1/player/nemesis?puuid=${p}&min_games=2`)
+    apiFetch(`/api/v1/player/nemesis?puuid=${p}&min_games=2`)
       .then(r => r.ok ? r.json() : []).then(setNemeses).catch(() => {})
-    fetch(`${API_URL}/api/v1/player/name-history?puuid=${p}`)
+    apiFetch(`/api/v1/player/name-history?puuid=${p}`)
       .then(r => r.ok ? r.json() : []).then(setNameHistory).catch(() => {})
-    fetch(`${API_URL}/api/v1/player/recommendations?puuid=${p}&top_n=6&reasons=true`)
+    apiFetch(`/api/v1/player/recommendations?puuid=${p}&top_n=6&reasons=true`)
       .then(r => r.ok ? r.json() : []).then(setRecommendations).catch(() => {})
-    fetch(`${API_URL}/api/v1/player/seasons`)
+    apiFetch('/api/v1/player/seasons')
       .then(r => r.ok ? r.json() : []).then(setSeasons).catch(() => {})
-    fetch(`${API_URL}/api/v1/stats/patches`)
+    apiFetch('/api/v1/stats/patches')
       .then(r => r.ok ? r.json() : []).then(setPatchList).catch(() => {})
   }, [resolvedPuuid])
 
@@ -197,7 +196,7 @@ export default function PlayerPage() {
     if (champRole) params.set('role', champRole)
     if (champPatch) params.set('patch', champPatch)
     else if (champSeason) params.set('season', champSeason)
-    fetch(`${API_URL}/api/v1/player/champion-stats?${params}`)
+    apiFetch(`/api/v1/player/champion-stats?${params}`)
       .then(r => r.ok ? r.json() : []).then(setChampStats).catch(() => {})
   }, [resolvedPuuid, champRole, champPatch, champSeason])
 
@@ -205,8 +204,8 @@ export default function PlayerPage() {
     setLoadingMatches(true)
     setMatchError(null)
     try {
-      const res = await fetch(
-        `${API_URL}/api/v1/player/history?puuid=${encodeURIComponent(puuid)}&limit=20&offset=${startOffset}`
+      const res = await apiFetch(
+        `/api/v1/player/history?puuid=${encodeURIComponent(puuid)}&limit=20&offset=${startOffset}`
       )
       if (!res.ok) throw new Error(`Erro ${res.status}`)
       const data = await res.json()
@@ -224,8 +223,8 @@ export default function PlayerPage() {
     if (!resolvedPuuid) return
     setLoadingMore(true)
     try {
-      const res = await fetch(
-        `${API_URL}/api/v1/player/history?puuid=${encodeURIComponent(resolvedPuuid)}&limit=${PAGE_SIZE}&offset=${offset}`
+      const res = await apiFetch(
+        `/api/v1/player/history?puuid=${encodeURIComponent(resolvedPuuid)}&limit=${PAGE_SIZE}&offset=${offset}`
       )
       if (!res.ok) throw new Error()
       const data = await res.json()
@@ -247,9 +246,8 @@ export default function PlayerPage() {
     setSyncing(true)
     setSyncMsg(null)
     try {
-      const res = await fetch(`${API_URL}/api/v1/player/sync`, {
+      const res = await apiFetch('/api/v1/player/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ riot_id: `${name}#${tag}`, server, count: 15 }),
       })
       const data = await res.json()

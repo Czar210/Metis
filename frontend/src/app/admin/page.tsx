@@ -8,8 +8,7 @@ import {
   TrendingUp, AlertTriangle, BarChart3,
 } from 'lucide-react'
 import { Header } from '@/components/ui/Header'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
+import { apiFetch } from '@/lib/api'
 
 type AdminStats = {
   players_total: number
@@ -73,7 +72,7 @@ export default function AdminPage() {
       if (!session) { router.replace('/auth'); return }
 
       try {
-        const res = await fetch(`${API_URL}/api/v1/admin/stats`, {
+        const res = await apiFetch('/api/v1/admin/stats', {
           headers: { Authorization: `Bearer ${session.access_token}` },
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)

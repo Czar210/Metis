@@ -6,8 +6,7 @@ import { Search } from 'lucide-react'
 import { StatsTable, type ChampionStat } from '@/components/stats/StatsTable'
 import { Header } from '@/components/ui/Header'
 import { emblemPath } from '@/lib/ddragon'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
+import { apiFetch } from '@/lib/api'
 
 const ROLES = [
   { value: '', label: 'Todas as Roles', icon: null },
@@ -59,7 +58,7 @@ export default function ChampionsPage() {
   const [patches, setPatches] = useState<string[]>([])
 
   useEffect(() => {
-    fetch(`${API_URL}/api/v1/stats/patches`)
+    apiFetch('/api/v1/stats/patches')
       .then(r => r.ok ? r.json() : [])
       .then(setPatches)
       .catch(() => {})
@@ -87,7 +86,7 @@ export default function ChampionsPage() {
         if (selectedPatches.length === 1) params.set('patch', selectedPatches[0])
         else if (selectedPatches.length > 1) params.set('patches', selectedPatches.join(','))
 
-        const res = await fetch(`${API_URL}/api/v1/stats/tierlist?${params}`)
+        const res = await apiFetch(`/api/v1/stats/tierlist?${params}`)
         if (!res.ok) throw new Error(`Erro ${res.status}`)
         const json = await res.json()
         setData(json)

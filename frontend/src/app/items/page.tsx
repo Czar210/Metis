@@ -5,8 +5,7 @@ import Image from 'next/image'
 import { Search } from 'lucide-react'
 import { Header } from '@/components/ui/Header'
 import { DDRAGON_VERSION } from '@/lib/ddragon'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
+import { apiFetch } from '@/lib/api'
 
 type ItemStat = {
   item_id: number
@@ -36,7 +35,7 @@ export default function ItemsPage() {
   const [sortBy, setSortBy] = useState<'picks' | 'winrate'>('picks')
 
   useEffect(() => {
-    fetch(`${API_URL}/api/v1/stats/patches`)
+    apiFetch('/api/v1/stats/patches')
       .then(r => r.ok ? r.json() : [])
       .then(setPatches)
       .catch(() => {})
@@ -50,7 +49,7 @@ export default function ItemsPage() {
         const params = new URLSearchParams({ min_picks: '3' })
         if (role) params.set('role', role)
         if (patch) params.set('patch', patch)
-        const res = await fetch(`${API_URL}/api/v1/items/ranking?${params}`)
+        const res = await apiFetch(`/api/v1/items/ranking?${params}`)
         if (!res.ok) throw new Error(`Erro ${res.status}`)
         setData(await res.json())
       } catch {

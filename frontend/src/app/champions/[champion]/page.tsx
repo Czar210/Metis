@@ -7,8 +7,7 @@ import Image from 'next/image'
 import { ArrowLeft } from 'lucide-react'
 import { championIconUrl, emblemPath, DDRAGON_VERSION } from '@/lib/ddragon'
 import { Header } from '@/components/ui/Header'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
+import { apiFetch } from '@/lib/api'
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -111,17 +110,17 @@ export default function ChampionPage() {
     setLoading(true)
     setError(null)
     try {
-      const base = `${API_URL}/api/v1/champion/${encodeURIComponent(champion)}`
+      const base = `/api/v1/champion/${encodeURIComponent(champion)}`
       const params = new URLSearchParams({ min_matches: '1' })
       if (role)   params.set('role', role)
       if (server) params.set('server', server)
       if (patch)  params.set('patch', patch)
 
       const [ovRes, bdRes, muRes, syRes] = await Promise.all([
-        fetch(`${base}/overview?${params}`),
-        fetch(`${base}/builds?${params}`),
-        fetch(`${base}/matchups?${params}`),
-        fetch(`${base}/synergies?${params}`),
+        apiFetch(`${base}/overview?${params}`),
+        apiFetch(`${base}/builds?${params}`),
+        apiFetch(`${base}/matchups?${params}`),
+        apiFetch(`${base}/synergies?${params}`),
       ])
 
       if (!ovRes.ok) throw new Error(`Overview: HTTP ${ovRes.status}`)
@@ -147,7 +146,7 @@ export default function ChampionPage() {
   useEffect(() => { fetchAll() }, [fetchAll])
 
   useEffect(() => {
-    fetch(`${API_URL}/api/v1/stats/patches`)
+    apiFetch('/api/v1/stats/patches')
       .then(r => r.ok ? r.json() : [])
       .then(setPatches)
       .catch(() => {})

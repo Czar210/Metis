@@ -8,8 +8,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Header } from '@/components/ui/Header'
 import { championIconUrl, DDRAGON_VERSION } from '@/lib/ddragon'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
+import { apiFetch } from '@/lib/api'
 
 type WatchedPlayer = {
   puuid: string
@@ -77,7 +76,7 @@ export default function HomePage() {
 
   async function loadTopChamps() {
     try {
-      const res = await fetch(`${API_URL}/api/v1/stats/tierlist?min_matches=5`)
+      const res = await apiFetch('/api/v1/stats/tierlist?min_matches=5')
       if (!res.ok) return
       const data: TopChampion[] = await res.json()
       setTopChamps(data.slice(0, 6))
@@ -94,7 +93,7 @@ export default function HomePage() {
       try {
         const params = new URLSearchParams({ q })
         if (searchServer) params.set('server', searchServer)
-        const res = await fetch(`${API_URL}/api/v1/player/search?${params}`)
+        const res = await apiFetch(`/api/v1/player/search?${params}`)
         if (res.ok) setSuggestions(await res.json())
       } catch { /* silencioso */ }
     }, 300)

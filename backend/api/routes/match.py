@@ -210,7 +210,7 @@ def get_match_details(match_id: str):
     except RuntimeError as err:
         raise HTTPException(status_code=500, detail=str(err))
     except Exception as err:
-        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+        import logging; logging.getLogger(__name__).error(f"Erro interno: {err}"); raise HTTPException(status_code=500, detail="Erro interno. Tente novamente.")
 
 
 @router.get("/{match_id}/timeline")
@@ -293,4 +293,4 @@ def get_match_timeline(match_id: str):
     except RuntimeError as err:
         raise HTTPException(status_code=500, detail=str(err))
     except Exception as err:
-        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+        import logging; logging.getLogger(__name__).error(f"Erro interno: {err}"); raise HTTPException(status_code=500, detail="Erro interno. Tente novamente.")

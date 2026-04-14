@@ -9,8 +9,7 @@ import { Header } from '@/components/ui/Header'
 import { championIconUrl, roleIconPath, DDRAGON_VERSION } from '@/lib/ddragon'
 import { runeIconUrl, RUNE_TREES } from '@/lib/runes'
 import { TimelineChart } from '@/components/matches/TimelineChart'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
+import { apiFetch } from '@/lib/api'
 
 // ── Tipos ─────────────────────────────────────────────────────
 
@@ -322,7 +321,7 @@ export default function MatchPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`${API_URL}/api/v1/match/${match_id}`)
+        const res = await apiFetch(`/api/v1/match/${match_id}`)
         if (res.status === 404) { setError('Partida não encontrada.'); return }
         if (!res.ok) { setError('Erro ao carregar partida.'); return }
         setMatch(await res.json())
@@ -342,7 +341,7 @@ export default function MatchPage() {
     setTimelineLoading(true)
     setTimelineError(null)
     try {
-      const res = await fetch(`${API_URL}/api/v1/match/${match_id}/timeline`)
+      const res = await apiFetch(`/api/v1/match/${match_id}/timeline`)
       if (!res.ok) { setTimelineError('Não foi possível carregar a timeline.'); return }
       const data = await res.json()
       setTimelineFrames(data.frames ?? [])

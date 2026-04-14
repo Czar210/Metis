@@ -51,7 +51,7 @@ def get_champion_overview(
     except RuntimeError as err:
         raise HTTPException(status_code=500, detail=str(err))
     except Exception as err:
-        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+        import logging; logging.getLogger(__name__).error(f"Erro interno: {err}"); raise HTTPException(status_code=500, detail="Erro interno. Tente novamente.")
 
 
 @router.get("/{champion}/builds")
@@ -72,7 +72,7 @@ def get_champion_builds(
     except RuntimeError as err:
         raise HTTPException(status_code=500, detail=str(err))
     except Exception as err:
-        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+        import logging; logging.getLogger(__name__).error(f"Erro interno: {err}"); raise HTTPException(status_code=500, detail="Erro interno. Tente novamente.")
 
 
 @router.get("/{champion}/matchups")
@@ -95,7 +95,7 @@ def get_champion_matchups(
     except RuntimeError as err:
         raise HTTPException(status_code=500, detail=str(err))
     except Exception as err:
-        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+        import logging; logging.getLogger(__name__).error(f"Erro interno: {err}"); raise HTTPException(status_code=500, detail="Erro interno. Tente novamente.")
 
 
 @router.get("/{champion}/synergies")
@@ -117,4 +117,4 @@ def get_champion_synergies(
     except RuntimeError as err:
         raise HTTPException(status_code=500, detail=str(err))
     except Exception as err:
-        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+        import logging; logging.getLogger(__name__).error(f"Erro interno: {err}"); raise HTTPException(status_code=500, detail="Erro interno. Tente novamente.")

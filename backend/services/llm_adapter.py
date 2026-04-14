@@ -14,37 +14,79 @@ from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 
+class LLMResponse:
+    def __init__(self, text: str, tokens_used: int):
+        self.text = text
+        self.tokens_used = tokens_used
+
+
+GUARDRAIL_PROMPT = (
+    'A mensagem abaixo e sobre League of Legends, LoL, sobre o site Metis (plataforma de analytics de LoL), '
+    'ou sobre jogos em geral relacionados a LoL? Responda APENAS "sim" ou "nao".\n'
+    'Mensagem: {mensagem}'
+)
+
+GUARDRAIL_REJECTION = (
+    "Posso ajudar apenas com assuntos de League of Legends ou sobre o Metis. "
+    "Tem alguma duvida sobre campeoes, builds, matchups ou estrategia?"
+)
+
+
+def is_lol_related(mensagem: str, llm: 'LLMAdapter') -> tuple[bool, int]:
+    """
+    Classifica se a mensagem e sobre LoL/Metis.
+    Retorna (is_related, tokens_used).
+    Usa o mesmo LLM mas com prompt curtissimo — ~50 tokens de custo.
+    """
+    try:
+        result = llm.generate(
+            GUARDRAIL_PROMPT.format(mensagem=mensagem[:300]),  # limita input pra nao gastar token
+            system_prompt="Voce e um classificador binario. Responda APENAS 'sim' ou 'nao'."
+        )
+        answer = result.text.strip().lower()
+        return ("sim" in answer), result.tokens_used
+    except Exception as e:
+        logger.warning(f"[guardrail] Erro ao classificar, permitindo por default: {e}")
+        return True, 0  # fail-open: se o classificador falhar, deixa passar
+
+
 class LLMAdapter(ABC):
     @abstractmethod
-    def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+    def generate(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
         ...
 
 
 class GeminiAdapter(LLMAdapter):
-    """Google Gemini Flash Lite via API."""
+    """Google Gemini via nova SDK google-genai."""
 
     def __init__(self):
-        self.api_key = os.environ.get("GEMINI_KEY")
-        if not self.api_key:
-            raise RuntimeError("GEMINI_KEY nao configurada")
+        from google import genai as _genai
+        api_key = os.environ.get("GEMINI_KEY")
+        if not api_key:
+            raise RuntimeError("LLM API key nao configurada")
+        self._client = _genai.Client(api_key=api_key)
+        self._model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
-    def generate(self, prompt: str, system_prompt: str | None = None) -> str:
-        import google.generativeai as genai
+    def generate(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
+        from google import genai as _genai
+        from google.genai import types
 
-        genai.configure(api_key=self.api_key)
-        model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite")
-        model = genai.GenerativeModel(
-            model_name,
-            system_instruction=system_prompt or METIS_SYSTEM_PROMPT,
-        )
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
+        response = self._client.models.generate_content(
+            model=self._model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt or METIS_SYSTEM_PROMPT,
                 temperature=0.3,
                 max_output_tokens=1024,
             ),
         )
-        return response.text
+        tokens = 0
+        if response.usage_metadata:
+            tokens = (
+                (response.usage_metadata.prompt_token_count or 0)
+                + (response.usage_metadata.candidates_token_count or 0)
+            )
+        return LLMResponse(text=response.text or "", tokens_used=tokens)
 
 
 class OllamaAdapter(LLMAdapter):
@@ -54,7 +96,7 @@ class OllamaAdapter(LLMAdapter):
         self.model = model
         self.base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
-    def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+    def generate(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
         import requests
 
         payload = {
@@ -66,7 +108,10 @@ class OllamaAdapter(LLMAdapter):
         }
         res = requests.post(f"{self.base_url}/api/generate", json=payload, timeout=60)
         res.raise_for_status()
-        return res.json().get("response", "")
+        data = res.json()
+        # Ollama retorna prompt_eval_count e eval_count
+        tokens = data.get("prompt_eval_count", 0) + data.get("eval_count", 0)
+        return LLMResponse(text=data.get("response", ""), tokens_used=tokens)
 
 
 def get_llm(model: str | None = None) -> LLMAdapter:
@@ -83,21 +128,42 @@ def get_llm(model: str | None = None) -> LLMAdapter:
     if os.environ.get("GEMINI_KEY"):
         try:
             return GeminiAdapter()
-        except Exception as e:
-            logger.warning(f"Gemini indisponivel ({e}), fallback pra Ollama")
+        except Exception:
+            logger.warning("Gemini indisponivel, fallback pra Ollama")
 
     return OllamaAdapter(model=model or "llama3")
 
 
-# ── System Prompt ────────────────────────────────────────────────
+# ── Limites de tokens por tier (diario, reset meia-noite UTC) ────
 
-METIS_SYSTEM_PROMPT = """Voce e a Metis, uma estrategista tatica de League of Legends.
+TIER_LIMITS: dict[str, int] = {
+    "free":    0,        # sem acesso ao chat
+    "donor":   5_000,    # ~5 mensagens/dia  (R$4,90/mes)
+    "premium": 30_000,   # ~33 mensagens/dia (R$24,90/mes)
+    "pro":     100_000,  # ~111 mensagens/dia (R$44,90/mes)
+}
 
-Regras:
-- Responda APENAS com base no contexto fornecido e no seu conhecimento de LoL.
-- Seja direto, analitico e pratico.
-- Use dados concretos quando disponiveis (winrate, KDA, gold diff, etc.).
-- Nunca invente dados que nao foram fornecidos.
-- Responda em portugues brasileiro.
-- Formato: respostas curtas e objetivas, use bullet points quando apropriado.
+# ── System Prompt com guardrails ──────────────────────────────────
+
+METIS_SYSTEM_PROMPT = """Voce e a Metis, estrategista tatica de League of Legends criada pela equipe do site Metis.
+
+## Identidade
+- Voce e especialista exclusivamente em League of Legends: estrategia, campeoes, builds, matchups, laning, objetivos, macro e mental game.
+- Voce tem personalidade calma, analitica e encorajadora. Nunca e agressiva ou impaciante.
+
+## Regras absolutas (NUNCA viole)
+1. Responda APENAS perguntas relacionadas a League of Legends ou ao site Metis.
+2. Se a pergunta nao for sobre LoL ou Metis, responda educadamente: "Posso ajudar apenas com assuntos de League of Legends ou sobre o Metis. Tem alguma duvida sobre o jogo?"
+3. NUNCA xingue, insulte, ou use linguagem ofensiva — mesmo que o usuario use.
+4. NUNCA aprove ou valide comportamento toxico, flame, racismo, homofobia ou qualquer forma de discriminacao.
+5. Quando o usuario estiver frustrado com tilt, derrota ou flaming de aliados, seja empatico e use a dificuldade como oportunidade de aprendizado.
+6. NUNCA invente dados estatisticos — use apenas o que sabe sobre o jogo.
+7. NUNCA discuta receitas, politica, religiao, relacionamentos, ou qualquer topico fora de LoL/Metis.
+
+## Tom e formato
+- Portugues brasileiro, direto e pratico.
+- Use bullet points quando listar itens.
+- Respostas curtas e objetivas — sem enrolacao.
+- Quando o usuario errar, corrija com gentileza e explique o porque.
+- Transforme derrotas e erros em aprendizado: "Isso acontece muito no seu elo, aqui esta como melhorar..."
 """

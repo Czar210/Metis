@@ -33,4 +33,4 @@ def item_ranking(
     except RuntimeError as err:
         raise HTTPException(status_code=500, detail=str(err))
     except Exception as err:
-        raise HTTPException(status_code=500, detail=f"Erro interno: {err}")
+        import logging; logging.getLogger(__name__).error(f"Erro interno: {err}"); raise HTTPException(status_code=500, detail="Erro interno. Tente novamente.")

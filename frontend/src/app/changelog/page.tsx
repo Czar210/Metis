@@ -21,10 +21,59 @@ type Release = {
 
 const RELEASES: Release[] = [
   {
+    version: 'Pre-0.9.0',
+    date: '04/2026',
+    label: 'Atual',
+    current: true,
+    entries: [
+      { version: '', date: '', tag: 'big',      text: 'Pre-release da 0.9.0 com foco em qualidade do Chat Metis.' },
+      { version: '', date: '', tag: 'novo',      text: 'Guardrail de topico — a Metis agora responde APENAS sobre League of Legends e rejeita perguntas fora do jogo.' },
+      { version: '', date: '', tag: 'novo',      text: 'Personalidade definida: calma, analitica, nunca toxica. Transforma derrotas em aprendizado.' },
+      { version: '', date: '', tag: 'novo',      text: 'Limite diario de tokens por plano — Doador (5k), Premium (30k), Pro (100k). Reset a meia-noite (horario de Londres).' },
+      { version: '', date: '', tag: 'novo',      text: 'Barra de uso de tokens no chat — veja quanto do seu limite diario foi utilizado em tempo real.' },
+      { version: '', date: '', tag: 'melhoria', text: 'Chat atualizado para Gemini 2.5 Flash — modelo mais capaz e com respostas mais precisas.' },
+    ],
+  },
+  {
+    version: 'Alpha v0.8.3',
+    date: '04/2026',
+    label: '',
+    current: false,
+    entries: [
+      { version: '', date: '', tag: 'melhoria', text: 'Chat com IA atualizado para Gemini 2.5 Flash — respostas mais inteligentes e contextuais.' },
+    ],
+  },
+  {
+    version: 'Alpha v0.8.2',
+    date: '04/2026',
+    label: 'Security Update',
+    current: false,
+    entries: [
+      { version: '', date: '', tag: 'big',      text: 'Atualização de segurança completa — todos os endpoints agora exigem autenticação interna.' },
+      { version: '', date: '', tag: 'melhoria', text: 'API Key interna (X-API-Key) protege toda a API — acesso sem credencial retorna 403.' },
+      { version: '', date: '', tag: 'melhoria', text: 'Mensagens de erro sanitizadas — detalhes internos não vazam mais para o cliente.' },
+      { version: '', date: '', tag: 'melhoria', text: 'CORS restrito a métodos e headers específicos (GET, POST, Content-Type, Authorization).' },
+      { version: '', date: '', tag: 'melhoria', text: 'Chave do Gemini configurada de forma segura — nunca armazenada no objeto, jamais aparece em logs.' },
+      { version: '', date: '', tag: 'fix',      text: '.gitignore atualizado para bloquear .env*, *.key e *.pem — impossível commitar secrets por acidente.' },
+    ],
+  },
+  {
+    version: 'Alpha v0.8.1',
+    date: '04/2026',
+    label: '',
+    current: false,
+    entries: [
+      { version: '', date: '', tag: 'melhoria', text: 'Recomendações de campeão agora usam 8 dimensões (modelo Neo-Artemis) — Agressividade, Mapa, Eficiência, Pressão, Sobrevivência, Utilidade, Early Game e Consistência.' },
+      { version: '', date: '', tag: 'melhoria', text: 'Scores mais realistas — a fórmula combina similaridade de cosseno com distância euclidiana, acabando com os 100% fáceis.' },
+      { version: '', date: '', tag: 'novo',      text: 'Radar chart nos detalhes da recomendação — veja seu perfil vs o campeão em um gráfico de 8 eixos ao clicar.' },
+      { version: '', date: '', tag: 'novo',      text: 'Mapa completo de runas — todas as runas menores (Feitiçaria, Determinação, etc.) agora exibem ícone correto na tab de Build.' },
+    ],
+  },
+  {
     version: 'Alpha v0.8.0',
     date: '04/2026',
     label: 'Big Update',
-    current: true,
+    current: false,
     entries: [
       { version: '', date: '', tag: 'big',      text: 'Maior atualização desde o lançamento — nova interface, IA integrada, recomendações e monetização.' },
       { version: '', date: '', tag: 'novo',      text: 'Busca inteligente com autocomplete — digite o nome e veja sugestões instantâneas de jogadores já cadastrados.' },
