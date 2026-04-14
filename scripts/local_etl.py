@@ -1,10 +1,10 @@
 """
-local_etl.py — Script para rodar ETL localmente no PC.
+local_etl.py — ETL local: processa partidas e timelines do R2 -> Supabase.
 
-Processa X partidas do R2 (Bronze -> Prata) e envia pro Supabase.
 Uso:
-    python scripts/local_etl.py --count 50
-    python scripts/local_etl.py --count 100 --skip-existing
+    python scripts/local_etl.py --count 500 --skip-existing
+    python scripts/local_etl.py --count 1000 --skip-existing --refresh-cache
+    python scripts/local_etl.py --count 200 --only-timelines
 """
 
 import argparse
@@ -13,8 +13,8 @@ import os
 import sys
 import json
 import gzip
+from datetime import datetime
 
-# Adiciona raiz ao path pra importar scripts.*
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
@@ -24,11 +24,25 @@ from supabase import create_client
 from scripts.processing.process_matches import processar_partida, _get_processed_ids
 from scripts.processing.process_timelines import processar_timeline
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-logger = logging.getLogger(__name__)
+# ── Logging: erros vao pro arquivo, terminal fica limpo ──────────────────────
+LOG_FILE = os.path.join(os.path.dirname(__file__), "..", "etl.log")
+
+file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+
+# Silenciar httpx/httpcore/supabase no terminal
+for noisy in ["httpx", "httpcore", "hpack", "supabase", "realtime", "postgrest"]:
+    logging.getLogger(noisy).setLevel(logging.WARNING)
+
+logger = logging.getLogger("etl")
+logger.setLevel(logging.DEBUG)
+logger.addHandler(file_handler)
+
+# Handler de terminal so pra CRITICAL (nada aparece — tqdm cuida da UI)
+console = logging.StreamHandler()
+console.setLevel(logging.CRITICAL)
+logger.addHandler(console)
 
 
 def get_r2_client():
@@ -37,7 +51,7 @@ def get_r2_client():
     access_key = os.environ.get("CLOUDFLARE_R2_ACCESS_KEY_ID")
     secret_key = os.environ.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY")
     if not all([account_id, access_key, secret_key]):
-        logger.error("Variaveis R2 nao configuradas no .env")
+        print("Variaveis R2 nao configuradas no .env")
         return None
     return boto3.client(
         "s3",
@@ -52,41 +66,33 @@ def get_supabase():
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_KEY")
     if not url or not key:
-        logger.error("SUPABASE_URL e SUPABASE_KEY nao configurados no .env")
+        print("SUPABASE_URL e SUPABASE_KEY nao configurados no .env")
         return None
     return create_client(url, key)
 
 
-def list_r2_matches(s3, bucket: str, prefix: str = "matches/") -> list[str]:
-    """Lista TODOS os match JSONs no R2 (com paginacao). Mais recentes primeiro."""
-    try:
-        paginator = s3.get_paginator("list_objects_v2")
-        items = []
-        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-            for obj in page.get("Contents", []):
-                if obj["Key"].endswith(".json.gz"):
-                    items.append((obj["Key"], obj.get("LastModified")))
-        # Ordenar por data de modificacao DESC (mais recente primeiro)
-        items.sort(key=lambda x: x[1] or "", reverse=True)
-        return [k for k, _ in items]
-    except Exception as e:
-        logger.error(f"Erro ao listar R2: {e}")
-        return []
+def list_r2_keys(s3, bucket: str, prefix: str) -> list[str]:
+    """Lista TODOS os JSONs no R2 (com paginacao). Mais recentes primeiro."""
+    paginator = s3.get_paginator("list_objects_v2")
+    items = []
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            if obj["Key"].endswith(".json.gz"):
+                items.append((obj["Key"], obj.get("LastModified")))
+    items.sort(key=lambda x: x[1] or "", reverse=True)
+    return [k for k, _ in items]
 
 
-def download_and_parse(s3, bucket: str, key: str) -> dict | None:
-    """Baixa e parseia um match JSON.gz do R2."""
+def download(s3, bucket: str, key: str) -> dict | None:
     try:
         obj = s3.get_object(Bucket=bucket, Key=key)
-        raw = gzip.decompress(obj["Body"].read())
-        return json.loads(raw)
+        return json.loads(gzip.decompress(obj["Body"].read()))
     except Exception as e:
-        logger.warning(f"Erro ao baixar {key}: {e}")
+        logger.error(f"Download falhou {key}: {e}")
         return None
 
 
 def _get_processed_timeline_ids(db) -> set[str]:
-    """IDs de timelines ja processadas (participant_snapshots)."""
     try:
         result = db.table("processed_timelines").select("match_id").execute()
         return {r["match_id"] for r in (result.data or [])}
@@ -95,15 +101,22 @@ def _get_processed_timeline_ids(db) -> set[str]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="ETL local: processa partidas e timelines do R2 -> Supabase")
-    parser.add_argument("--count", type=int, default=50, help="Numero de itens a processar (default: 50)")
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        print("Instalando tqdm...")
+        os.system(f"{sys.executable} -m pip install tqdm -q")
+        from tqdm import tqdm
+
+    parser = argparse.ArgumentParser(description="Metis ETL — processa partidas e timelines do R2")
+    parser.add_argument("--count", type=int, default=50, help="Itens a processar (default: 50)")
     parser.add_argument("--skip-existing", action="store_true", help="Pular ja processados")
-    parser.add_argument("--bucket", default="metis", help="Nome do bucket R2 (default: metis)")
-    parser.add_argument("--only-matches", action="store_true", help="Processar so partidas (sem timelines)")
-    parser.add_argument("--only-timelines", action="store_true", help="Processar so timelines (sem partidas)")
-    parser.add_argument("--refresh-cache", action="store_true", help="Invalidar cache da tier list no backend apos processar")
-    parser.add_argument("--api-url", default="http://localhost:8000", help="URL do backend (default: localhost:8000)")
-    parser.add_argument("--api-key", default=os.environ.get("METIS_API_KEY", ""), help="API key do backend")
+    parser.add_argument("--bucket", default="metis", help="Bucket R2 (default: metis)")
+    parser.add_argument("--only-matches", action="store_true", help="So partidas")
+    parser.add_argument("--only-timelines", action="store_true", help="So timelines")
+    parser.add_argument("--refresh-cache", action="store_true", help="Atualizar tier list ao terminar")
+    parser.add_argument("--api-url", default="http://localhost:8000", help="URL do backend")
+    parser.add_argument("--api-key", default=os.environ.get("METIS_API_KEY", ""), help="API key")
     args = parser.parse_args()
 
     s3 = get_r2_client()
@@ -111,77 +124,89 @@ def main():
     if not s3 or not db:
         sys.exit(1)
 
-    # ── Partidas ──────────────────────────────────────────────────
-    if not args.only_timelines:
-        logger.info(f"=== Partidas: processando ate {args.count} ===")
+    print(f"\n  Metis ETL — {datetime.now().strftime('%H:%M:%S')}")
+    print(f"  Log completo: {os.path.abspath(LOG_FILE)}\n")
 
-        all_keys = list_r2_matches(s3, args.bucket, prefix="matches/")
-        logger.info(f"Encontradas {len(all_keys)} partidas no R2")
+    # ── Listar e parear partidas + timelines ────────────────────────
+    print("  Listando arquivos no R2...")
 
-        if args.skip_existing:
-            processed_ids = _get_processed_ids(db)
-            logger.info(f"{len(processed_ids)} ja processadas no banco")
-            all_keys = [k for k in all_keys if k.split("/")[-1].replace(".json.gz", "") not in processed_ids]
-            logger.info(f"{len(all_keys)} restantes apos filtrar")
+    match_keys = [] if args.only_timelines else list_r2_keys(s3, args.bucket, "matches/")
+    tl_keys = [] if args.only_matches else list_r2_keys(s3, args.bucket, "timelines/")
 
-        to_process = all_keys[:args.count]
-        sucesso = erro = dirty = 0
-
-        for i, key in enumerate(to_process):
-            match_data = download_and_parse(s3, args.bucket, key)
-            if not match_data:
-                erro += 1
-                continue
-            try:
-                saved = processar_partida(match_data, db_client=db)
-                if saved:
-                    sucesso += 1
-                else:
-                    dirty += 1
-                if (i + 1) % 10 == 0:
-                    logger.info(f"Partidas: {i + 1}/{len(to_process)} (OK:{sucesso} dirty:{dirty} erro:{erro})")
-            except Exception as e:
-                logger.error(f"Erro partida {key}: {e}")
-                erro += 1
-
-        logger.info(f"=== Partidas concluido: {sucesso} salvas, {dirty} dirty, {erro} erros ===")
-
-    # ── Timelines ─────────────────────────────────────────────────
-    if not args.only_matches:
-        logger.info(f"=== Timelines: processando ate {args.count} ===")
-
-        tl_keys = list_r2_matches(s3, args.bucket, prefix="timelines/")
-        logger.info(f"Encontradas {len(tl_keys)} timelines no R2")
-
-        if args.skip_existing:
+    if args.skip_existing:
+        if match_keys:
+            processed = _get_processed_ids(db)
+            match_keys = [k for k in match_keys if k.split("/")[-1].replace(".json.gz", "") not in processed]
+        if tl_keys:
             processed_tl = _get_processed_timeline_ids(db)
-            logger.info(f"{len(processed_tl)} timelines ja processadas")
             tl_keys = [k for k in tl_keys if k.split("/")[-1].replace(".json.gz", "") not in processed_tl]
-            logger.info(f"{len(tl_keys)} restantes apos filtrar")
 
-        to_process_tl = tl_keys[:args.count]
-        tl_ok = tl_err = 0
+    # Montar mapa de match_id -> timeline key pra parear
+    tl_map: dict[str, str] = {}
+    for k in tl_keys:
+        mid = k.split("/")[-1].replace(".json.gz", "")
+        tl_map[mid] = k
 
-        for i, key in enumerate(to_process_tl):
-            tl_data = download_and_parse(s3, args.bucket, key)
-            if not tl_data:
-                tl_err += 1
-                continue
-            try:
-                saved = processar_timeline(tl_data, db_client=db)
-                if saved:
-                    tl_ok += 1
-                if (i + 1) % 10 == 0:
-                    logger.info(f"Timelines: {i + 1}/{len(to_process_tl)} (OK:{tl_ok} erro:{tl_err})")
-            except Exception as e:
-                logger.error(f"Erro timeline {key}: {e}")
-                tl_err += 1
+    # Lista final: cada item = (match_key, timeline_key ou None)
+    pairs: list[tuple[str | None, str | None]] = []
+    seen_tl: set[str] = set()
 
-        logger.info(f"=== Timelines concluido: {tl_ok} salvas, {tl_err} erros ===")
+    for mk in match_keys[:args.count]:
+        mid = mk.split("/")[-1].replace(".json.gz", "")
+        tk = tl_map.get(mid)
+        pairs.append((mk, tk))
+        if tk:
+            seen_tl.add(mid)
+
+    # Timelines orfas (sem match correspondente) — so se --only-timelines
+    if args.only_timelines:
+        for tk in tl_keys[:args.count]:
+            mid = tk.split("/")[-1].replace(".json.gz", "")
+            if mid not in seen_tl:
+                pairs.append((None, tk))
+
+    ok = dirty = err = tl_ok = tl_err = 0
+
+    with tqdm(pairs, desc="  ETL", unit="par", ncols=90) as pbar:
+        for match_key, tl_key in pbar:
+            # Processar partida
+            if match_key:
+                data = download(s3, args.bucket, match_key)
+                if data:
+                    try:
+                        saved = processar_partida(data, db_client=db)
+                        if saved:
+                            ok += 1
+                        else:
+                            dirty += 1
+                    except Exception as e:
+                        logger.error(f"Partida {match_key}: {e}")
+                        err += 1
+                else:
+                    err += 1
+
+            # Processar timeline correspondente logo em seguida
+            if tl_key:
+                tl_data = download(s3, args.bucket, tl_key)
+                if tl_data:
+                    try:
+                        saved = processar_timeline(tl_data, db_client=db)
+                        if saved:
+                            tl_ok += 1
+                    except Exception as e:
+                        logger.error(f"Timeline {tl_key}: {e}")
+                        tl_err += 1
+                else:
+                    tl_err += 1
+
+            pbar.set_postfix_str(f"ok:{ok} dirty:{dirty} tl:{tl_ok} err:{err+tl_err}")
+
+    logger.info(f"ETL: {ok} partidas salvas, {dirty} dirty, {tl_ok} timelines, {err + tl_err} erros")
+    print(f"  Resultado: {ok} partidas, {dirty} dirty, {tl_ok} timelines, {err + tl_err} erros\n")
 
     # ── Refresh cache ────────────────────────────────────────────
     if args.refresh_cache and args.api_key:
-        logger.info("Invalidando cache da tier list...")
+        print("  Atualizando tier list...", end=" ")
         try:
             import requests
             res = requests.post(
@@ -190,12 +215,14 @@ def main():
                 timeout=10,
             )
             if res.ok:
-                data = res.json()
-                logger.info(f"Cache invalidado: {data.get('cleared', 0)} entradas removidas")
+                d = res.json()
+                print(f"OK ({d.get('cleared', 0)} entradas)")
             else:
-                logger.warning(f"Falha ao invalidar cache: HTTP {res.status_code}")
+                print(f"Falhou (HTTP {res.status_code})")
         except Exception as e:
-            logger.warning(f"Nao foi possivel invalidar cache: {e}")
+            print(f"Erro ({e})")
+
+    print("  Concluido.\n")
 
 
 if __name__ == "__main__":

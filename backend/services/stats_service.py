@@ -69,22 +69,24 @@ def buscar_stats_campeao(
 
     Retorna sempre 200 — se total_matches < min_matches, retorna stats=None.
     """
-    # ── Busca com nested select (FK: match_id → matches, puuid → players) ─────
-    query = (
-        db_client.table("match_participants")
-        .select(
-            "champion_name, team_position, win, kills, deaths, assists, "
-            "gold_earned, damage_per_minute, kill_participation, "
-            "matches(game_version, queue_id), players(server)"
-        )
-        .ilike("champion_name", champion)
+    # ── Busca paginada ─────────────────────────────────────────────────
+    select_cols = (
+        "champion_name, team_position, win, kills, deaths, assists, "
+        "gold_earned, damage_per_minute, kill_participation, "
+        "matches(game_version, queue_id), players(server)"
     )
-
-    if role:
-        query = query.eq("team_position", role.upper())
-
-    result = query.execute()
-    rows: list[dict] = result.data or []
+    rows: list[dict] = []
+    page_size = 1000
+    offset = 0
+    while True:
+        q = db_client.table("match_participants").select(select_cols).ilike("champion_name", champion)
+        if role:
+            q = q.eq("team_position", role.upper())
+        batch = q.range(offset, offset + page_size - 1).execute().data or []
+        rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
 
     # ── Filtros Python para campos de tabelas relacionadas ─────────────────────
     if server:
@@ -150,20 +152,28 @@ def buscar_tierlist(
         logger.debug(f"[cache] tierlist hit: {cache_key[:60]}")
         return cached
 
-    query = (
-        db_client.table("match_participants")
-        .select(
-            "match_id, champion_name, team_position, win, kills, deaths, assists, "
-            "gold_earned, damage_per_minute, "
-            "matches(game_version, queue_id, bans), players(server)"
-        )
+    # Paginar pra pegar TODOS os registros (PostgREST limita 1000 por default)
+    select_cols = (
+        "match_id, champion_name, team_position, win, kills, deaths, assists, "
+        "gold_earned, damage_per_minute, "
+        "matches(game_version, queue_id, bans), players(server)"
     )
+    rows: list[dict] = []
+    page_size = 1000
+    offset = 0
 
-    if role:
-        query = query.eq("team_position", role.upper())
+    while True:
+        q = db_client.table("match_participants").select(select_cols)
+        if role:
+            q = q.eq("team_position", role.upper())
+        result = q.range(offset, offset + page_size - 1).execute()
+        batch = result.data or []
+        rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
 
-    result = query.execute()
-    rows: list[dict] = result.data or []
+    logger.info(f"[tierlist] {len(rows)} participantes carregados")
 
     # Filtros Python para campos de tabelas relacionadas
     if server:
