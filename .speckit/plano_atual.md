@@ -1,446 +1,174 @@
-# Metis - Plano Atual (Milestones Tracker)
+# Metis — Plano Atual
 
-*Sincronizado com Trello Oficial — última sync: 2026-04-13*
-*Colunas do Trello: [PUC Zaras] | [André] | [Takis] | [Depende de Outras Tarefas] | [Pegue Suas Tarefas] | [Revisão]*
-
----
-
-## 🗺️ Roadmap de Features — Itens 1 a 12 (César + Claude)
-
-Evolução da plataforma de dados e UX, executada em sessões de pair-programming.
-
-| # | Feature | Versão | Status |
-|---|---------|--------|--------|
-| 1 | `GET /api/v1/player/history` — histórico paginado com nested select | v0.6.0 | ✅ |
-| 2 | `MatchCard` reescrito — items, keystone, CS/m, data relativa, patch | v0.6.4 | ✅ |
-| 3 | `GET /api/v1/stats/tierlist` — tier list global com filtros | v0.6.0 | ✅ |
-| 4 | `matches_dirty` + filtro SoloQ/Flex + paginação `/history` | v0.6.3 | ✅ |
-| 5 | `process_matches.py` + `riot_service.py` — 12 campos enriquecidos (items, runas, CS/m, etc.) | v0.6.4 | ✅ |
-| 6 | `backfill_enriched_fields.py` — backfill dos campos antigos via R2 | v0.6.4 | ✅ |
-| 7 | `GET /api/v1/match/{match_id}` — scoreboard com blue/red team + max_damage | v0.6.4 | ✅ |
-| 8 | `/matches/[match_id]` — página de scoreboard completa no frontend | v0.6.4 | ✅ |
-| 9 | `GET /api/v1/match/{match_id}/timeline` — lazy-cache da Riot API | v0.6.5 | ✅ |
-| 10 | `TimelineChart.tsx` — gráfico SVG CS/m / Ouro / XP com tabs | v0.6.5 | ✅ |
-| 11 | Endpoints de campeão — `/overview`, `/builds`, `/matchups`, `/synergies` | v0.7.0 | ✅ |
-| 12 | `/champions/[champion]` — página de campeão com builds e matchups | v0.7.0 | ✅ |
-
-**Extras desta sessão (fora da lista original):**
-- Rate limit de sync (5 min cooldown + countdown no frontend) — v0.6.6
-- Painel admin `/admin` + conta `admin@metis.gg` — v0.6.6
-- Player page: auto-resolve Riot ID, ícone do invocador, UX de sync melhorada — v0.6.4
+*Ultima sync: 2026-04-14 | Versao atual: p-0.9.0*
 
 ---
 
-## 🧑‍💻 Equipe e Perfis de Atuação
+## Estado Atual das Versoes
 
-| Membro | Papel | Foco |
-|--------|-------|------|
-| **César (PUC Zaras)** | Tech Lead, Data Architect, CI/CD | Python/Polars, GitHub Actions, Supabase SQL, R2 |
-| **André** | Backend & AI Engineer | FastAPI, Prompt Engineering, Llama 3, Gemma 4, Gemini Flash Lite, OpenRAG |
-| **Takida (Takis)** | Frontend & UX | Next.js App Router, Tailwind, Supabase Auth |
-| **César + Claude** | Revisão & Validação | Code review, testes, qualidade |
-
----
-
-## ✅ [Revisão] Milestone 1 — Concluído
-
-Cards na coluna [Revisão] com todas as checklists completas:
-
-### [Revisão ✅] Configuração do pgvector e Tabela Ouro no Supabase
-- [x] Habilitar extensão `CREATE EXTENSION IF NOT EXISTS vector;`
-- [x] Criar tabela `guides_gold` com colunas: id, champion, title, author, content, embedding (vector)
-- [x] Criar índice HNSW na coluna embedding (`vector_cosine_ops`)
-- [x] Criar função RPC `match_documents` com operador `<=>` do pgvector
-
-### [Revisão ✅] Criar Endpoints Base do FastAPI
-- [x] Inicializar FastAPI em `backend/main.py`
-- [x] Configurar CORSMiddleware (origens do Next.js)
-- [x] Rota `GET /api/v1/health` → `{"status": "online", "system": "Metis"}`
-- [x] Modelo Pydantic `ChatRequest` (campo `mensagem: str`)
-- [x] Esqueleto da rota `POST /api/v1/chat`
-- [x] Deploy contínuo no Railway apontando para `backend/`
-
-### [Done ✅] Endpoint FastAPI - Sincronizar Partidas do Jogador
-- [x] Rota `POST /api/v1/player/sync` recebendo Riot ID (ex: `Zaras#0210`)
-- [x] RiotWatcher para descobrir PUUID
-- [x] Buscar IDs das últimas partidas via `match.matchlist_by_puuid`
-- [x] Download dos dados detalhados por Match ID
-- [x] Filtrar remakes e partidas < 15 min
-- [x] UPSERT na tabela `matches` do Supabase
-- [x] **Bugfix (revisão):** `game_version` normalizada via `_normalizar_patch`, `team_position` defaulta para UNKNOWN, `match_participants` upsert com `on_conflict="match_id,puuid"`
-
-### [Done ✅] Endpoint FastAPI - Estatísticas Médias de Campeões
-- [x] Rota `GET /api/v1/stats/champions`
-- [x] Agregação Python sobre match_participants com nested select (matches + players)
-- [x] Filtros via Query Params (`?role=`, `?server=`, `?patch=`, `?elo=`, `?min_matches=`)
-- [x] Retorno JSON estruturado com winrate, KDA, gold, DPM
-- [x] `?elo=` aceito mas documentado como sem efeito (sem rank por partida no schema)
-- [x] Arquivos: `backend/services/stats_service.py` + `backend/api/routes/stats.py`
+| Versao | Status | O que entregou |
+|--------|--------|----------------|
+| v0.1–0.7 | ✅ Concluido | Base de dados, pipeline, endpoints, frontend inicial |
+| v0.8.0 | ✅ Concluido | Big Update: header, tier list, player page, match detail, itens, IA, pricing |
+| v0.8.1 | ✅ Concluido | Recomendacoes 8D (Neo-Artemis), radar chart, mapa de runas completo |
+| v0.8.2 | ✅ Concluido | Security: API key middleware, CORS restrito, erros sanitizados, Gemini seguro |
+| v0.8.3 | ✅ Concluido | Gemini 2.5 Flash |
+| p-0.9.0 | ✅ Concluido | Guardrail LoL, token limits por tier, barra de uso, SDK google-genai |
 
 ---
 
-## 🔄 Tickets Ativos — v0.7.0 (Em fila)
+## 🎯 Roadmap v0.9.0 — Analytics Profundo
 
-### [Done ✅] Endpoints de Campeão — Backend (Item 11)
-**Arquivo:** `backend/api/routes/champion.py` [NEW] + `backend/services/champion_service.py` [NEW]
+> Objetivo: tornar o Metis a fonte mais rica de analytics de LoL em PT-BR.
+> Pre-requisito critico: **parsear eventos ITEM_PURCHASED e SKILL_LEVEL_UP do critical_events** — desbloqueia 3 dos 5 blocos abaixo.
 
-- [x] `GET /api/v1/champion/{champion}/overview` — stats médias do campeão (winrate, KDA, DPM, CS/m, gold) por role/patch/server
-- [x] `GET /api/v1/champion/{champion}/builds` — itens mais frequentes com winrate por item (via view `champion_item_stats`)
-- [x] `GET /api/v1/champion/{champion}/matchups` — winrate contra cada oponente na mesma lane
-- [x] `GET /api/v1/champion/{champion}/synergies` — winrate com aliados na mesma partida
-- [x] Registrar router em `main.py`
-- [x] Testes pytest — `tests/test_champion_api.py` (18 testes)
+### Bloco 0 (PRE-REQUISITO) — Parsing de Eventos do Timeline
+**Responsavel:** Cesar | **Complexidade:** Media | **Desbloqueia:** Blocos 1, 2 e 3
 
-### [Done ✅] Página de Campeão — Frontend (Item 12)
-**Arquivo:** `frontend/src/app/champions/[champion]/page.tsx` [NEW]
+- [ ] Estender `extrair_dados_timeline()` em `process_timelines.py` para parsear:
+  - `ITEM_PURCHASED` — item_id + timestamp + participant_id
+  - `SKILL_LEVEL_UP` — skill_slot (Q/W/E/R) + level + timestamp
+- [ ] Salvar esses eventos na tabela `critical_events` (schema ja existe com dados de kill/dragon/torre)
+- [ ] Rodar backfill nos matches existentes via pipeline
+- [ ] Verificar que os 37k eventos existentes + novos ficam consistentes
 
-- [x] Fetch em `GET /api/v1/champion/{champion}/overview` → card de stats (8 métricas)
-- [x] Fetch em `GET /api/v1/champion/{champion}/builds` → tabela de itens com winrate
-- [x] Fetch em `GET /api/v1/champion/{champion}/matchups` → tabela de matchups (ícone, winrate, games)
-- [x] Fetch em `GET /api/v1/champion/{champion}/synergies` → tabela de sinergias
-- [x] Filtros: role (botões), server (select), patch (input)
-- [x] Botão "Campeão" nos MatchCards → `/champions/{champion}`
-- [x] Nome clicável na Tier List → `/champions/{champion}`
-- [x] Ícone do campeão via Data Dragon CDN
+### Bloco 1 — Matchup Detalhado
+**Responsavel:** Cesar (backend) + Takida (frontend) | **Complexidade:** Grande
 
----
+- [ ] `GET /api/v1/champion/{champion}/vs/{opponent}` — pagina de matchup
+- [ ] Forcar mesma lane (TOP vs TOP, MID vs MID) — counter de lane real
+- [ ] Gold diff e XP diff @5/10/15min — cruzar `match_timelines` com `match_participants`
+- [ ] Delta normalizado: quao diferente vs media geral desse campeao
+- [ ] Stats especificas da matchup (KDA, CS/m, dano, visao)
+- [ ] Builds usadas CONTRA esse oponente especifico
+- [ ] Link clicavel na tabela de matchups do campeao → pagina detalhada
 
-## 🔄 Tickets Ativos
+### Bloco 2 — Itens Profundo
+**Responsavel:** Cesar (backend) + Andre (AI) + Takida (frontend) | **Complexidade:** Grande
+**Depende de:** Bloco 0 (ordem de compra)
 
-### [Done ✅] Script de Limpeza de Partidas (Bronze → Prata)
-**Arquivo:** `scripts/processing/process_matches.py`
-- [x] Criar a lógica de limpeza (filtros: duração, queue, participantes, bots, teamPosition, game_version)
-- [x] Montar o loop R2 (`rodar_pipeline`: lista, filtra processed_matches, baixa, processa, marca)
-- [x] GitHub Action `.github/workflows/process_matches.yml` (cron 10:00 UTC, BATCH_SIZE=50)
-- [x] Bugfix: `on_conflict="match_id,puuid"` no upsert de match_participants
+- [ ] Winrate por slot (1o/2o/3o item lendario) — usando eventos ITEM_PURCHASED
+- [ ] Delta WR: diff de quem builda X como 1o vs 2o item
+- [ ] Detectar combos frequentes (pares e trios): Tocha+Liandry → WR do combo
+- [ ] Combos por campeao: quais campeoes mais usam cada combo
+- [ ] Combos CONTRA: contra quais times cada combo tem melhor WR
+- [ ] Combos COM: com quais aliados cada combo funciona melhor
+- [ ] AI titles: Gemini gera nomes criativos pros combos ("Burn Build", "Poke Machine")
 
-### [PUC Zaras] Automatizar a Raspagem do Mobafire + Bugfix
-**Descrição:** Playwright rodando via GitHub Actions 1x/semana, salvando HTML bruto no R2 (Camada Bronze).
-- [ ] Corrigir bug existente no script Playwright
-- [ ] Configurar GitHub Action com schedule semanal
-- [ ] Validar upload no R2
+### Bloco 3 — Builds Core na Pagina do Campeao
+**Responsavel:** Cesar + Takida | **Complexidade:** Media
+**Depende de:** Bloco 0 (para ter ordem real) — sem ele, usa top-3 mais frequentes juntos
 
-### [Revisão ✅] Modelagem e Ingestão de Itens (Builds dos Campeões)
-**Arquivos:** Supabase SQL + `scripts/processing/process_matches.py` + `data/static/item.json`
-- [x] Criar tabela `champion_builds` no Supabase (champion_name, item_id, item_name, pick_count, win_count, patch) + UNIQUE (champion_name, item_id, patch)
-- [x] `item.json` já existia em `data/static/` (v16.4.1, 688 itens)
-- [x] `_get_item_dict()` com lazy cache (lê o JSON uma vez por processo)
-- [x] `extrair_builds_partida(match_json, item_dict)` — função pura, ignora slots 0, ignora IDs fora do dict, ignora bots
-- [x] `processar_partida()` chama RPC `upsert_champion_builds` — atomic ON CONFLICT DO UPDATE
-- [x] View SQL `champion_item_stats` com winrate_pct calculado automaticamente
-- [x] `tests/test_process_builds.py` — 16 testes passando
+- [ ] Core build visual: Item 1 → Item 2 → Item 3 com setas e winrate do trio
+- [ ] Builds alternativas (2o e 3o combo mais comum)
+- [ ] Skill order: Q/W/E/R por nivel (eventos SKILL_LEVEL_UP)
 
----
+### Bloco 4 — Recomendacao de Runas
+**Responsavel:** Cesar + Takida | **Complexidade:** Media
+**Dados ja disponiveis:** `runes_raw` JSONB em `match_participants`
 
-### [André] Prompt Engineering — Multi-LLM (Llama 3 + Gemma 4 + Gemini Flash Lite)
-**Arquivos:** `backend/services/llm_service.py` + `backend/prompts/system_prompt.txt`
-**Stack LLM atualizado (2026-04-13):** Llama 3 e Gemma 4 via Ollama (local) + Gemini Flash Lite via API Google (cloud) + RAG próprio
-- [ ] Escrever `system_prompt.txt` ("Você é Metis, o estrategista. Nunca alucine. Responda APENAS com base no contexto.")
-- [ ] Criar `llm_service.py` montando: System Prompt + Contexto (do RAG) + Pergunta do Usuário
-- [ ] Suporte multi-modelo: Ollama (Llama 3 / Gemma 4) para uso local + Gemini Flash Lite via API para produção
-- [ ] Configurar `temperature=0.1` (respostas analíticas e determinísticas)
-- [ ] Retornar string gerada para a rota `POST /api/v1/chat`
+- [ ] Agregar runas por campeao+role a partir do `runes_raw`
+- [ ] Mostrar: keystone mais usado + arvores + stat shards + WR de cada combo
+- [ ] Integrar na pagina do campeao (nova tab ou secao na tab Builds)
+- [ ] Na tab Build da partida: mostrar TODAS as runas (ja existe parcialmente)
+- [ ] Nas recomendacoes de campeao do player: sugerir runas que combinam com o playstyle
 
----
+### Bloco 5 — CI/CD e Qualidade
+**Responsavel:** Cesar | **Complexidade:** Media
 
-### [Done ✅] Tela de Chat e Autenticação no Next.js (v0.4 + v0.5)
-**Arquivos:** `frontend/src/app/auth/` + `frontend/src/app/chat/` + `frontend/src/app/page.tsx` + `frontend/src/app/players/[puuid]/`
-- [x] `package.json` com next 15, @supabase/ssr, lucide-react, tailwindcss — `npm install` OK
-- [x] `src/lib/supabase/client.ts` — `createBrowserClient` para componentes client
-- [x] `src/lib/supabase/server.ts` — `createServerClient` com cookies para Server Components
-- [x] `src/middleware.ts` — refresh de sessão + redirect: /chat sem auth → /auth; /auth com auth → /
-- [x] `src/app/page.tsx` — home pública: busca de jogador + lista de supervisão (watched_players)
-- [x] `src/app/auth/page.tsx` — Login Email/Senha via Supabase Auth, redirect para /
-- [x] `src/app/chat/page.tsx` — gate premium (app_metadata.is_premium), chat com FastAPI
-- [x] `src/app/players/[puuid]/page.tsx` — stats públicas placeholder + toggle supervisão (Star/StarOff + label)
-- [x] Supabase `watched_players` — tabela + RLS + UNIQUE(user_id, puuid)
-- [x] `src/components/ui/ChatInput.tsx` — textarea + botão Send (lucide), Enter para enviar
-- [x] `src/components/ui/ChatMessage.tsx` — bolha user (azul) vs metis (surface), avatares
-- [x] `npx tsc --noEmit` — zero erros TypeScript
-- [ ] Deploy no Vercel (pendente: Takida configura env vars + domínio)
-- [ ] Concessão premium: `auth.admin.updateUserById(userId, { app_metadata: { is_premium: true } })` via service role
+- [ ] GitHub Action: roda `pytest tests/ -v` em todo PR
+- [ ] GitHub Action: roda `npx tsc --noEmit` no frontend em todo PR
+- [ ] Smoke test de endpoints criticos (health, tierlist, player/history)
+- [ ] Deploy automatico no Railway (backend) e Vercel (frontend) apos merge na main
 
-### [Takis] Lógica de Login (Supabase + FastAPI)
-**Arquivos:** `frontend/src/app/auth/` + `backend/core/security.py`
-**Libs Frontend:** `@supabase/supabase-js`, `@supabase/ssr` | **Backend:** `fastapi`, `python-jose`
-- [ ] Página de Login e Cadastro (Email/Senha ou Google)
-- [ ] Salvar sessão via Supabase SSR (Cookies)
-- [ ] Interceptador: adicionar `Authorization: Bearer <TOKEN>` em todo fetch
-- [ ] FastAPI: dependência `get_current_user` lendo o header
-- [ ] Validar token com chave pública Supabase → retornar 401 se inválido
-
-### [Done ✅] Separação de Dados Sujos + Paginação (v0.6.3)
-- [x] Tabela `matches_dirty` no Supabase (reason + snapshot JSON + RLS)
-- [x] `riot_service.py` — filtro SoloQ/Flex (420/440) + remake/short_game → matches_dirty
-- [x] `GET /api/v1/player/history` com `offset` + `has_more`
-- [x] Player page — carga inicial 15, botão "Carregar mais" (+10), badge SoloQ/Flex
-
-### [Done ✅] Tela de Histórico de Partidas do Jogador
-**Arquivos:** `frontend/src/app/players/[puuid]/page.tsx` + `frontend/src/components/matches/MatchCard.tsx`
-- [x] Fetch em `GET /api/v1/player/history?puuid=&limit=10`
-- [x] Componente `MatchCard` (Resultado, Campeão via Data Dragon CDN, KDA, Ouro, DPM, duração)
-- [x] Azul = Vitória, vermelho = Derrota
-- [x] Botão "Analisar" → `/chat?match_id=&puuid=`
-- [x] Toggle supervisão (Star/StarOff) com label livre, watch via `watched_players`
-- [x] Backend: `GET /api/v1/player/history` com nested select PostgREST
-
-### [Done ✅] Tela de Estatísticas Globais (Tier List / Meta)
-**Arquivos:** `frontend/src/app/champions/page.tsx` + `frontend/src/components/stats/StatsTable.tsx`
-- [x] Rota `/champions` no Next.js
-- [x] Fetch em `GET /api/v1/stats/tierlist` com filtros role/server/patch
-- [x] Tabela sortável por qualquer coluna (click header, toggle asc/desc)
-- [x] Ícone do campeão via Data Dragon CDN
-- [x] Winrate: verde > 51%, vermelho < 49%
-- [x] Filtros: role (botões), servidor (select), patch (input), elo (emblemas Data Dragon, UI-only)
-- [x] Backend: `GET /api/v1/stats/tierlist` + `buscar_tierlist()` em `stats_service.py`
-- [ ] Cores percentil (top/bottom 25%) por coluna — pendente
-- [ ] Badge "baixa amostra" para campeões com poucos dados no filtro — pendente
+### Seguranca (Backlog — nao bloqueia 0.9.0)
+- [ ] Rate limiting por IP (Railway middleware ou Cloudflare)
+- [ ] Supabase RLS nas tabelas publicas (players, matches, match_participants)
+- [ ] WAF / Cloudflare na frente do Railway
 
 ---
 
-## 🎯 Visão Beta v1.0.0 — O que define a saída do Alpha
+## 🏆 Visao v1.0.0 — Release Oficial
 
-> Registrado em 2026-04-03. Dois pilares precisam estar entregues para declarar Beta.
+> A 1.0.0 e a versao que sai do Alpha e entra em producao real com usuarios pagantes.
+> Dois pilares obrigatorios: **produto completo** e **monetizacao funcionando**.
 
-### Pilar 1 — Profundidade Analítica
+### Pilar 1 — Produto Completo
 
-**Stats filtráveis com contexto cruzado**
-- [ ] Filtros combinados na página de campeão: winrate/KDA com build específica **dentro** de um matchup específico (ex: "Ahri com Luden contra Zed mid no patch 16.x")
-- [ ] Backend: extensão de `champion_service.py` com filtro por `item_id` cruzado com `opponent_champion`
+**Analytics:**
+- Todos os 5 blocos da 0.9.0 entregues
+- Timeline interativa com mapa (critico_events ja tem posicoes X/Y)
+- Dashboard de evolucao temporal do jogador (WR por semana/mes)
+- Comparacao com jogadores do mesmo elo
 
-**Tela de partida com mapa interativo**
-- [ ] Mapa do Summoner's Rift com eventos plotados (mortes, dragões, Barão, torres)
-- [ ] Cada evento clicável: timestamp + quem matou + quem morreu + assistentes
-- [ ] Dados disponíveis: `critical_events` já coleta tudo desde v0.7.2 (vítima, assistentes, tipo de monstro/torre, posição X/Y)
-- [ ] Slider de tempo: ver onde cada jogador estava no mapa em momentos-chave
-- [ ] Dados disponíveis: `participant_snapshots` (10/15/20 min) com gold, level, CS
+**IA:**
+- Chat com RAG real: Metis consulta dados do banco antes de responder
+- Function calling: Gemini chama endpoints da propria API ("busca o historico desse jogador")
+- Build sugerida por IA: dado campeao+lane+matchup → build com explicacao
+- Alertas de meta: "Esse campeao subiu 5% de WR nesse patch"
 
-**Gap de ouro temporal**
-- [ ] Gráfico de diferença de ouro entre blue/red team ao longo do tempo
-- [ ] Extensão do `TimelineChart.tsx` (já tem tabs CS/m, Ouro, XP)
-- [ ] Dados disponíveis: `total_gold` nos snapshots por minuto já coletados
+**Conta Riot:**
+- Vinculo OAuth Riot Sign On (conta verificada)
+- Badges automaticas: Challenger, 1kk maestria, etc.
+- Perfil publico com badges visiveis
 
-**Timeline de eventos da partida**
-- [ ] Feed cronológico de eventos (kill, dragão, torre, Barão) com ícones e timestamps
-- [ ] Destaque para o jogador sendo analisado (mortes, abates, participações)
+### Pilar 2 — Monetizacao Funcionando
 
-### Pilar 2 — IA Premium (M4)
+- [ ] Gateway de pagamento integrado (Stripe ou MercadoPago)
+- [ ] Fluxo completo: plano → pagamento → acesso automatico
+- [ ] Renovacao automatica + cancelamento self-service
+- [ ] Webhook de pagamento → atualiza `subscriptions` e `app_metadata.tier` no Supabase
+- [ ] Pagina de conta do usuario (ver plano, historico de pagamentos, cancelar)
 
-- [ ] Mobafire scraper rodando via Action → guias no R2 (**desbloqueado com fix de hoje**)
-- [ ] `vectorize_guides.py` → guias vetorizados em `guides_gold` (OpenRAG + pgvector)
-- [ ] `rag_service.py` → busca semântica via RPC `match_documents`
-- [ ] `llm_service.py` (André) → prompt engineering multi-LLM (Llama 3 + Gemma 4 via Ollama, Gemini Flash Lite via API)
-- [ ] `/api/v1/chat` com IA real (hoje é skeleton)
-- [ ] Gate premium funcional com análise tática por partida e por jogador
+### Pilar 3 — Estabilidade e Escala
 
-**Condição de entrada na Beta:** ambos os pilares entregues. Não há versão intermediária.
+- [ ] Rate limiting real (Cloudflare ou Railway)
+- [ ] Monitoramento: alertas de erro, latencia, uso de tokens IA
+- [ ] Supabase RLS completo em todas as tabelas
+- [ ] Testes automatizados cobrindo todos os endpoints e flows criticos
+- [ ] SLA definido: 99.5% uptime, resposta < 500ms nos endpoints principais
+- [ ] Documentacao de onboarding pra novos devs (CONTRIBUTING.md)
 
----
+### Criterio de entrada na 1.0.0
 
-## 🔒 [Depende de Outras Tarefas]
-
-### Vetorização dos Guias (Camada Ouro)
-**Bloqueio:** Depende de Mobafire scraper (PUC Zaras) e process_matches (PUC Zaras)
-**Arquivos:** `scripts/ouro/vectorize_guides.py` + `.github/workflows/vetorizacao_diaria.yml`
-**Libs:** `boto3`, `openrag`, `supabase`, `python-dotenv`
-- [ ] Criar `.yml` no Actions (cron `'0 3 * * *'`)
-- [ ] `boto3` para listar/baixar HTMLs do R2 (Camada Bronze)
-- [ ] Parse do JSON nativo + iterar sobre array de chapters
-- [ ] Passar `chapter['content']` pelo pipeline OpenRAG (chunking)
-- [ ] Vetorizar blocos com OpenRAG → embeddings
-- [ ] UPSERT na `guides_gold`: texto + metadados (campeão, patch, autor) + vetor embedding
-
-### Conectar o FastAPI com o Supabase (Busca Semântica)
-**Bloqueio:** Depende de Vetorização dos Guias
-**Arquivos:** `backend/services/rag_service.py` + SQL Editor Supabase
-**Libs:** `openrag`, `supabase`
-- [ ] Criar função RPC `match_documents` no Supabase (operador `<->` pgvector)
-- [ ] `rag_service.py`: receber string da pergunta
-- [ ] Vetorizar a pergunta com OpenRAG (mesmo modelo da ingestão)
-- [ ] Chamar `supabase.rpc('match_documents', {'query_embedding': vetor, 'match_threshold': 0.78, 'match_count': 3})`
-- [ ] Extrair texto dos resultados e formatar bloco de Contexto para o FastAPI
+Todos os itens abaixo devem estar verdes:
+- [ ] Gateway de pagamento processando transacoes reais
+- [ ] Chat com RAG (nao so LLM sem contexto)
+- [ ] Todos os blocos analiticos da 0.9.0 entregues
+- [ ] Timeline interativa funcionando
+- [ ] CI/CD rodando em 100% dos PRs
+- [ ] Pelo menos 1 usuario pagante ativo (prova de conceito do fluxo completo)
 
 ---
 
-## 🆓 [Pegue Suas Tarefas]
+## Dependencias Tecnicas Criticas
 
-*Sync Trello: 2026-04-13*
+```
+Bloco 0 (ITEM_PURCHASED parsing)
+    ↓
+    ├─ Bloco 1 (builds na matchup)
+    ├─ Bloco 2 (itens profundo: combos, WR por slot)
+    └─ Bloco 3 (builds core: ordem real)
 
-### Tela de Detalhes da Partida
-**Tags:** Frontend, Análise de Dados, API/Backend
-**Referência visual:** OP.GG match detail (tabs: Visão Geral, Pontuação OP, Análise de Equipe, Build, Etc.)
-**Status:** Aberto (0%)
+Bloco 4 (runas) — independente, pode comecar agora
+Bloco 5 (CI/CD) — independente, pode comecar agora
 
-**Scoreboard principal:**
-- [ ] Ordenar jogadores de cada time por role: TOP → JG → MID → ADC → SUP (sempre)
-- [ ] Metis Score: pontuação própria do Metis baseada na performance média da partida (KDA, CS, visão, dano, ouro — normalizado)
-
-**Tab: Análise de Equipe** (estilo OP.GG)
-- [ ] Gráficos donut comparando Equipe Vencedora vs Perdedora
-- [ ] Seções: Abates do Campeão, Ouro, Dano, Vigias Colocadas, Dano Recebido, CS
-- [ ] Barras horizontais por jogador com ícone do campeão + valor individual
-- [ ] Total de cada time no centro do donut
-
-**Tab: Timeline interativa**
-- [ ] Mapa do Summoner's Rift com eventos plotados (kills, dragões, torres, Barão)
-- [ ] Feed cronológico lateral com eventos: kill (quem matou + quem morreu + assistentes), dragão, torre, monstro do Vazio
-- [ ] Gráfico de diferença de ouro (blue vs red) ao longo do tempo com slider
-- [ ] Hover em evento: tooltip mostrando o estado de cada jogador naquele momento (gold, level, CS, itens)
-- [ ] Checkboxes para filtrar tipos de evento: Abates, Torres
-- [ ] Ícones dos jogadores no topo para filtrar por participante
-- [ ] Dados disponíveis: `critical_events` (vítima, assistentes, tipo, posição X/Y) + `participant_snapshots`
-
-**Tab: Build**
-- [ ] Build de itens de cada jogador com timestamps (quando comprou cada item)
-- [ ] Ordem de habilidades (skill order por nível)
-- [ ] Runas detalhadas: árvore primária + secundária + fragmentos (Precisão, Dominação, Fragmentos)
-- [ ] Dados disponíveis: `items` JSONB, `runes_raw` JSONB em `match_participants`
-
-### Detalhes do Jogador na Tela de Jogador
-**Tags:** Frontend, API/Backend
-**Referência visual:** OP.GG player profile
-**Status:** Aberto (0%)
-
-**Busca inteligente:**
-- [ ] Input único aceita formato `Zaras#0210` — parseia automaticamente nick e tag pelo `#`
-- [ ] Se o usuário digitar tudo no campo de nome (ex: `Zaras#0210`), capturar `#0210` como tag e o resto como nick
-- [ ] Manter compatibilidade com campos separados (nick + tag) como alternativa
-
-**Stats por campeão (Season atual):**
-- [ ] Lista de campeões jogados com: CS médio (CS/m), KDA, winrate %, número de jogos
-- [ ] Filtro por fila: Ranqueada Solo, Ranqueada Flex
-- [ ] Filtro por temporada (S2026, etc.)
-- [ ] Link "Mostrar mais + Temporadas anteriores"
-
-**Maestria:**
-- [ ] Top 4 campeões com maior maestria: ícone, nível de maestria, pontos
-- [ ] Dados: Riot API maestria endpoint
-
-**Jogou recentemente com (últimas partidas):**
-- [ ] Lista de jogadores que apareceram nas últimas partidas do jogador (mínimo 3 jogos juntos)
-- [ ] Mostrar: nick#tag, servidor, W/L juntos, nível, winrate % juntos
-- [ ] Lógica: cruzar `match_participants` por PUUID — agrupar aliados que compartilham ≥3 partidas recentes
-
-**Nemesis — Adversários Recorrentes:**
-- [ ] Tela/seção de jogadores enfrentados mais de 1 vez (comparação por PUUID no time oposto)
-- [ ] Mostrar: nick#tag, vezes enfrentados, W/L contra, campeões usados por ambos
-- [ ] Lógica: cruzar `match_participants` — jogadores com mesmo `match_id` mas `team_id` diferente, agrupados por PUUID com count ≥ 2
-
-### Gemini Flash Lite como Modelo Usável
-**Tags:** IA/RAG, API/Backend
-**Status:** Aberto
-- [ ] Configurar integração com API Google (Gemini Flash Lite)
-- [ ] Adicionar `GEMINI_API_KEY` às env vars (local + Railway + GitHub Secrets)
-- [ ] Criar adapter/abstração em `llm_service.py` para alternar entre Ollama (local) e Gemini (API)
-- [ ] Testar latência e qualidade de resposta com o RAG existente
-- [ ] Atualizar `requirements.txt` com SDK Google (ex: `google-generativeai`)
-
-### Interface — Ajustes Visuais
-**Tags:** Frontend
-**Status:** Aberto (0%)
-- [ ] Light mode + cor do tier S+ amarelo (página inicial)
-- [ ] Passar a `#` pro lado da Tag
-- [ ] Aumentar o tamanho dos elementos muito pequenos ou que dependem de movimentação
-
-### Tier List — Melhorias
-**Tags:** Frontend
-**Status:** Aberto (0%)
-- [ ] Patch Notes selecionável em DROPDOWN (não input livre)
-- [ ] Botões de Elo funcionais (filtro real, não UI-only)
-- [ ] Badge de Tier na tela de Tierlist (S+, S, A, B, C, D)
-- [ ] Melhorar as estatísticas que são mostradas
-
-### Botões — Fixes de Navegação
-**Tags:** Frontend
-**Status:** Aberto (0%)
-- [ ] Arrumar os ícones dos botões de elo
-- [ ] Programar os filtros (tornar funcionais)
-- [ ] Fix: ao clicar em chat Metis, o botão superior direito "Metis" para de voltar à página principal
-- [ ] O botão METIS tem que ser clicável em TODAS as telas pra voltar pro menu
-- [ ] Tirar o botão "Início" — usar só o botão Metis (superior esquerdo) sempre
-
-### Barra Superior — Redesign
-**Tags:** Frontend
-**Status:** Aberto (0%)
-- [ ] Aumentar o tamanho da barra superior
-- [ ] Dar uma cor melhor
-- [ ] Botões maiores
-
-### Página de Campeões — Expansão Analítica
-**Tags:** Frontend, Análise de Dados
-**Status:** Aberto (0%)
-- [ ] Matchup com duas opções: Matchup de Lane (Lane vs Lane)
-- [ ] Status de Lane geral aos X minutos: XP, Gold, Gold Lead, CS — geral e contra personagens específicos
-- [ ] Counter: winrate vs todos os campeões (independente da lane) + valor normalizado baseado na winrate média daquele campeão no mesmo patch
-- [ ] Filtro por patch: ver todas as estatísticas por patch e selecionar entre X patches
-
-### Versão Paga — Monetização
-**Tags:** IA/RAG, Frontend
-**Status:** Aberto (0%)
-- [ ] Criar os tiers de pagamento
-- [ ] Criar os planos (free vs premium vs ?)
-- [ ] Criar o sistema de depósito / gateway de pagamento + lugar pra receber
-
-### Tela de Estatísticas de Itens
-**Tags:** Frontend, Análise de Dados
-**Status:** Aberto (0%)
-- [ ] Winrate de itens feitos em ordem (ranking de melhores itens lendários + melhores fragmentos/componentes)
-- [ ] Criar títulos com IA pra combos de itens (aka "Build") baseado pra que o item serve
-
-### Recomendações de Campeão Via Perfil e Elo
-**Tags:** IA/RAG, Frontend, Análise de Dados
-**Status:** Aberto (0%)
-**Descrição:** Recomendar campeão baseado em dados do jogador usando similaridade de cosseno para encontrar a maior winrate esperada + build ideal.
-- [ ] Modelo de similaridade: perfil do jogador → campeões com maior winrate provável
-- [ ] Output: "Pessoas com seu perfil de jogo tendem a jogar bem com X, Y, Z"
-- [ ] Output: "Pessoas do seu elo tendem a jogar com X, A, B"
-- [ ] Output: "Você deveria jogar com X com 79% de certeza"
-- [ ] Backend: endpoint + service com cálculo de similaridade de cosseno
-- [ ] Frontend: tela de recomendação com cards dos campeões sugeridos
-
-### Data Lake Local (Estruturação)
-**Status:** Aberto / Sem dono definido
+Para 1.0.0:
+    Blocos 1-5 completos
+    + RAG no chat
+    + Gateway de pagamento
+    + Timeline interativa
+```
 
 ---
 
-## 🧪 [Done ✅] Testes Funcionais — API Metis (M5)
+## Times e Responsabilidades (0.9.0)
 
-**Status:** 28/28 passando — `tests/test_funcionais_api_metis.py`
-
-#### Health Check
-- [x] `GET /api/v1/health` → 200 `{"status": "online", "system": "Metis"}`
-
-#### POST /api/v1/player/sync
-- [x] Request válido `{"riot_id":"Faker#KR1","server":"KR","count":5}` → 200
-- [x] Sem `#` no riot_id → 400 "Formato inválido"
-- [x] Nick vazio `{"riot_id":"#KR1"}` → 400 "Nome e Tag não podem ser vazios"
-- [x] Tag vazia `{"riot_id":"Faker#"}` → 400
-- [x] Ambos vazios `{"riot_id":"#"}` → 400
-
-#### GET /api/v1/stats/champions
-- [x] `?champion=Ahri` → 200
-- [x] `?champion=Ahri&role=MIDDLE` → 200 filtrado
-- [x] `?champion=Ahri&server=BR1` → 200 filtrado
-- [x] `?champion=Ahri&elo=DIAMOND` → 200 filtrado
-- [x] `?champion=Ahri&patch=14.5` → 200 filtrado
-- [x] Todos os filtros combinados → 200
-- [x] `min_matches=99999` → 200 com `stats: null`
-- [x] Sem parâmetro champion → 422
-- [x] `?champion=XYZ` (inexistente) → 200 com `total_matches: 0`
-- [x] `min_matches=0` → 422 (mínimo 1)
-- [x] `?champion=ahri` (minúsculo) → 200 (ilike case-insensitive)
-
-#### POST /api/v1/player/update-history
-- [x] Request válido `{"nick":"Faker","tag":"KR1","server":"KR","count":5}` → 200
-- [x] Nick vazio → 404 jogador não encontrado
-- [x] Count = 0 → 422
-- [x] Count = 25 → 422 (máximo 20)
-- [x] Servidor inválido `"server":"XYZ"` → 500 ValueError
-- [x] Sem RIOT_API_KEY → 500 RuntimeError
-
-#### CORS & Exception Handling
-- [x] Request de `localhost:3000` → aceito
-- [x] Request de origem não permitida → bloqueado
-- [x] Supabase indisponível → 500 com detail JSON, sem crash
-- [x] Riot API 429 (rate limit) → 429 com mensagem amigável
-- [x] Riot API 403 (key expirada) → 502 com detail legível
+| Bloco | Cesar | Andre | Takida |
+|-------|-------|-------|--------|
+| 0 (Pre-req) | Pipeline + parsing | — | — |
+| 1 (Matchup) | Backend endpoint | — | Frontend pagina |
+| 2 (Itens) | Backend agregacao | AI titles | Frontend pagina |
+| 3 (Builds core) | Backend query | — | Frontend visual |
+| 4 (Runas) | Backend agregacao | Rec. de runas IA | Frontend tab |
+| 5 (CI/CD) | Setup workflows | — | — |
