@@ -2,7 +2,10 @@ import os
 import json
 import gzip
 import io
+import logging
 from pathlib import Path
+
+_logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -28,7 +31,7 @@ def _get_item_dict() -> dict[int, str]:
     global _ITEM_DICT
     if _ITEM_DICT is None:
         if not _ITEM_JSON_PATH.exists():
-            print(f"⚠️  item.json não encontrado em {_ITEM_JSON_PATH}. Builds serão ignoradas.")
+            _logger.warning(f"  item.json não encontrado em {_ITEM_JSON_PATH}. Builds serão ignoradas.")
             _ITEM_DICT = {}
         else:
             with open(_ITEM_JSON_PATH, encoding="utf-8") as f:
@@ -69,19 +72,19 @@ def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
     # ── Filtro 1: Duração mínima (remake / queda de servidor) ─────────────────
     game_duration = info.get("gameDuration", 0)
     if game_duration < 190:
-        print(f"⏭️  {match_id}: Descartado — duração {game_duration}s (remake).")
+        _logger.debug(f"  {match_id}: Descartado — duração {game_duration}s (remake).")
         return None, [], []
 
     # ── Filtro 2: Queue válida (só Ranked Solo/Flex) ──────────────────────────
     queue_id = info.get("queueId", 0)
     if queue_id not in VALID_QUEUE_IDS:
-        print(f"⏭️  {match_id}: Descartado — queue {queue_id} (não é ranked).")
+        _logger.debug(f"  {match_id}: Descartado — queue {queue_id} (não é ranked).")
         return None, [], []
 
     # ── Filtro 3: Partida com exatamente 10 participantes ────────────────────
     participants_raw = info.get("participants", [])
     if len(participants_raw) != 10:
-        print(f"⏭️  {match_id}: Descartado — {len(participants_raw)} participantes (corrompido).")
+        _logger.debug(f"  {match_id}: Descartado — {len(participants_raw)} participantes (corrompido).")
         return None, [], []
 
     # ── Montar payload da partida ─────────────────────────────────────────────
@@ -269,10 +272,10 @@ def processar_partida(match_json: dict, db_client=None) -> bool:
             # RPC atomic: INSERT … ON CONFLICT DO UPDATE SET pick_count += 1, win_count += won
             db_client.rpc("upsert_champion_builds", {"builds": builds}).execute()
 
-        print(f"✅ {match_id}: Salvo ({match_payload['end_type']}, patch {match_payload['game_version']}, {len(builds)} builds).")
+        _logger.debug(f" {match_id}: Salvo ({match_payload['end_type']}, patch {match_payload['game_version']}, {len(builds)} builds).")
         return True
     except Exception as e:
-        print(f"❌ {match_id}: Erro ao salvar — {e}")
+        _logger.error(f" {match_id}: Erro ao salvar — {e}")
         return False
 
 
@@ -303,7 +306,7 @@ def _get_processed_ids(db_client) -> set:
             offset += page_size
         return ids
     except Exception as e:
-        print(f"⚠️  Não foi possível buscar processed_matches: {e}")
+        _logger.warning(f"  Não foi possível buscar processed_matches: {e}")
         return set()
 
 
@@ -312,7 +315,7 @@ def _marcar_processado(db_client, match_id: str) -> None:
     try:
         db_client.table("processed_matches").upsert({"match_id": match_id}).execute()
     except Exception as e:
-        print(f"⚠️  Falha ao marcar {match_id} como processado: {e}")
+        _logger.warning(f"  Falha ao marcar {match_id} como processado: {e}")
 
 
 def _listar_keys_r2(s3_client, bucket: str, prefix: str = "matches/") -> list[str]:
@@ -333,7 +336,7 @@ def _baixar_e_descomprimir(s3_client, bucket: str, key: str) -> dict | None:
         with gzip.open(io.BytesIO(compressed), "rt", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"❌ Falha ao baixar {key}: {e}")
+        _logger.error(f" Falha ao baixar {key}: {e}")
         return None
 
 
@@ -381,7 +384,7 @@ def rodar_pipeline(s3_client=None, db_client=None, batch_size: int = BATCH_SIZE)
 
     for i, key in enumerate(batch, 1):
         match_id = key.replace("matches/", "").replace(".json.gz", "")
-        print(f"[{i}/{len(batch)}] {match_id}", end=" — ")
+        _logger.debug(f"[{i}/{len(batch)}] {match_id}", end=" — ")
 
         match_json = _baixar_e_descomprimir(s3_client, bucket, key)
         if match_json is None:
