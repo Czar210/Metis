@@ -2,6 +2,7 @@ import os
 import json
 import gzip
 import io
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -125,18 +126,21 @@ def processar_timeline(timeline_json_data: dict, db_client=None) -> bool:
             return False
         db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    print(f"⏳ Salvando Timeline {match_id} — {len(snapshots_payload)} snapshots, {len(events_payload)} eventos...")
+    logging.getLogger(__name__).debug(f"Timeline {match_id}: {len(snapshots_payload)} snapshots, {len(events_payload)} eventos")
 
     try:
         if snapshots_payload:
-            db_client.table("participant_snapshots").upsert(snapshots_payload).execute()
+            db_client.table("participant_snapshots").upsert(
+                snapshots_payload, on_conflict="match_id,puuid,timestamp_minute"
+            ).execute()
         if events_payload:
-            db_client.table("critical_events").upsert(events_payload).execute()
+            # critical_events nao tem unique constraint — deletar antes e reinserir
+            db_client.table("critical_events").delete().eq("match_id", match_id).execute()
+            db_client.table("critical_events").insert(events_payload).execute()
 
-        print(f"✅ Timeline {match_id} salva com sucesso.")
         return True
     except Exception as e:
-        print(f"❌ Erro ao salvar Timeline no Supabase: {e}")
+        logging.getLogger(__name__).error(f"Timeline {match_id}: {e}")
         return False
 
 
