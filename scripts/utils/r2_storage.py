@@ -59,3 +59,34 @@ def compress_and_upload(data_dict, folder, match_id, s3_client):
     except Exception as e:
         logger.error("Erro no upload %s: %s", match_id, e)
         return False
+
+
+def check_html_exists(s3_client, folder, file_name):
+    if not s3_client:
+        return False
+    file_key = f"{folder}/{file_name}.html.gz"
+    try:
+        s3_client.head_object(Bucket=BUCKET_NAME, Key=file_key)
+        return True
+    except ClientError as e:
+        if e.response['Error']['Code'] == '404':
+            return False
+        logger.error("Erro ao verificar html %s: %s", file_key, e.response['Error']['Code'])
+        raise
+
+
+def compress_and_upload_html(html_str, folder, file_name, s3_client):
+    if not s3_client:
+        return False
+    file_key = f"{folder}/{file_name}.html.gz"
+    compressed_data = gzip.compress(html_str.encode('utf-8'))
+    try:
+        s3_client.put_object(
+            Bucket=BUCKET_NAME, Key=file_key,
+            Body=compressed_data, ContentType='application/gzip'
+        )
+        logger.info("[%s] html salvo: %s", folder, file_name)
+        return True
+    except Exception as e:
+        logger.error("Erro no upload html %s: %s", file_name, e)
+        return False

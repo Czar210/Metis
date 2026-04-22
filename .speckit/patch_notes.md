@@ -2,6 +2,23 @@
 
 *Diário de mudanças significativas no ecossistema e na stack do projeto.*
 
+## p-0.9.4 — Bronze HTML Guides + Bug Fix Playwright (2026-04-20)
+
+### Scripts
+- **BUG FIX `fetch_guides.py`**: `'/build/'` → `'/builds/'` em `get_elite_guide_urls` — bug silencioso que fazia o scraper retornar `[]` para todos os campeões e nunca scrapeava nada
+- **Bronze HTML**: `scrape_mobafire_guide` agora salva o HTML cru em `guides/html/{champion}_{url_slug}.html.gz` no R2 imediatamente após `page.content()`, antes de qualquer parsing (arquitetura medalhão correta)
+- **Idempotência R2**: checa se `guides/html/{file_name}.html.gz` já existe no R2 antes de abrir o browser para aquela URL — evita re-scraping em runs futuras
+- **`_build_file_name()`**: nova função auxiliar que gera nome de arquivo seguro a partir do campeão + slug final da URL (em vez de depender do nome do autor antes de parsear)
+
+### r2_storage.py
+- `check_html_exists(s3_client, folder, file_name)` — head_object em `.html.gz`
+- `compress_and_upload_html(html_str, folder, file_name, s3_client)` — gzip de HTML string + upload
+
+### CI/CD
+- **`fetch_guides.yml`**: schedule alterado de `*/3 * *` (a cada 3 dias) para `* * 1` (toda segunda-feira às 04:00 UTC)
+
+---
+
 ## p-0.9.3 — Filtro de Impopulares, Compressao, Admin Refresh, ETL Invertido (2026-04-14)
 
 ### Banco de Dados

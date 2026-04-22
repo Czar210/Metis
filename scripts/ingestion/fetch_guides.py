@@ -8,7 +8,9 @@ from dotenv import load_dotenv
 
 from scripts.utils.r2_storage import (
     get_r2_client,
-    compress_and_upload
+    compress_and_upload,
+    compress_and_upload_html,
+    check_html_exists,
 )
 
 load_dotenv()
@@ -128,7 +130,7 @@ def get_elite_guide_urls(champion_name, page, limit=5):
     for a_tag in soup.find_all('a', href=True):
         href = a_tag['href']
 
-        if '/build/' in href and slug in href.lower():
+        if '/builds/' in href and slug in href.lower():
             full_url = f"https://www.mobafire.com{href}" if href.startswith('/') else href
             if full_url not in elite_urls:
                 elite_urls.append(full_url)
@@ -137,10 +139,27 @@ def get_elite_guide_urls(champion_name, page, limit=5):
 
     return elite_urls
 
+def _build_file_name(champion_name, url):
+    """Gera um nome de arquivo seguro a partir do campeão + slug da URL."""
+    safe_champion = re.sub(r"[\s']", '_', champion_name.lower()).strip('_')
+    safe_champion = re.sub(r'_+', '_', safe_champion)
+    url_slug = url.rstrip('/').split('/')[-1][:80]
+    url_slug = re.sub(r'[^\w\-]', '_', url_slug)
+    return f"{safe_champion}_{url_slug}"
+
+
 def scrape_mobafire_guide(url, champion_name, s3_client, page, auto_upload=False, visited_urls=None):
     """Extrai o texto, salva localmente e opcionalmente envia ao R2 sem confirmação."""
     if visited_urls is not None and url in visited_urls:
         print(f"  ⏭️  Já coletado anteriormente, pulando: {url}")
+        return True
+
+    html_file_name = _build_file_name(champion_name, url)
+
+    if check_html_exists(s3_client, "guides/html", html_file_name):
+        print(f"  ⏭️  HTML já existe no R2, pulando: {url}")
+        if visited_urls is not None:
+            visited_urls.add(url)
         return True
 
     print(f"  -> 📖 Infiltrando: {url}")
@@ -155,6 +174,13 @@ def scrape_mobafire_guide(url, champion_name, s3_client, page, auto_upload=False
         time.sleep(3)
 
         raw_html = page.content()
+
+        # --- BRONZE: salva o HTML cru no R2 imediatamente, antes de qualquer parsing ---
+        if compress_and_upload_html(raw_html, "guides/html", html_file_name, s3_client):
+            print(f"    🟤 HTML Bronze salvo no R2: guides/html/{html_file_name}.html.gz")
+        else:
+            print("    ⚠️  Falha ao salvar HTML Bronze no R2 — continuando com parsing local.")
+
         soup = BeautifulSoup(raw_html, 'html.parser')
 
         # --- FASE 0: EXTERMINADOR DE LIXO ---
