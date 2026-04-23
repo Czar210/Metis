@@ -42,6 +42,9 @@ data/
 !**/requirements.txt
 !frontend/src/messages/*.json
 
+# Spikes de análise local — César não quer no repo
+analysis/
+
 # Infrastructure
 infra/.env
 infra/keys/

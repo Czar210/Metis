@@ -1,6 +1,6 @@
 # Metis — Plano Atual
 
-*Ultima sync: 2026-04-23 | Versao atual: p-0.9.19*
+*Ultima sync: 2026-04-23 | Versao atual: p-0.9.22*
 
 ---
 
@@ -30,7 +30,11 @@
 | p-0.9.16 | ✅ Concluido | Admin redesign com design system + bugfix avatar header (condicional em `is_admin`) |
 | p-0.9.17 | ✅ Concluido | Tier List por z-score (S+ ≥ +2σ) + filtro de role_share (nicho legítimo entra mesmo com sample baixo). Frontend consome `c.tier` do backend, mostra z_score como +X.Yσ |
 | p-0.9.18 | ✅ Concluido | i18n Foundation: PT + EN via `next-intl` cookie-based. Piloto migrado: AppHeader + Home + Admin. `LangSwitcher` no header. `formatNumber` substitui `toLocaleString('pt-BR')`. URL-based documentado em `plano_i18n_url_future.md` pra migração futura. |
-| **p-0.9.19** | ✅ **Concluido** | **i18n 100% das telas: team, auth, changelog, items, pricing, chat, champions list, champion detail, players dashboard, match detail + componentes compartilhados (ThemeSwitcher, TimelineChart). 15 namespaces, ~650 chaves. Build passou.** |
+| p-0.9.19 | ✅ Concluido | i18n 100% das telas: team, auth, changelog, items, pricing, chat, champions list, champion detail, players dashboard, match detail + componentes compartilhados (ThemeSwitcher, TimelineChart). 15 namespaces, ~650 chaves. Build passou. |
+| p-0.9.19.1 | ✅ Concluido | Fix Vercel build (`.gitignore` comendo `messages/*.json`) + dropdown no avatar do header (Sair + Painel admin condicional) |
+| p-0.9.20 | ✅ Concluido | Rota `/account` nova: hero identidade, assinatura com cartão fake, uso de tokens real, cupons públicos, watched_players, preferências (idioma/accent/região) e segurança. 13 ícones novos + namespace `account.*` com ~60 chaves. Middleware protege `/account`. |
+| p-0.9.21 | ✅ Concluido | `/auth` reescrita com design system (saiu Tailwind). 3 modos: login / signup / forgot password (novo). Mostrar/ocultar senha, requisitos de senha em tempo real, botões OAuth Google + GitHub stub "Em breve". |
+| **p-0.9.22** | ✅ **Concluido** (frontend-only) | **DualRadar promovido a primitive em `components/design/`. Ideal polygon agora é outline dashed. Hover tooltip com player/ideal values. Modal "Como melhorar [eixo]" stub. Reescrita dos 8 eixos canônicos com z-score fica pro backend.** |
 
 ---
 

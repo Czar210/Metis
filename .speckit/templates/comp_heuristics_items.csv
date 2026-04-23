@@ -1,0 +1,8 @@
+item_name,item_id,category,primary_stat,archetype_signal,tier_bought,cost,anti_what,notes
+Luden's Companion,6655,core_mage_burst,AP,poke|pickoff|scaling,core_1st,3200,,"Mage rush padrão pra burst médio alcance."
+Trinity Force,3078,core_fighter,HYBRID,dive|splitpush,core_1st,3333,,"Bruisers que gostam de autoataque rápido."
+Mortal Reminder,6609,situational_anti_heal,AD,dive|teamfight,situational,3000,anti_heal,"Anti-heal 40% em alvos com healing."
+Boots of Swiftness,3009,boots,NONE,dive|pick,early,900,anti_slow,"Quando precisa chase/escape contra slows."
+Mejai's Soulstealer,3041,core_mage_scaling,AP,scaling|splitpush,situational,1600,,"High-risk snowball."
+Imperial Mandate,3504,support_engage,AP,dive|engage|pickoff,core_1st,2500,,"Enchanter de engage — proc em slow/root."
+Thornmail,3075,tank_warden,ARMOR,protect|teamfight,situational,2700,anti_ad|anti_heal,"Contra ADCs + anti-heal passivo."

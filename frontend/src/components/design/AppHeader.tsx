@@ -255,6 +255,27 @@ export function AppHeader({ active = 'home', compact = false }: Props) {
                   {userEmail}
                 </div>
 
+                <Link
+                  role="menuitem"
+                  href="/account"
+                  onClick={() => setMenuOpen(false)}
+                  className="m-hover-surface"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: 'var(--m-text)',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <Icon name="settings" size={14} />
+                  {t('menu.account')}
+                </Link>
+
                 {isAdmin && (
                   <Link
                     role="menuitem"

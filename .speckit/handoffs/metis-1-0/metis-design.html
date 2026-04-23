@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Metis · Redesign Canvas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; overflow: hidden; }
+  body { font-family: 'Inter', system-ui, sans-serif; }
+
+  /* ── Metis tokens (dark) ────────────────────────────────────── */
+  .metis-scope {
+    --m-bg:        #0B0D12;        /* deeper than original for punch */
+    --m-surface:   #141826;
+    --m-surface-2: #1B2030;
+    --m-border:    #222838;
+    --m-border-2:  #2B3246;
+    --m-text:      #E5E9F2;
+    --m-text-dim:  #8A93A6;
+    --m-muted:     #5A6378;
+
+    --m-accent:    #F5C842;        /* LoL gold — "vida" do app */
+    --m-accent-2:  #E8A845;
+    --m-cyan:      #5BE3D4;
+    --m-violet:    #8B7FFF;
+    --m-pink:      #FF6B9D;
+    --m-green:     #4ADE80;
+    --m-red:       #F87171;
+    --m-blue:      #60A5FA;
+    --m-orange:    #FB923C;
+
+    font-family: 'Inter', system-ui, sans-serif;
+    color: var(--m-text);
+    background: var(--m-bg);
+  }
+  .metis-scope *, .metis-scope *::before, .metis-scope *::after { box-sizing: border-box; }
+  .metis-scope h1, .metis-scope h2, .metis-scope h3, .metis-scope h4 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+  .metis-scope p { margin: 0; }
+  .metis-scope button { font-family: inherit; cursor: pointer; }
+  .font-display { font-family: 'Space Grotesk', 'Inter', sans-serif; letter-spacing: -0.02em; }
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  /* subtle grid for hero */
+  .metis-grid-bg {
+    background-image:
+      linear-gradient(to right, rgba(245,200,66,0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(245,200,66,0.04) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+</head>
+<body>
+<div id="root"></div>
+
+<!-- Shared UI primitives for Metis screens -->
+<script type="text/babel" src="metis/primitives.jsx"></script>
+<!-- Shared icons -->
+<script type="text/babel" src="metis/icons.jsx"></script>
+<!-- Sample data -->
+<script type="text/babel" src="metis/data.jsx"></script>
+<!-- Individual screens -->
+<script type="text/babel" src="metis/screen-home.jsx"></script>
+<script type="text/babel" src="metis/screen-tierlist.jsx"></script>
+<script type="text/babel" src="metis/screen-player.jsx"></script>
+<script type="text/babel" src="metis/screen-match.jsx"></script>
+<script type="text/babel" src="metis/timeline-data.jsx"></script>
+<script type="text/babel" src="metis/timeline.jsx"></script>
+<script type="text/babel" src="metis/screen-champion.jsx"></script>
+<script type="text/babel" src="metis/screen-items.jsx"></script>
+<script type="text/babel" src="metis/screen-plans.jsx"></script>
+<script type="text/babel" src="metis/screen-misc.jsx"></script>
+<script type="text/babel" src="metis/screen-account.jsx"></script>
+<script type="text/babel" src="metis/screen-auth.jsx"></script>
+<script type="text/babel" src="metis/tweaks-panel.jsx"></script>
+
+<!-- Design canvas wrapper -->
+<script type="text/babel" src="design-canvas.jsx"></script>
+
+<!-- Main app -->
+<script type="text/babel" src="metis/app.jsx"></script>
+</body>
+</html>

@@ -2,6 +2,122 @@
 
 *Diário de mudanças significativas no ecossistema e na stack do projeto.*
 
+## p-0.9.22 — DualRadar polish: primitive + tooltip + modal stub (2026-04-23)
+
+Escopo **frontend-only** do p-0.9.22 planejado. Reescrita estatística dos 8 eixos canônicos + perfil ideal vindo de batch semanal fica pro ticket de backend futuro (HANDOFF-TECNICO seção 2.3).
+
+### Promoção a primitive
+- **`components/design/DualRadar.tsx`** — novo primitive. Antes vivia inline em `players/[puuid]/page.tsx` linhas 2017-2112 (~95 linhas). Agora exportado via barrel `@/components/design`.
+- Props públicas: `axes: { label, player, ideal }[]`, `size`, `confidence: 'high'|'low'`, `playerLabel`, `idealLabel`, `onAxisClick`.
+
+### Visual — alinhado com HANDOFF seção 2.2
+- **Ideal = outline dashed**: `stroke-dasharray="3 3"`, opacity 0.7, `fill="none"`. Antes era preenchido igual ao player — ficava confuso visualmente.
+- **Player com dots**: 3px nos vértices (4.5px no hover), cor `--m-accent`.
+- **`confidence='low'`**: player polygon desenhado com `stroke-dasharray` + opacity 0.5, sinalizando baixa amostragem. Pronto pra backend enviar flag quando recomendações tiverem <10 partidas (hoje não usa ainda).
+
+### Interação nova
+- **Hover em qualquer área de eixo** (wedge invisível dividindo o círculo em N fatias) destaca o label, engrossa o dot e abre tooltip mostrando `player.toFixed(1) / ideal.toFixed(1)` com tipografia tabular.
+- **Click em eixo** chama `onAxisClick(idx, axis)` — caller decide ação.
+- **Legenda dinâmica**: antes `"Você" / "Campeão"`. Agora `"Seu perfil" / "Ideal pra {champion}"` usando nome do campeão recomendado. Linha do ideal na legenda é tracejada (match com o polygon).
+
+### Integração no player dashboard
+- **`app/players/[puuid]/page.tsx`**:
+  - Import do novo primitive + helper `buildRadarAxes(player, champion, labels)` pra zipar os dois arrays em `DualRadarAxis[]`
+  - Estado `radarImproveAxis: string | null` + componente interno `RadarImproveModal` com focus trap via Escape, backdrop click-to-close, ícone sparkles accent
+  - Inline DualRadar deletado (95 linhas a menos)
+- **i18n**: `players.legend_you` e `players.legend_champion` rebatizados pra alinhar com HANDOFF ("Seu perfil" / "Ideal pra {champion}"). Chaves novas: `radar_improve_title`, `radar_improve_soon`, `radar_improve_close`.
+
+### Validação
+- `npx tsc --noEmit` → 0 erros
+- `npm run build` → 14 rotas, `/players/[puuid]` 9.90 kB (vs 9.85 kB antes)
+
+### Não entregue (backend necessário — ticket futuro)
+- 8 eixos canônicos (MECÂNICA, MACRO, FARMING, VISÃO, TEAMFIGHT, EARLY, AGRESSÃO, DUELING) com z-score por elo×role — hoje o backend envia `AGR/MAP/EFC/PRS/SBV/UTL/ERL/CST` em escala 0..10
+- Perfil ideal via batch semanal dos top 100 OTPs do campeão naquele elo
+- Percentile real no tooltip (`top 15% Diamante jungle` etc) — hoje só mostra valores brutos
+- Drills personalizados com IA no modal "Como melhorar" — hoje é stub "em breve"
+
+---
+
+## p-0.9.21 — /auth redesign + OAuth stubs (2026-04-23)
+
+Tela de login migrada para o design system novo (eram as únicas junto com admin — admin migrou em p-0.9.16). Agora todas as telas usam `.metis-scope` + primitives.
+
+### Mudanças
+- **`app/auth/page.tsx`** — reescrita completa. Saiu Tailwind + lucide-react, entrou design system (`Icon`, `Logo`, tokens `--m-*`). 3 modos internos: `login` / `signup` / `forgot`.
+- **Novo modo "forgot password"**: link "Esqueci minha senha" no login → tela dedicada com `supabase.auth.resetPasswordForEmail`. Link expira em 1h (texto do Supabase), redireciona pra `/auth` de volta.
+- **Mostrar/ocultar senha**: botão olho no input de senha (login + signup).
+- **Requisitos de senha em tempo real no signup**: min 8 chars · 1 maiúscula · 1 dígito. Ícone `check`/`dot` verde ou muted conforme cumprido. Validação visual só — mantém `password.length < 6` do server (regra Supabase antiga).
+- **OAuth Google + GitHub**: botões presentes, desabilitados com tag "Em breve" (traduzido). SVGs inline dos dois provedores (Google colorido oficial, GitHub mono currentColor).
+- **Decoração**: grid de pontos accent + glow radial central, `maskImage` pra esmaecer nas bordas.
+- i18n completa: namespace `auth.*` recebeu ~25 chaves novas (login_title, signup_sub, forgot_hint, pass_req_*, or_continue, coming_soon, etc).
+
+### Validação
+- `npx tsc --noEmit` → 0 erros
+- `npm run build` → 14 rotas, `/auth` 3.92 kB (vs 2.76 kB antigo — +1.16 kB pelo modo forgot + provider SVGs)
+
+### Não testado
+- Fluxo visual em navegador — não rodei dev server. César/Takida devem validar antes de fechar ticket.
+
+---
+
+## p-0.9.20 — /account (Minha conta) (2026-04-23)
+
+Nova rota autenticada `/account` substituindo o link direto `/admin` do avatar. Dropdown do header agora tem 3 itens: **Minha conta** → **Painel admin** (se admin) → **Sair**.
+
+### Rota nova
+- **`app/account/page.tsx`** — dashboard 2-col de conta:
+  - **Hero identidade**: avatar gigante com glow da cor do tier, tier pill (Free/Doador/Premium/Pro), username (derivado do email), email, `member since` formatado por locale
+  - **Card Assinatura**: tier com preço fake (Free null · Doador R$4,90 once · Premium R$24,90/mo · Pro R$44,90/mo), "ATIVO" pill, card fake com brand logo (Visa/Mastercard SVG inline), última 4 dígitos, validade, próxima cobrança, botões Upgrade (free→/pricing) ou Gerenciar (stub). Sem Stripe real — escopo fora do ticket.
+  - **Card Uso do Chat Metis**: puxa `/api/v1/chat/usage` (endpoint existente). Barra fica vermelha a partir de 80%. Reseta em N dias derivado de `resets_at`.
+  - **Card Cupons**: lista `/api/v1/coupons/public` — título (estilizado como código monospace tracejado), descrição, `valid_until` formatado, barra de dias restantes (vermelha se ≤10 dias). Botão copiar título (muda pro ícone check 1.5s). Input "Resgatar código" ainda stub — toast "Em breve" (não existe endpoint de redeem).
+  - **Card Jogadores supervisionados**: query direta em `watched_players` com JOIN `players` (mesmo shape da home). Botões abrir dashboard + remover (delete direto, RLS cuida de isolamento). Empty state instruindo como adicionar.
+  - **Card Preferências**: Idioma (wire pra `setLocale` server action), cor de accent (wire pra `useTheme`), região padrão (persiste em `localStorage` key `metis_region`). 3 rows com ícone à esquerda, controle à direita.
+  - **Card Segurança**: email (read-only), senha (botão → `supabase.auth.resetPasswordForEmail`), sessões ativas (botão → `signOut({scope:'global'})` + redirect `/`). Seção vermelha "Deletar conta" com botão stub.
+- **Auth gate**: middleware atualizado — `/account` agora exige login junto com `/chat` e `/admin`.
+
+### Design system
+- **`components/design/Icon.tsx`** — 13 ícones novos: `creditCard`, `info`, `copy`, `gift`, `calendar`, `mail`, `globe`, `palette`, `shieldCheck`, `key`, `lock`, `trash`, `refresh`. Todos Lucide-style, stroke 1.75.
+- **`components/design/AppHeader.tsx`** — adicionado item **"Minha conta"** no dropdown, acima de "Painel admin".
+
+### Tier resolution
+- Lê `app_metadata.tier` (valores `'free'|'donor'|'premium'|'pro'`). Fallback: se só existir `is_premium === true`, mapeia pra `'premium'`. Pricing já usava esse padrão; agora `/account` também.
+- **Decisão não-óbvia**: O bundle Claude Design usava `'doador'` (pt), o código existente usa `'donor'` (en). Mantive `'donor'` como valor interno pra não criar divergência — display respeita i18n via `account.tier_donor`.
+
+### Fake cards
+- Confirmado com César: Stripe não está integrado ainda. Todos os usuários com tier pago veem o mesmo cartão fake Visa/Mastercard. Quando Stripe entrar, basta trocar `FAKE_SUB` por fetch do backend.
+
+### i18n
+- **pt.json** + **en.json**: namespace `account.*` (~60 chaves) cobrindo eyebrow, title, member_since, tier_*, subscription.*, tokens.*, coupons.*, watched.*, preferences.*, security.*.
+- **header.menu.account** adicionado também.
+
+### Validação
+- `npx tsc --noEmit` → 0 erros
+- `npm run build` → 14 rotas, `/account` 6.42 kB, 201 kB first load
+
+### Não testado
+- UI em navegador — não rodei dev server. Validação visual fica com César.
+
+### Pendente (fora do escopo deste ticket)
+- Integração Stripe real (substitui `FAKE_SUB`)
+- Endpoint de redeem de cupom (input hoje é stub)
+- Alterar email (read-only)
+- Listar sessões reais — Supabase JS não expõe sessões ativas; hoje só mostra "sessão atual detectada". Precisaria de endpoint server usando service role.
+- Deletar conta real
+
+---
+
+## p-0.9.19.1 — Fix Vercel build + dropdown menu no avatar (2026-04-23)
+
+### Bug fix
+- **`.gitignore`** — regra `*.json` (linha 40) silenciosamente engoliu `frontend/src/messages/{pt,en}.json` no commit do p-0.9.19. Resultado: build local verde, Vercel falha com `Module not found: Can't resolve '../messages'` em `src/i18n/request.ts`. Adicionada exceção `!frontend/src/messages/*.json`.
+
+### Feature pedida pelo César
+- **`components/design/AppHeader.tsx`** — avatar do usuário logado agora abre dropdown (role="menu") em vez de link direto pra `/admin`/`/`. Menu com email + itens "Painel admin" (se `isAdmin`) + "Sair" (vermelho, chama `supabase.auth.signOut()` + redirect `/`). Fecha com click fora ou Escape.
+- i18n: `header.menu.{open, admin_panel, sign_out, signing_out}` em pt/en.
+
+---
+
 ## p-0.9.19 — i18n 100% das telas PT/EN (2026-04-23)
 
 Todo o site agora fala PT e EN. Telas restantes do p-0.9.18 foram migradas. Build passou com 13 rotas, 0 erros typecheck.

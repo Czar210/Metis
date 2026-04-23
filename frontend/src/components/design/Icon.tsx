@@ -88,6 +88,59 @@ const PATHS: Record<string, IconPath> = {
     <path key="se-b" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />,
   ],
   logout: <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />,
+  creditCard: [
+    <rect key="cc-a" x="2" y="5" width="20" height="14" rx="2" />,
+    <path key="cc-b" d="M2 10h20" />,
+  ],
+  info: [
+    <circle key="in-a" cx="12" cy="12" r="10" />,
+    <path key="in-b" d="M12 16v-4M12 8h.01" />,
+  ],
+  copy: [
+    <rect key="cp-a" x="9" y="9" width="13" height="13" rx="2" />,
+    <path key="cp-b" d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />,
+  ],
+  gift: [
+    <path key="gi-a" d="M20 12v10H4V12" />,
+    <path key="gi-b" d="M2 7h20v5H2z" />,
+    <path key="gi-c" d="M12 22V7M12 7H7.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z" />,
+  ],
+  calendar: [
+    <rect key="ca-a" x="3" y="4" width="18" height="18" rx="2" />,
+    <path key="ca-b" d="M16 2v4M8 2v4M3 10h18" />,
+  ],
+  mail: [
+    <rect key="ma-a" x="2" y="4" width="20" height="16" rx="2" />,
+    <path key="ma-b" d="M22 7l-10 7L2 7" />,
+  ],
+  globe: [
+    <circle key="gl-a" cx="12" cy="12" r="10" />,
+    <path key="gl-b" d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" />,
+  ],
+  palette: [
+    <circle key="pa-a" cx="13.5" cy="6.5" r="1" />,
+    <circle key="pa-b" cx="17.5" cy="10.5" r="1" />,
+    <circle key="pa-c" cx="8.5" cy="7.5" r="1" />,
+    <circle key="pa-d" cx="6.5" cy="12.5" r="1" />,
+    <path key="pa-e" d="M12 2a10 10 0 0 0 0 20 3 3 0 0 0 3-3 2 2 0 0 1 2-2h1.5a4.5 4.5 0 0 0 4.5-4.5A10 10 0 0 0 12 2z" />,
+  ],
+  shieldCheck: [
+    <path key="sc-a" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
+    <path key="sc-b" d="M9 12l2 2 4-4" />,
+  ],
+  key: [
+    <circle key="ke-a" cx="8" cy="15" r="4" />,
+    <path key="ke-b" d="M11 12l8-8 3 3-2 2 2 2-2 2-2-2-2 2-3-3" />,
+  ],
+  lock: [
+    <rect key="lo-a" x="3" y="11" width="18" height="11" rx="2" />,
+    <path key="lo-b" d="M7 11V7a5 5 0 0 1 10 0v4" />,
+  ],
+  trash: [
+    <path key="tr-a" d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />,
+    <path key="tr-b" d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />,
+  ],
+  refresh: <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" />,
 }
 
 export type IconName = keyof typeof PATHS

@@ -22,6 +22,8 @@ import {
   Donut,
   AreaChart,
   RadarChart as DsRadarChart,
+  DualRadar,
+  type DualRadarAxis,
   StackedBar,
   WinLossDots,
   type Role,
@@ -130,6 +132,19 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+/** Zipa player + champion profile arrays em axes pro DualRadar. */
+function buildRadarAxes(
+  player: number[],
+  champion: number[],
+  labels: string[]
+): DualRadarAxis[] {
+  return labels.map((label, i) => ({
+    label,
+    player: player[i] ?? 0,
+    ideal: champion[i] ?? 0,
+  }))
+}
+
 function useFormatRelativeDate() {
   const t = useTranslations('players')
   const locale = useLocale() as Locale
@@ -209,6 +224,7 @@ export default function PlayerPage() {
 
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [selectedRec, setSelectedRec] = useState<string | null>(null)
+  const [radarImproveAxis, setRadarImproveAxis] = useState<string | null>(null)
 
   // ── Cooldown
   const cooldownKey = `sync_cooldown_${resolvedPuuid ?? rawParam}`
@@ -1432,8 +1448,12 @@ export default function PlayerPage() {
                         }}
                       >
                         <DualRadar
-                          playerProfile={r.player_profile}
-                          championProfile={r.champion_profile}
+                          axes={buildRadarAxes(r.player_profile, r.champion_profile, [
+                            'AGR', 'MAP', 'EFC', 'PRS', 'SBV', 'UTL', 'ERL', 'CST',
+                          ])}
+                          playerLabel={t('legend_you')}
+                          idealLabel={t('legend_champion', { champion: r.champion })}
+                          onAxisClick={(_, axis) => setRadarImproveAxis(axis.label)}
                         />
                         {r.reasons && r.reasons.length > 0 && (
                           <div
@@ -1877,6 +1897,13 @@ export default function PlayerPage() {
         </div>
       </div>
 
+      {radarImproveAxis && (
+        <RadarImproveModal
+          axis={radarImproveAxis}
+          onClose={() => setRadarImproveAxis(null)}
+        />
+      )}
+
       <style jsx>{`
         @keyframes m-bounce {
           0%, 80%, 100% { transform: scale(0); }
@@ -1886,6 +1913,74 @@ export default function PlayerPage() {
           to { transform: rotate(360deg); }
         }
       `}</style>
+    </div>
+  )
+}
+
+// ── Modal "Como melhorar [EIXO]" ────────────────────────────────
+// Premium-gated stub. Backend de drills personalizados com IA é ticket futuro.
+function RadarImproveModal({ axis, onClose }: { axis: string; onClose: () => void }) {
+  const t = useTranslations('players')
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 50,
+        background: 'rgba(0,0,0,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--m-surface)',
+          border: '1px solid var(--m-border-2)',
+          borderRadius: 14,
+          padding: '24px 26px',
+          maxWidth: 420, width: '100%',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+        }}
+      >
+        <div style={{
+          width: 44, height: 44, borderRadius: 10,
+          background: 'rgb(var(--m-accent-rgb) / 0.12)',
+          border: '1px solid rgb(var(--m-accent-rgb) / 0.3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'var(--m-accent)', marginBottom: 14,
+        }}>
+          <Icon name="sparkles" size={20} />
+        </div>
+        <h3 className="font-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+          {t('radar_improve_title', { axis })}
+        </h3>
+        <p style={{ fontSize: 13, color: 'var(--m-text-dim)', lineHeight: 1.5, marginBottom: 18 }}>
+          {t('radar_improve_soon')}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            background: 'var(--m-surface-2)',
+            border: '1px solid var(--m-border-2)',
+            color: 'var(--m-text)',
+            padding: '8px 16px', borderRadius: 8,
+            fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          {t('radar_improve_close')}
+        </button>
+      </div>
     </div>
   )
 }
@@ -2012,99 +2107,4 @@ function MatchRow({ m, puuid }: { m: MatchData; puuid: string }) {
   )
 }
 
-// ── DualRadar (usado nas recomendações expandidas) ──────────────
-function DualRadar({
-  playerProfile,
-  championProfile,
-}: {
-  playerProfile: number[]
-  championProfile: number[]
-}) {
-  const t = useTranslations('players')
-  const labels = ['AGR', 'MAP', 'EFC', 'PRS', 'SBV', 'UTL', 'ERL', 'CST']
-  const n = labels.length
-  const cx = 100
-  const cy = 100
-  const r = 78
-
-  function point(idx: number, val: number): [number, number] {
-    const angle = ((2 * Math.PI) / n) * idx - Math.PI / 2
-    const dist = Math.min(1, val / 10) * r
-    return [cx + dist * Math.cos(angle), cy + dist * Math.sin(angle)]
-  }
-
-  const polygonPts = (vs: number[]) => vs.map((v, i) => point(i, v).join(',')).join(' ')
-  const rings = [2.5, 5, 7.5, 10]
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <svg viewBox="0 0 200 200" width={200} height={200}>
-        {rings.map((rv) => (
-          <polygon
-            key={rv}
-            points={Array.from({ length: n }, (_, i) => point(i, rv).join(',')).join(' ')}
-            fill="none"
-            stroke="var(--m-border)"
-            strokeWidth="0.8"
-            opacity="0.4"
-          />
-        ))}
-        {labels.map((_, i) => {
-          const [x, y] = point(i, 10)
-          return (
-            <line
-              key={i}
-              x1={cx}
-              y1={cy}
-              x2={x}
-              y2={y}
-              stroke="var(--m-border)"
-              strokeWidth="0.6"
-              opacity="0.3"
-            />
-          )
-        })}
-        <polygon
-          points={polygonPts(championProfile)}
-          fill="rgba(251,191,36,0.18)"
-          stroke="rgba(251,191,36,0.85)"
-          strokeWidth="1.5"
-        />
-        <polygon
-          points={polygonPts(playerProfile)}
-          fill="rgb(var(--m-accent-rgb) / 0.2)"
-          stroke="var(--m-accent)"
-          strokeWidth="1.5"
-        />
-        {labels.map((l, i) => {
-          const [x, y] = point(i, 11.5)
-          return (
-            <text
-              key={i}
-              x={x}
-              y={y}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontSize="8"
-              fill="var(--m-text-dim)"
-              fontWeight="600"
-              style={{ letterSpacing: '0.06em' }}
-            >
-              {l}
-            </text>
-          )
-        })}
-      </svg>
-      <div style={{ display: 'flex', gap: 14, fontSize: 10, color: 'var(--m-text-dim)', marginTop: 6 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 10, height: 2, background: 'var(--m-accent)' }} />
-          {t('legend_you')}
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 10, height: 2, background: 'rgb(251,191,36)' }} />
-          {t('legend_champion')}
-        </span>
-      </div>
-    </div>
-  )
-}
+// DualRadar foi promovido a primitive em `@/components/design/DualRadar` (p-0.9.22).
