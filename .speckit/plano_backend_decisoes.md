@@ -9,30 +9,31 @@ Este documento consolida os tickets de backend que o bundle do Claude Design (`.
 ## Dependências entre tickets
 
 ```
-                                    ┌────────────────┐
-                                    │ Bloco 0 (v0.9.0)│
+                                    ┌─────────────────┐
+                                    │ A: Bloco 0 (v0.9.0)│
                                     │ ETL de eventos  │
                                     │ da timeline     │
-                                    └───┬────────────┘
+                                    └───┬─────────────┘
                                         │
-                ┌───────────────────────┼──────────────────────┐
-                ▼                       ▼                      ▼
-    ┌──────────────────┐   ┌────────────────────┐   ┌──────────────────┐
-    │ Bloco 0 (cont.)  │   │ p-0.9.23           │   │ p-0.9.22 backend │
-    │ Timeline interat.│   │ AI Insights        │   │ Radar v2         │
-    │ (mapa + scrubber)│   │ (match analysis    │   │ (z-score eixos + │
-    └──────────────────┘   │  usa critical_     │   │  perfil ideal)   │
-                           │  events)           │   └──────────────────┘
-                           └────────────────────┘
+                ┌─────────────┬─────────┴─────────┬──────────────────┐
+                ▼             ▼                   ▼                  ▼
+    ┌─────────────────┐ ┌────────────────┐ ┌──────────────────┐ ┌──────────────┐
+    │ Bloco 0 (cont.) │ │ C: AI Insights │ │ B: Radar v2      │ │ E: Rotação   │
+    │ Timeline map +  │ │ + loja tokens  │ │ z-score eixos +  │ │ DB → R2 +    │
+    │ scrubber        │ │ usa events +   │ │ perfil ideal OTP │ │ stats do R2  │
+    └─────────────────┘ │ loja→Stripe    │ └──────────────────┘ └──────┬───────┘
+                        └────────────────┘           │                  │
+                                                     └─── casa com ────┘
+                                                     (mesmo job batch)
 
     ┌──────────────────┐
-    │ p-0.9.24         │   (independente de Bloco 0, depende de
-    │ Champion v2      │    decisão sobre scraping/ETL de abilities)
-    │ (dados do champ) │
+    │ D: Champion v2   │   (independente. depende de spike D2 +
+    │ lore/abilities/  │    excel D5 do César)
+    │ matchup/synergy  │
     └──────────────────┘
 ```
 
-**Caminho crítico sugerido**: Bloco 0 primeiro (desbloqueia timeline + AI insights profundos). Radar v2 e Champion v2 podem ir em paralelo.
+**Caminho crítico sugerido**: A (Bloco 0) primeiro. B∥C∥D∥E em paralelo depois. **E casa naturalmente com B** no mesmo job batch semanal — recomendado fazer juntos.
 
 ---
 
@@ -413,16 +414,94 @@ Dois CSVs pra César preencher localmente:
 
 ---
 
+## Ticket E — Rotação DB × R2 + agregados de stats lidos do R2 (arquitetura)
+
+**Insight do César (2026-04-23)**: Supabase DB free tier tem 500 MB (hoje em 142 MB, 28%). No ritmo atual (~2k matches = 142 MB), bate o teto em ~7k matches. Pra escalar pra milhões de matches sem migrar pra Pro plan ($25/mês), inverter a arquitetura:
+
+**Regra nova**:
+- **R2 = source of truth** de todas as partidas (histórico completo, barato: $0.015/GB/mês depois do free 10 GB)
+- **DB = cache quente** — só partidas da **Season atual**, apagamento automático das antigas
+- **Stats agregadas** (tierlist, champion WR, item WR) computadas em batch a partir do R2, gravadas em tabelas materialized no DB
+
+### Economia estimada
+
+| Volume | R2 size (est.) | R2 custo/mês | DB hoje | DB c/ rotação |
+|--------|---------------:|-------------:|--------:|---------------:|
+| 2k matches (hoje) | 1.3 GB | $0 (free) | 142 MB | 142 MB |
+| 100k matches | 60 GB | $0.75 | ~7 GB (estoura free) | <500 MB |
+| 1M matches | 600 GB | $8.85 | ~70 GB ($25+ Pro) | <500 MB |
+| **5M matches** (alvo) | **3 TB** | **~$45** | precisaria Supabase Team ($599+) | <500 MB |
+
+> Correção: 5M matches em R2 não dá $10/mês, dá ~$45 — mas ainda é **13× mais barato** que manter no Supabase. Os valores já contam com gzip ativo desde a ingestão (`compress_and_upload` em `scripts/utils/r2_storage.py`). Pra baixar mais, o único ganho real vem de zstd (~20% extra de redução) — futuro, não blocker.
+
+### Mudanças de escopo
+
+#### 1. DB rotation (César)
+
+- **Job semanal** `scripts/processing/rotate_matches.py`:
+  - Identifica partidas de seasons anteriores (hoje: pré-2026 split 2, ou similar conforme calendário Riot)
+  - Confirma que o JSON bruto existe no R2 (`matches/{match_id}.json.gz` e `timelines/{match_id}.json.gz`)
+  - Deleta as linhas de `matches`, `match_participants`, `critical_events`, `participant_snapshots`, `match_timelines` em transação
+  - Log do que foi deletado em `rotation_log` (match_id + deletion_date, ~40 bytes por linha, fica 10 anos em <500MB)
+- **Player history** continua no DB se a partida for da season atual. Partidas antigas viram "link pro replay" — frontend puxa timeline on-demand do R2.
+
+#### 2. Stats agregadas lidas do R2 (César + André)
+
+- **Script batch** `scripts/processing/compute_stats_from_r2.py`:
+  - Lê partidas do R2 via Polars (streaming com `scan_ndjson` + lazy)
+  - Agrupa por `(champion, role, patch, elo)` — computa WR, pick rate, ban rate, KDA médio, CS/min
+  - Grava em **tabelas materialized** novas:
+    - `stats_champion_aggregate` (substitui queries atuais que escaneiam `match_participants`)
+    - `stats_item_aggregate`
+    - `stats_rune_aggregate`
+  - Roda toda **sábado** (junto com `compute_ideal_profiles` do Ticket B)
+- **Endpoints afetados**: `/api/v1/stats/tierlist`, `/api/v1/stats/champions`, `/api/v1/items` passam a ler das tabelas agregadas. Queries ficam < 50ms em vez de escanear `match_participants` (hoje 20k rows, no futuro milhões).
+
+#### 3. Timeline/match detail on-demand
+
+- Partida da season atual → DB (rápido, como hoje)
+- Partida antiga → frontend chama `/api/v1/match/{id}?from_r2=true` → backend busca no R2, faz parse leve, retorna
+- Cache Cloudflare KV (1h TTL) pras últimas N mais pedidas
+
+### Decisões tomadas (2026-04-23)
+
+| # | Tema | Decisão |
+|---|------|---------|
+| E1 | Definição de "season atual" | ✅ **Split Riot** (muda 3× por ano) — rotação pega partidas de splits anteriores. Calendário Riot vira dado de config no backend, atualizado manualmente no CLAUDE.md quando Riot anunciar novos splits |
+| E2 | Compactação no R2 | ✅ **Já é gzip desde a ingestão** (`scripts/utils/r2_storage.compress_and_upload` chama gzip antes do upload). Não é decisão — é status quo. Eu tinha interpretado errado a pergunta original. zstd fica como otimização futura se ratio precisar melhorar |
+| E3 | Particionamento das agregadas | ✅ **(b) Com dimensão `time_bucket`** — tabela terá PK composta `(champion, role, patch, elo, time_bucket)` onde `time_bucket ∈ {'all', '7d', '30d'}`. Permite mostrar tendência "hot pick" vs "cold pick" no frontend |
+| E4 | `critical_events` antigo | ✅ **(a) Deleta junto com a rotação** — timeline JSON no R2 é a fonte. Se precisar reconstruir, re-roda o ETL pontual naquelas partidas |
+| E5 | Player match history antigo | ✅ **(a) Card simplificado com botão "Carregar do R2"** — user-facing feedback de que é fetch on-demand (evita loading infinito em scroll) |
+
+### Estimativa
+
+- `rotate_matches.py` + Action semanal: 2 dias (César)
+- `compute_stats_from_r2.py` + migrations das tabelas agregadas: 3-4 dias (César)
+- Modify endpoints pra ler das agregadas: 1 dia (André)
+- Endpoint on-demand R2 + cache KV: 1 dia (André)
+- Frontend: link "carregar do R2" em partidas antigas, se E5=a: 0.5 dia
+
+**Total**: ~7-8 dias. Destrava escala de 1000× em volume sem migrar plano Supabase.
+
+### Bloqueia / é bloqueado por
+
+- ⚠️ **Depende do Bloco 0 estar estável** — se o ETL de eventos muda, as agregadas precisam recalcular
+- ✅ **Não bloqueia** os Tickets A/B/C/D em si, mas é um **refactor de fundação** — idealmente entra junto com Ticket B (mesmo job semanal `compute_*`)
+- 🟡 **A5 afeta indiretamente**: key moments são em tempo de ETL, então precisam estar gravados antes da agregada puxar deles
+
+---
+
 ## Resumo executivo (atualizado 2026-04-23)
 
 | Ticket | Nome | Bloqueia | Backend | Frontend | Custo $$ |
 |--------|------|----------|---------|----------|----------|
-| A | Bloco 0 (timeline ETL) | C (parcial) | 3-5 dias | 3 dias | Baixo (nota IA é on-demand) |
+| A | Bloco 0 (timeline ETL) | C (parcial), E (parcial) | 3-5 dias | 3 dias | Baixo (nota IA é on-demand) |
 | B | Radar v2 z-score | — | 4 dias | Pronto (p-0.9.22) | Zero |
 | C | AI Insights + loja de tokens | — | 7-9 dias (+loja) | 4 dias (+loja em /account) | ~$1.20/mês/100 users (Gemini 2.5 Flash) |
 | D | Champion v2 | — | 5-7 dias (+spike D2) | 3 dias | ~$5 setup (só top 5 counters × 168 champs × 5 roles) |
+| **E** | **Rotação DB + stats do R2** | — | **7-8 dias** | **0.5 dia** | **~$45/mês a 5M matches** (13× mais barato que DB) |
 
-**Caminho crítico**: A (Bloco 0) → (B ∥ C ∥ D) em paralelo. **C depende de Stripe real pra loja** — fica stub.
+**Caminho crítico**: A (Bloco 0) → (B ∥ C ∥ D ∥ E) em paralelo. **E casa bem com B** (mesmo job batch semanal). **C depende de Stripe real pra loja** — fica stub.
 
 ## Seguimentos (ações pendentes)
 
@@ -431,6 +510,7 @@ Dois CSVs pra César preencher localmente:
 | César | Rodar spike do D2 (power curve) — scripts em `analysis/power_curve/` (gitignored) com `run.py` + `results/` + `NOTES.md` | D2 implementação |
 | César | Preencher os CSVs de comp heuristics — copiar `.speckit/templates/*.csv` pra `analysis/comp_heuristics/` e preencher | D5 implementação |
 | César | Confirmar convenção de coord da Riot timeline (A6) — inspecionar 5 matches conhecidos (quem estava blue, onde morreram) | A implementação do script ETL |
+| César | Manter calendário dos splits Riot atualizado no CLAUDE.md/backend config (E1) | Detecção da "season atual" no rotate_matches.py |
 | César/André | A/B test da escala 0..1 vs 0..10 no radar (B1) — branch de teste no staging | B1 migração de API |
 | André | Integrar Stripe (Ticket E futuro — não estava neste doc) | C3 loja de tokens + cards reais em `/account` |
 | André | System prompt + few-shot examples de tom (C6) — draft em `backend/app/ai/prompts/tone_guardrails.py` | C rollout |

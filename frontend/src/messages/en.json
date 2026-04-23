@@ -206,6 +206,85 @@
     "tag_melhoria": "IMPROVED",
     "tag_fix": "FIX",
     "releases": {
+      "p_0_9_22": {
+        "label": "More readable recommendation radar",
+        "entry_0": "Recommendation radar: the champion's ideal profile now appears dashed (used to blend with your filled profile). Your profile got vertex dots for clarity.",
+        "entry_1": "Hover any axis to see a tooltip with your profile value vs the champion's ideal.",
+        "entry_2": "New: click an axis to open the \"How to improve [axis]\" card (personalized AI drills coming soon for Premium)."
+      },
+      "p_0_9_21": {
+        "label": "New sign-in / sign-up screen",
+        "entry_0": "Sign in, sign up and password reset redesigned in the new Metis look. \"Forgot password\" mode sends a reset link via email.",
+        "entry_1": "Google and GitHub buttons visible (integration coming soon). Show/hide password via the eye icon.",
+        "entry_2": "On sign-up, password requirements show in real time (8 chars, 1 uppercase, 1 digit)."
+      },
+      "p_0_9_20": {
+        "label": "New screen: My Account",
+        "entry_0": "New /account route with everything about your account — current plan, Metis Chat usage this month, active coupons and watched players in one place.",
+        "entry_1": "Preferences on the same screen: language, accent color and default search region.",
+        "entry_2": "Security section with change password (via email), sign out all devices and delete account.",
+        "entry_3": "Coupons now have a copy-code button and a countdown to expiration."
+      },
+      "p_0_9_19_1": {
+        "label": "Avatar menu in the header",
+        "entry_0": "Clicking your initial in the header corner now opens a menu: My account, Admin panel (if admin) and Sign out.",
+        "entry_1": "PT/EN translation was broken in production — fixed."
+      },
+      "p_0_9_19": {
+        "label": "English across 100% of the site",
+        "entry_0": "Every screen now responds to your language — not just the home, admin and header. Tier list, profile, match page, chat, plans, everything.",
+        "entry_1": "Numbers format differently per language: 1.234 in Portuguese, 1,234 in English."
+      },
+      "p_0_9_18": {
+        "label": "Site in English 🇺🇸",
+        "entry_0": "Metis now speaks Portuguese and English. The PT/EN switcher sits in the header next to your account — click and the whole site flips language.",
+        "entry_1": "Your preference is saved in a cookie and persists after you close the browser.",
+        "entry_2": "First batch of translated screens: Home, Admin panel and the header itself. The rest landed in the next version."
+      },
+      "p_0_9_17": {
+        "label": "Fairer tier list",
+        "entry_0": "We rethought how tiers are calculated. It used to be raw winrate — now it uses standard deviation. A champion only reaches S+ if it's significantly above the role average on that patch.",
+        "entry_1": "Niche picks like Volibear jungle now show up even with few games, if the performance is consistently high on that role."
+      },
+      "p_0_9_16": {
+        "label": "Admin panel + avatar bugfix",
+        "entry_0": "Admin panel got the same look as the rest of the site — KPI cards, charts and an invalidate-cache button.",
+        "entry_1": "Clicking your initial in the header was taking everyone to the admin panel. Now it only does that for actual admins."
+      },
+      "p_0_9_15": {
+        "label": "Match detail",
+        "entry_0": "Full redesign of the individual match page with 3 tabs: Overview, Team Analysis and Builds & Runes.",
+        "entry_1": "Per-metric comparison between the two teams via a split donut — who got more kills, more gold, more damage, more vision.",
+        "entry_2": "Each player gets their Metis Score highlighted, and the full builds (items, runes, summoner spells) are grouped by role.",
+        "entry_3": "Match timeline reused from the player page — CS/m, gold and XP over time."
+      },
+      "p_0_9_14": {
+        "label": "Champion page",
+        "entry_0": "Fresh look for each champion's page with 4 sub-tabs: Overview (stats + power curve), Builds, Matchups and Synergies.",
+        "entry_1": "Automatic unpopular-role detection — if you filter Diana support, the site warns you the sample may not be representative."
+      },
+      "p_0_9_13": {
+        "label": "Player profile redesigned",
+        "entry_0": "Player banner with PFP, rank, mastery and a watch button. The first thing you see is who the summoner is.",
+        "entry_1": "4 large KPIs (winrate, KDA, CS/min and vision score) with semantic colors based on performance.",
+        "entry_2": "Cumulative winrate chart over recent matches — see the player's trend in real time.",
+        "entry_3": "Champion recommendations with an 8-dimension Neo-Artemis radar comparing your profile to the suggested champion.",
+        "entry_4": "Tighter match history with clickable match cards that lead to the detail page.",
+        "entry_5": "Rich sidebar: roles played, play profile, players you play with most, your nemesis and a chat CTA."
+      },
+      "p_0_9_12": {
+        "label": "Metis Chat redesigned",
+        "entry_0": "Chat got the site's new look: token bar up top, cleaner bubbles, quick prompts to get started, and a more elegant premium gate.",
+        "entry_1": "Easter egg: a coupon code is hidden somewhere on the site — find it to unlock Premium."
+      },
+      "p_0_9_11": {
+        "label": "Meet the team",
+        "entry_0": "New /team page showing who builds Metis — 3 cards with decorative glow, chip tags and live stats (days building, commits, lines of code, André's Red Bull count)."
+      },
+      "p_0_9_10": {
+        "label": "New Updates page",
+        "entry_0": "This page you're on got redesigned as a vertical timeline, with colored tags and nodes marking each release."
+      },
       "p_0_9_9": {
         "label": "Redesign: Plans + Coupons",
         "entry_0": "Full redesign of the Plans page with 4 tier cards, monthly/yearly toggle and new trust footer.",

@@ -206,6 +206,85 @@
     "tag_melhoria": "MELHORIA",
     "tag_fix": "FIX",
     "releases": {
+      "p_0_9_22": {
+        "label": "Radar de recomendação mais legível",
+        "entry_0": "Radar de recomendações: perfil ideal do campeão agora aparece tracejado (antes confundia com o seu preenchido). Seu perfil ganhou pontos de destaque nos vértices.",
+        "entry_1": "Passando o mouse em qualquer eixo, aparece tooltip com o valor do seu perfil vs o ideal do campeão.",
+        "entry_2": "Novo: clique em um eixo pra abrir o card \"Como melhorar [eixo]\" (drills personalizados com IA chegam em breve pra Premium)."
+      },
+      "p_0_9_21": {
+        "label": "Nova tela de login/cadastro",
+        "entry_0": "Login, cadastro e redefinição de senha repaginados no visual novo da Metis. Modo \"Esqueci minha senha\" com link por email.",
+        "entry_1": "Botões Google e GitHub visíveis (integração em breve). Mostrar/ocultar senha com o ícone de olho.",
+        "entry_2": "No cadastro, os requisitos da senha aparecem em tempo real (8 caracteres, 1 maiúscula, 1 número)."
+      },
+      "p_0_9_20": {
+        "label": "Nova página: Minha Conta",
+        "entry_0": "Nova rota /account com tudo da sua conta — plano atual, uso do chat Metis no mês, cupons ativos e supervisionados em um só lugar.",
+        "entry_1": "Preferências na mesma tela: idioma, cor de destaque e região padrão de busca.",
+        "entry_2": "Seção de segurança com alterar senha (via email), sair de todos os dispositivos e deletar conta.",
+        "entry_3": "Cupons na página agora têm botão de copiar código e contador de dias até expirar."
+      },
+      "p_0_9_19_1": {
+        "label": "Menu do avatar no header",
+        "entry_0": "Clique na sua inicial no canto do header agora abre um menu: Minha conta, Painel admin (se admin) e Sair.",
+        "entry_1": "Tradução PT/EN estava quebrada em produção — corrigido."
+      },
+      "p_0_9_19": {
+        "label": "Inglês em 100% do site",
+        "entry_0": "Todas as telas agora respondem ao seu idioma — não só a home, o admin e o header. Tier list, perfil, página de partida, chat, planos, tudo.",
+        "entry_1": "Números formatam diferente em cada idioma: 1.234 em português, 1,234 em inglês."
+      },
+      "p_0_9_18": {
+        "label": "Site em inglês 🇺🇸",
+        "entry_0": "Metis agora fala português e inglês. O seletor PT/EN aparece no header ao lado da sua conta — clica e o site inteiro muda de idioma.",
+        "entry_1": "A preferência fica salva num cookie e persiste mesmo depois de fechar o navegador.",
+        "entry_2": "Primeira leva de telas traduzidas: Home, Painel Admin e o próprio header. As demais entraram na versão seguinte."
+      },
+      "p_0_9_17": {
+        "label": "Tier list mais justo",
+        "entry_0": "Repensamos como os tiers são calculados. Antes era winrate bruto, agora usa desvio padrão — um campeão só entra em S+ se estiver significativamente acima da média daquela role no patch.",
+        "entry_1": "Campeões de nicho como Volibear jungle agora aparecem, mesmo com poucas partidas, se o desempenho for consistentemente alto na role."
+      },
+      "p_0_9_16": {
+        "label": "Painel admin + bugfix do avatar",
+        "entry_0": "Painel admin ganhou o mesmo visual das outras telas — cards de KPI, gráficos e botão de invalidar cache.",
+        "entry_1": "Clicar na sua inicial no header levava todo mundo pro painel admin. Agora só leva quem realmente é admin."
+      },
+      "p_0_9_15": {
+        "label": "Detalhe da partida",
+        "entry_0": "Redesign completo da página de uma partida individual com 3 abas: Overview, Análise de Equipe e Builds & Runas.",
+        "entry_1": "Comparação por métrica entre os dois times com donut split — quem fez mais kills, mais ouro, mais dano, mais visão.",
+        "entry_2": "Cada jogador tem seu Metis Score destacado, e os builds completos (itens, runas, feitiços) ficam agrupados por role.",
+        "entry_3": "Timeline da partida reaproveitada da página do jogador — CS/m, ouro e XP ao longo do tempo."
+      },
+      "p_0_9_14": {
+        "label": "Página de campeão",
+        "entry_0": "Novo visual pra página de cada campeão com 4 sub-abas: Overview (stats + curva de poder), Builds, Matchups e Sinergias.",
+        "entry_1": "Detecção automática de role impopular — se você filtrar Diana support, o site avisa que a amostra pode não ser representativa."
+      },
+      "p_0_9_13": {
+        "label": "Perfil de jogador redesenhado",
+        "entry_0": "Banner do jogador com PFP, elo, maestria e botão de supervisionar. A primeira coisa que você vê é quem é o invocador.",
+        "entry_1": "4 KPIs grandes (winrate, KDA, CS/min e score de visão) com cores semânticas conforme o desempenho.",
+        "entry_2": "Gráfico de winrate cumulativo nas últimas partidas — vê a curva do jogador em tempo real.",
+        "entry_3": "Recomendações de campeão com radar de 8 dimensões Neo-Artemis comparando seu perfil ao do campeão sugerido.",
+        "entry_4": "Histórico de partidas mais compacto, com match cards clicáveis que levam pra página de detalhe.",
+        "entry_5": "Sidebar rica: roles jogados, perfil de jogo, jogadores com quem você mais joga, seu nemesis e CTA pro chat."
+      },
+      "p_0_9_12": {
+        "label": "Chat Metis redesenhado",
+        "entry_0": "Chat ganhou a cara do resto do site: token bar no topo, bubbles mais limpas, quick prompts pra começar e o gate premium mais elegante.",
+        "entry_1": "Easter egg: esconde um código de cupom em algum lugar no site — quem descobrir ganha Premium."
+      },
+      "p_0_9_11": {
+        "label": "Conheça a equipe",
+        "entry_0": "Nova página /team mostrando quem faz a Metis — 3 cards com glow decorativo, tags em chips e stats ao vivo (dias construindo, commits, linhas de código, Red Bulls do André)."
+      },
+      "p_0_9_10": {
+        "label": "Nova página de novidades",
+        "entry_0": "Esta página aqui foi redesenhada como uma timeline vertical, com tags coloridas e nodes marcando cada release."
+      },
       "p_0_9_9": {
         "label": "Redesign: Planos + Cupons",
         "entry_0": "Redesign completo da página de Planos com os 4 tier cards, toggle mensal/anual e novo footer de trust.",
