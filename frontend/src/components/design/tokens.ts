@@ -13,6 +13,7 @@ export const TIER_COLORS = {
   'A':  { bg: 'rgba(74,222,128,0.12)',  border: '#4ADE80', text: '#4ADE80' },
   'B':  { bg: 'rgba(96,165,250,0.12)',  border: '#60A5FA', text: '#60A5FA' },
   'C':  { bg: 'rgba(138,147,166,0.12)', border: '#5A6378', text: '#8A93A6' },
+  'D':  { bg: 'rgba(248,113,113,0.12)', border: '#7F1D1D', text: '#F87171' },
 } as const
 
 export type Tier = keyof typeof TIER_COLORS

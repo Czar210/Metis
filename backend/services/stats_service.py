@@ -140,13 +140,24 @@ def buscar_tierlist(
     patch: str | None = None,
     patch_list: list[str] | None = None,
     min_matches: int = 1,
+    min_role_share: float = 0.15,
+    min_matches_relative: int = 10,
 ) -> list[dict[str, Any]]:
     """
     Agrega estatísticas de TODOS os campeões para montar a Tier List.
     Cacheado por 24h por combinacao de filtros.
-    Retorna lista ordenada por winrate desc por role.
+
+    Filtro de significância (nicho legítimo):
+      - Entra se `total_matches >= min_matches` (piso absoluto)
+      - OU se `role_share >= min_role_share` E `total_matches >= min_matches_relative`
+
+    Tier assignment: z-score do winrate dentro da role.
+      S+ ≥ +2σ · S ≥ +1σ · A ≥ 0 · B ≥ -1σ · C ≥ -2σ · D < -2σ
     """
-    cache_key = f"tierlist|{role}|{server}|{patch}|{sorted(patch_list) if patch_list else None}|{min_matches}"
+    cache_key = (
+        f"tierlist|{role}|{server}|{patch}|{sorted(patch_list) if patch_list else None}"
+        f"|{min_matches}|{min_role_share}|{min_matches_relative}"
+    )
     cached = _cache_get(cache_key)
     if cached is not None:
         logger.debug(f"[cache] tierlist hit: {cache_key[:60]}")
@@ -225,13 +236,27 @@ def buscar_tierlist(
             key = f"{name}|{pos}"
             buckets[key].append(r)
 
+    # Total de partidas de cada campeão em TODAS as roles (pra computar role_share).
+    # Precisamos disso antes do filtro pra cada (champ, role) saber o denominador real.
+    matches_per_champion: dict[str, int] = defaultdict(int)
+    for key, champ_rows in buckets.items():
+        champion, _ = key.split("|", 1)
+        matches_per_champion[champion] += len(champ_rows)
+
+    # Monta result_list com role_share + aplica filtro de significância.
     result_list: list[dict[str, Any]] = []
     for key, champ_rows in buckets.items():
         total = len(champ_rows)
-        if total < min_matches:
+        champion, champ_role = key.split("|", 1)
+        champ_total_all_roles = matches_per_champion[champion]
+        role_share = total / champ_total_all_roles if champ_total_all_roles > 0 else 0.0
+
+        # Filtro combinado: piso absoluto OU (role_share alta E piso relativo)
+        passes_abs = total >= min_matches
+        passes_nicho = role_share >= min_role_share and total >= min_matches_relative
+        if not (passes_abs or passes_nicho):
             continue
 
-        champion, champ_role = key.split("|", 1)
         wins = sum(1 for r in champ_rows if r.get("win"))
 
         def avg(field: str) -> float:
@@ -248,6 +273,7 @@ def buscar_tierlist(
             "winrate": round(wins / total * 100, 2),
             "pickrate": round(total / total_unique_matches * 100, 2),
             "banrate": round(ban_counts.get(champion, 0) / total_unique_matches * 100, 2),
+            "role_share": round(role_share * 100, 1),   # % dos jogos do champ nessa role
             "kda": kda,
             "avg_kills": round(avg("kills"), 2),
             "avg_deaths": round(avg("deaths"), 2),
@@ -265,25 +291,39 @@ def buscar_tierlist(
         by_role[c["role"]].append(c)
 
     def _assign_tiers(items: list[dict]) -> None:
+        """Tier por desvio padrão do winrate dentro da role.
+
+        Critério absoluto (não percentil): se o meta está balanceado e
+        ninguém fica +2σ acima, ninguém é S+ — e tá tudo certo.
+
+            S+ ≥ +2.0σ   (≈ top 2.5%)
+            S  ≥ +1.0σ   (≈ top 16%)
+            A  ≥  0.0σ   (acima da média)
+            B  ≥ -1.0σ
+            C  ≥ -2.0σ
+            D  <  -2.0σ
+        """
         if not items:
             return
-        wrs = sorted(c["winrate"] for c in items)
+        wrs = [c["winrate"] for c in items]
         n = len(wrs)
+        mean = sum(wrs) / n
+        variance = sum((w - mean) ** 2 for w in wrs) / n if n > 1 else 0.0
+        stddev = variance ** 0.5
 
-        def pct(p: float) -> float:
-            k = (n - 1) * p
-            f = int(k)
-            hi = f + 1 if f + 1 < n else f
-            return wrs[f] + (k - f) * (wrs[hi] - wrs[f])
-
-        p95, p80, p60, p40, p20 = pct(0.95), pct(0.80), pct(0.60), pct(0.40), pct(0.20)
         for c in items:
-            wr = c["winrate"]
-            if wr >= p95:   c["tier"] = "S+"
-            elif wr >= p80: c["tier"] = "S"
-            elif wr >= p60: c["tier"] = "A"
-            elif wr >= p40: c["tier"] = "B"
-            elif wr >= p20: c["tier"] = "C"
+            if stddev == 0:
+                # Sem variação — todo mundo na média
+                c["z_score"] = 0.0
+                c["tier"] = "A"
+                continue
+            z = (c["winrate"] - mean) / stddev
+            c["z_score"] = round(z, 2)
+            if z >= 2.0:   c["tier"] = "S+"
+            elif z >= 1.0: c["tier"] = "S"
+            elif z >= 0.0: c["tier"] = "A"
+            elif z >= -1.0: c["tier"] = "B"
+            elif z >= -2.0: c["tier"] = "C"
             else:           c["tier"] = "D"
 
     for role_items in by_role.values():

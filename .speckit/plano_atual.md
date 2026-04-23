@@ -1,6 +1,6 @@
 # Metis — Plano Atual
 
-*Ultima sync: 2026-04-22 | Versao atual: p-0.9.15 — REDESIGN COMPLETO 🎉*
+*Ultima sync: 2026-04-22 | Versao atual: p-0.9.17*
 
 ---
 
@@ -26,7 +26,9 @@
 | p-0.9.12 | ✅ Concluido | Redesign: Chat Metis (token bar, thread bubbles, quick prompts, gate premium) + easter egg de código de cupom oculto |
 | p-0.9.13 | ✅ Concluido | Redesign: Player Dashboard (banner, 4 KPIs, winrate cumulativo, tabela campeões, recomendações com DualRadar, match history, sidebar rica) |
 | p-0.9.14 | ✅ Concluido | Redesign: Champion Page (hero violet, 4 sub-tabs, detecção de role impopular) |
-| **p-0.9.15** | ✅ **Concluido** | **Redesign: Match Detail (3 tabs Overview/Análise de Equipe/Builds, TeamBlock com Metis Score, SplitDonut por métrica, timeline de frames reusada). FECHA O REDESIGN 🎉** |
+| p-0.9.15 | ✅ Concluido | Redesign: Match Detail (3 tabs Overview/Análise de Equipe/Builds, TeamBlock com Metis Score, SplitDonut por métrica, timeline de frames reusada) |
+| p-0.9.16 | ✅ Concluido | Admin redesign com design system + bugfix avatar header (condicional em `is_admin`) |
+| **p-0.9.17** | ✅ **Concluido** | **Tier List por z-score (S+ ≥ +2σ) + filtro de role_share (nicho legítimo entra mesmo com sample baixo). Frontend consome `c.tier` do backend, mostra z_score como +X.Yσ** |
 
 ---
 
@@ -51,6 +53,25 @@ Baseado no handoff do Claude Design (`metis-design.html` + 10 screens JSX). Uma 
 - `/admin` e `/auth` continuam no estilo antigo (fora do handoff do Claude Design). Decidir se migrar numa próxima versão.
 - Sistema antigo `--metis-*` no CSS pode ser removido quando admin/auth migrarem.
 - Roadmap analytics: Bloco 0 (parsing eventos timeline) destrava timeline interativa completa, builds filtradas, matchup profundo — seguir no M2.
+
+---
+
+## 🎯 Próximo grande marco — v0.9.0 (Sistema Neo-Artemis 2.0)
+
+**Plano completo:** [`.speckit/plano_v0.9.0/`](plano_v0.9.0/README.md)
+
+Em paralelo (não bloqueante): **César classifica os 172 champs** no [`data/champion_classification.csv`](../data/champion_classification.csv) seguindo o [guia de curadoria](plano_v0.9.0/classify_champions_guide.md).
+
+Execução em 7 fases (0 → 7), cada uma com sub-plano detalhado:
+- [Fase 0 — Infra Estatística](plano_v0.9.0/fase_0_infra_estatistica.md) · 1d
+- [Fase 1 — Normalização real](plano_v0.9.0/fase_1_normalizacao_real.md) · 1-2d
+- [Fase 2 — Split Win-vs-Loss](plano_v0.9.0/fase_2_split_win_loss.md) · 2d
+- [Fase 3a — Timing via Frames](plano_v0.9.0/fase_3a_timing_frames.md) · 2d
+- [Fase 3b — Timing via Events](plano_v0.9.0/fase_3b_timing_events.md) · 4-5d (inclui Bloco 0 do roadmap abaixo)
+- [Fase 4 — Classes + Enemy Comp](plano_v0.9.0/fase_4_classes_comp.md) · 3d (paralelo com curadoria)
+- [Fase 5 — Build Contextual](plano_v0.9.0/fase_5_build_contextual.md) · 4d
+- [Fase 6 — Pensamento Crítico](plano_v0.9.0/fase_6_pensamento_critico.md) · 3d
+- [Fase 7 — IA Narrativa (fecha v0.9.0)](plano_v0.9.0/fase_7_ia_narrativa.md) · 2d
 
 ---
 

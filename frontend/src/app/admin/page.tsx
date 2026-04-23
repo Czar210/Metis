@@ -3,13 +3,17 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import {
-  Users, Trophy, Trash2, Clock, Database,
-  TrendingUp, AlertTriangle, BarChart3, RefreshCw,
-} from 'lucide-react'
-import { Header } from '@/components/ui/Header'
 import { apiFetch } from '@/lib/api'
+import {
+  AppHeader,
+  Card,
+  SectionLabel,
+  Stat,
+  Bar,
+  Icon,
+} from '@/components/design'
 
+// ── Types ──────────────────────────────────────────────────────
 type AdminStats = {
   players_total: number
   matches_clean: number
@@ -25,46 +29,24 @@ const REASON_LABEL: Record<string, string> = {
   remake:      'Remakes (< 5 min)',
   short_game:  'Partida curta (5–15 min)',
   wrong_queue: 'Fila errada (ARAM, etc.)',
+  invalid_json: 'JSON inválido',
+  afk_status:  'AFK detectado',
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  sub,
-  color = 'text-metis-accent',
-}: {
-  icon: React.ElementType
-  label: string
-  value: number | string
-  sub?: string
-  color?: string
-}) {
-  return (
-    <div className="bg-metis-surface border border-metis-border rounded-xl p-5 flex flex-col gap-2">
-      <div className="flex items-center gap-2 text-metis-text-dim">
-        <Icon className={`w-4 h-4 ${color}`} />
-        <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
-      </div>
-      <span className={`text-3xl font-bold ${color}`}>
-        {typeof value === 'number' ? value.toLocaleString('pt-BR') : value}
-      </span>
-      {sub && <span className="text-[11px] text-metis-text-dim">{sub}</span>}
-    </div>
-  )
-}
-
+// ── Page ───────────────────────────────────────────────────────
 export default function AdminPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [stats, setStats]     = useState<AdminStats | null>(null)
+  const [stats, setStats] = useState<AdminStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState<string | null>(null)
+
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
-
       if (!user) { router.replace('/auth'); return }
       if (!user.app_metadata?.is_admin) { router.replace('/'); return }
 
@@ -84,171 +66,339 @@ export default function AdminPage() {
       }
     }
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const header = <Header />
+  async function handleRefreshCache() {
+    setRefreshing(true)
+    setRefreshMsg(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setRefreshing(false); return }
+      const res = await apiFetch('/api/v1/admin/refresh-cache', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const d = await res.json()
+      setRefreshMsg(`Cache atualizado — ${d.cleared ?? 0} entradas removidas`)
+    } catch {
+      setRefreshMsg('Erro ao atualizar cache')
+    } finally {
+      setRefreshing(false)
+      setTimeout(() => setRefreshMsg(null), 5000)
+    }
+  }
 
-  if (loading) return (
-    <div className="min-h-screen bg-metis-bg text-metis-text">
-      {header}
-      <div className="flex items-center justify-center py-32 text-metis-text-dim text-sm">
-        Carregando painel…
+  if (loading) {
+    return (
+      <div className="metis-scope" style={{ minHeight: '100vh', background: 'var(--m-bg)' }}>
+        <AppHeader active="home" />
+        <div style={{ padding: '80px 0', display: 'flex', justifyContent: 'center', gap: 6 }}>
+          {[0, 150, 300].map((d) => (
+            <span
+              key={d}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: 'var(--m-accent)',
+                animation: 'm-bounce 1.4s infinite ease-in-out both',
+                animationDelay: `${d}ms`,
+              }}
+            />
+          ))}
+        </div>
+        <style jsx>{`
+          @keyframes m-bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+          }
+        `}</style>
       </div>
-    </div>
-  )
+    )
+  }
 
-  if (error || !stats) return (
-    <div className="min-h-screen bg-metis-bg text-metis-text">
-      {header}
-      <div className="flex flex-col items-center justify-center py-32 gap-3">
-        <AlertTriangle className="w-8 h-8 text-red-400" />
-        <p className="text-sm text-metis-text-dim">{error ?? 'Erro desconhecido.'}</p>
+  if (error || !stats) {
+    return (
+      <div className="metis-scope" style={{ minHeight: '100vh', background: 'var(--m-bg)' }}>
+        <AppHeader active="home" />
+        <div
+          style={{
+            padding: '80px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 14,
+          }}
+        >
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 12,
+              background: 'rgba(248,113,113,0.1)',
+              border: '1px solid rgba(248,113,113,0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--m-red)',
+            }}
+          >
+            <Icon name="x" size={26} />
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>{error ?? 'Erro desconhecido.'}</p>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
-  const cleanRate = stats.matches_clean + stats.matches_dirty_total > 0
-    ? Math.round(stats.matches_clean / (stats.matches_clean + stats.matches_dirty_total) * 100)
-    : 0
+  const cleanRate =
+    stats.matches_clean + stats.matches_dirty_total > 0
+      ? Math.round(stats.matches_clean / (stats.matches_clean + stats.matches_dirty_total) * 100)
+      : 0
 
   return (
-    <div className="min-h-screen bg-metis-bg text-metis-text">
-      {header}
+    <div className="metis-scope" style={{ minHeight: '100vh', background: 'var(--m-bg)' }}>
+      <AppHeader active="home" />
 
-      <main className="max-w-5xl mx-auto px-6 py-10 space-y-8">
-
-        {/* Título + ações */}
-        <div className="flex items-center justify-between">
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 28px 48px' }}>
+        {/* Header + refresh button */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'space-between',
+            marginBottom: 24,
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
           <div>
-            <h1 className="text-xl font-bold text-metis-text">Visao Geral do Sistema</h1>
-            <p className="text-sm text-metis-text-dim mt-1">
-              Dados ao vivo do Supabase
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 11,
+                color: 'var(--m-accent)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                fontWeight: 700,
+                marginBottom: 8,
+              }}
+            >
+              <Icon name="settings" size={12} /> Painel Admin · acesso restrito
+            </div>
+            <h1
+              className="font-display"
+              style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.03em' }}
+            >
+              Visão geral do sistema
+            </h1>
+            <p style={{ fontSize: 13, color: 'var(--m-text-dim)', marginTop: 4 }}>
+              Dados ao vivo do Supabase · pipeline + ETL + cache
             </p>
           </div>
-          <button
-            onClick={async () => {
-              try {
-                const { data: { session } } = await supabase.auth.getSession()
-                if (!session) return
-                const res = await apiFetch('/api/v1/admin/refresh-cache', {
-                  method: 'POST',
-                  headers: { Authorization: `Bearer ${session.access_token}` },
-                })
-                const d = await res.json()
-                alert(`Cache atualizado: ${d.cleared} entradas removidas`)
-              } catch { alert('Erro ao atualizar cache') }
-            }}
-            className="flex items-center gap-2 text-xs bg-metis-accent hover:bg-metis-accent-hover text-white px-4 py-2 rounded-lg transition-colors font-medium"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Atualizar Tier List
-          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {refreshMsg && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: refreshMsg.startsWith('Erro') ? 'var(--m-red)' : 'var(--m-green)',
+                }}
+              >
+                {refreshMsg}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleRefreshCache}
+              disabled={refreshing}
+              className="m-hover-accent"
+              style={{
+                padding: '9px 16px',
+                background: 'var(--m-accent)',
+                color: '#1a1510',
+                border: 'none',
+                borderRadius: 10,
+                fontSize: 12,
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: refreshing ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                opacity: refreshing ? 0.55 : 1,
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-block',
+                  animation: refreshing ? 'm-spin 1s linear infinite' : 'none',
+                }}
+              >
+                <Icon name="compass" size={13} />
+              </span>
+              {refreshing ? 'Atualizando...' : 'Invalidar cache da tier list'}
+            </button>
+          </div>
         </div>
 
-        {/* Cards principais */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            icon={Users}
-            label="Jogadores"
-            value={stats.players_total}
-            sub="cadastrados no banco"
-            color="text-metis-accent"
-          />
-          <StatCard
-            icon={Trophy}
-            label="Partidas limpas"
-            value={stats.matches_clean}
-            sub={`Taxa de aprovação: ${cleanRate}%`}
-            color="text-green-400"
-          />
-          <StatCard
-            icon={Trash2}
-            label="Partidas descartadas"
-            value={stats.matches_dirty_total}
-            sub="remakes, fila errada, curtas"
-            color="text-red-400"
-          />
-          <StatCard
-            icon={Database}
-            label="Timelines salvas"
-            value={stats.timelines_saved}
-            sub={`de ${stats.matches_clean} partidas limpas`}
-            color="text-purple-400"
-          />
+        {/* KPIs principais */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 12,
+            marginBottom: 20,
+          }}
+        >
+          <Card>
+            <SectionLabel icon="users">Jogadores</SectionLabel>
+            <Stat
+              size="lg"
+              label=""
+              value={stats.players_total.toLocaleString('pt-BR')}
+              sub="cadastrados no banco"
+            />
+          </Card>
+          <Card>
+            <SectionLabel icon="check">Partidas limpas</SectionLabel>
+            <Stat
+              size="lg"
+              label=""
+              value={stats.matches_clean.toLocaleString('pt-BR')}
+              sub={`taxa de aprovação: ${cleanRate}%`}
+              accent="var(--m-green)"
+            />
+          </Card>
+          <Card>
+            <SectionLabel icon="x">Partidas descartadas</SectionLabel>
+            <Stat
+              size="lg"
+              label=""
+              value={stats.matches_dirty_total.toLocaleString('pt-BR')}
+              sub="remakes, fila errada, curtas"
+              accent="var(--m-red)"
+            />
+          </Card>
+          <Card>
+            <SectionLabel icon="activity">Timelines salvas</SectionLabel>
+            <Stat
+              size="lg"
+              label=""
+              value={stats.timelines_saved.toLocaleString('pt-BR')}
+              sub={`de ${stats.matches_clean.toLocaleString('pt-BR')} partidas limpas`}
+              accent="var(--m-violet)"
+            />
+          </Card>
         </div>
 
-        {/* Cards secundários */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            icon={TrendingUp}
-            label="Sincronizações 24h"
-            value={stats.synced_last_24h}
-            sub="jogadores atualizados hoje"
-            color="text-yellow-400"
-          />
-          <StatCard
-            icon={TrendingUp}
-            label="Sincronizações 7d"
-            value={stats.synced_last_7d}
-            sub="jogadores atualizados na semana"
-            color="text-yellow-400"
-          />
-          <StatCard
-            icon={BarChart3}
-            label="Participantes"
-            value={stats.participants_total}
-            sub="linhas em match_participants"
-            color="text-metis-accent"
-          />
-          <StatCard
-            icon={Clock}
-            label="Cooldown de sync"
-            value="5 min"
-            sub="por jogador por sincronização"
-            color="text-metis-text-dim"
-          />
+        {/* KPIs secundários */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 12,
+            marginBottom: 24,
+          }}
+        >
+          <Card>
+            <SectionLabel icon="trending">Sincronizações 24h</SectionLabel>
+            <Stat
+              size="lg"
+              label=""
+              value={stats.synced_last_24h.toLocaleString('pt-BR')}
+              sub="jogadores atualizados hoje"
+              accent="var(--m-accent)"
+            />
+          </Card>
+          <Card>
+            <SectionLabel icon="trending">Sincronizações 7d</SectionLabel>
+            <Stat
+              size="lg"
+              label=""
+              value={stats.synced_last_7d.toLocaleString('pt-BR')}
+              sub="semana"
+              accent="var(--m-accent)"
+            />
+          </Card>
+          <Card>
+            <SectionLabel icon="barChart">Participantes</SectionLabel>
+            <Stat
+              size="lg"
+              label=""
+              value={stats.participants_total.toLocaleString('pt-BR')}
+              sub="linhas em match_participants"
+            />
+          </Card>
+          <Card>
+            <SectionLabel icon="clock">Cooldown de sync</SectionLabel>
+            <Stat size="lg" label="" value="5 min" sub="por jogador/request" />
+          </Card>
         </div>
 
         {/* Breakdown dirty matches */}
-        <div className="bg-metis-surface border border-metis-border rounded-xl p-6">
-          <h2 className="text-sm font-semibold text-metis-text mb-4 flex items-center gap-2">
-            <Trash2 className="w-4 h-4 text-red-400" />
-            Partidas descartadas — por motivo
-          </h2>
-          <div className="space-y-3">
-            {Object.entries(stats.matches_dirty_by_reason).map(([reason, count]) => {
-              const total = stats.matches_dirty_total || 1
-              const pct = Math.round((count / total) * 100)
-              return (
-                <div key={reason}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-metis-text">
-                      {REASON_LABEL[reason] ?? reason}
-                    </span>
-                    <span className="text-xs text-metis-text-dim">
-                      {count.toLocaleString('pt-BR')} ({pct}%)
-                    </span>
-                  </div>
-                  <div className="w-full bg-metis-border/30 rounded-full h-1.5">
-                    <div
-                      className="h-full rounded-full bg-red-500/60"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-            {Object.keys(stats.matches_dirty_by_reason).length === 0 && (
-              <p className="text-xs text-metis-text-dim">Nenhuma partida descartada ainda.</p>
-            )}
-          </div>
-        </div>
+        <Card>
+          <SectionLabel icon="filter">Partidas descartadas · por motivo</SectionLabel>
+          {Object.keys(stats.matches_dirty_by_reason).length === 0 ? (
+            <p style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>
+              Nenhuma partida descartada ainda.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+              {Object.entries(stats.matches_dirty_by_reason)
+                .sort((a, b) => b[1] - a[1])
+                .map(([reason, count]) => {
+                  const total = stats.matches_dirty_total || 1
+                  const pct = Math.round((count / total) * 100)
+                  return (
+                    <div key={reason}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: 6,
+                        }}
+                      >
+                        <span style={{ fontSize: 12, color: 'var(--m-text)', fontWeight: 500 }}>
+                          {REASON_LABEL[reason] ?? reason}
+                        </span>
+                        <span
+                          className="tabular"
+                          style={{ fontSize: 11, color: 'var(--m-text-dim)' }}
+                        >
+                          {count.toLocaleString('pt-BR')} · {pct}%
+                        </span>
+                      </div>
+                      <Bar value={pct} max={100} color="var(--m-red)" height={5} />
+                    </div>
+                  )
+                })}
+            </div>
+          )}
+        </Card>
 
-        {/* Footer */}
-        <p className="text-[11px] text-metis-text-dim text-center">
-          Metis Admin · acesso restrito
+        <p
+          style={{
+            fontSize: 10,
+            color: 'var(--m-muted)',
+            textAlign: 'center',
+            marginTop: 24,
+            letterSpacing: '0.04em',
+          }}
+        >
+          Metis Admin · visível apenas pra contas com <code style={{ color: 'var(--m-accent)' }}>app_metadata.is_admin = true</code>
         </p>
-      </main>
+      </div>
+
+      <style jsx>{`
+        @keyframes m-spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   )
 }

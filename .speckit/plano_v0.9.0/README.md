@@ -4,22 +4,49 @@
 **Autor:** César (proposta) + Claude (detalhamento)
 **Status:** Aprovado em macro. Cada fase exige re-aval antes de implementar.
 
+**Decisões fechadas (2026-04-22):**
+- Ordem 0 → 7 mantida (nada reordenado)
+- Classificação dos 170 campeões na Fase 4 é **100% manual por César** (sem first-pass LLM)
+  - Claude prepara o CSV template com `champion_name`, `title`, `ddragon_tags`, `short_blurb` pré-preenchidos
+  - César preenche `primary_class`, `secondary_classes`, `notes` à mão
+  - Pode ser feito em paralelo durante as fases 0–3 (não bloqueia o caminho crítico)
+
 ---
+
+## Estrutura desta pasta
+
+```
+.speckit/plano_v0.9.0/
+├── README.md                        ← você está aqui (mapa macro)
+├── fase_0_infra_estatistica.md      ← sub-plano detalhado com SQL/código
+├── fase_1_normalizacao_real.md
+├── fase_2_split_win_loss.md
+├── fase_3a_timing_frames.md
+├── fase_3b_timing_events.md
+├── fase_4_classes_comp.md
+├── fase_5_build_contextual.md
+├── fase_6_pensamento_critico.md
+├── fase_7_ia_narrativa.md
+└── classify_champions_guide.md      ← guia de curadoria das 10 classes (Fase 4)
+```
+
+Este README tem o **mapa macro** (filosofia, convenções, bibliotecas globais, ordem das fases, anexos A/B/C). Cada **sub-plano** é um arquivo próprio com SQL literal, código Python exato, testes e validação — consultado imediatamente antes de começar a implementar a fase.
 
 ## Índice
 
 - [Filosofia](#filosofia)
 - [Convenções](#convenções)
 - [Bibliotecas globais](#bibliotecas-globais-do-projeto)
-- [Fase 0 — Infraestrutura Estatística](#fase-0--infraestrutura-estatística)
-- [Fase 1 — Normalização real no perfil 8D](#fase-1--normalização-real-no-perfil-8d)
-- [Fase 2 — Split Win-vs-Loss](#fase-2--split-win-vs-loss)
-- [Fase 3a — Timing via Frames](#fase-3a--timing-via-frames)
-- [Fase 3b — Timing via Events (depende Bloco 0)](#fase-3b--timing-via-events-depende-bloco-0)
-- [Fase 4 — Classes de Campeões + Enemy Comp](#fase-4--classes-de-campeões--enemy-comp)
-- [Fase 5 — Build Contextual](#fase-5--build-contextual)
-- [Fase 6 — Pensamento Crítico (regras)](#fase-6--pensamento-crítico-regras)
-- [Fase 7 — IA Narrativa (Metis)](#fase-7--ia-narrativa-metis)
+- [Fase 0 — Infraestrutura Estatística](fase_0_infra_estatistica.md)
+- [Fase 1 — Normalização real no perfil 8D](fase_1_normalizacao_real.md)
+- [Fase 2 — Split Win-vs-Loss](fase_2_split_win_loss.md)
+- [Fase 3a — Timing via Frames](fase_3a_timing_frames.md)
+- [Fase 3b — Timing via Events](fase_3b_timing_events.md)
+- [Fase 4 — Classes de Campeões + Enemy Comp](fase_4_classes_comp.md)
+- [Fase 5 — Build Contextual](fase_5_build_contextual.md)
+- [Fase 6 — Pensamento Crítico (regras)](fase_6_pensamento_critico.md)
+- [Fase 7 — IA Narrativa (Metis)](fase_7_ia_narrativa.md)
+- [Guia de curadoria das classes](classify_champions_guide.md)
 - [Anexo A — Taxonomia de classes](#anexo-a--taxonomia-de-classes-fase-4)
 - [Anexo B — Arquétipos de composição](#anexo-b--arquétipos-de-composição-fase-5)
 - [Anexo C — Catálogo inicial de regras](#anexo-c--catálogo-inicial-de-regras-fase-6)

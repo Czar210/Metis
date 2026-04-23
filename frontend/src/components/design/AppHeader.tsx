@@ -38,15 +38,18 @@ type Props = {
 
 export function AppHeader({ active = 'home', compact = false }: Props) {
   const [userEmail, setUserEmail] = useState<string | null | undefined>(undefined)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUserEmail(user?.email ?? null)
+      setIsAdmin(user?.app_metadata?.is_admin === true)
     })
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserEmail(session?.user?.email ?? null)
+      setIsAdmin(session?.user?.app_metadata?.is_admin === true)
     })
     return () => {
       subscription.subscription.unsubscribe()
@@ -151,21 +154,21 @@ export function AppHeader({ active = 'home', compact = false }: Props) {
           </Link>
         ) : initial ? (
           <Link
-            href="/admin"
-            title={userEmail ?? ''}
+            href={isAdmin ? '/admin' : '/'}
+            title={isAdmin ? `${userEmail} · Admin` : (userEmail ?? 'Minha conta')}
             className="m-hover-surface"
             style={{
               width: 32,
               height: 32,
               borderRadius: '50%',
               background: 'var(--m-surface-2)',
-              border: '1px solid var(--m-border-2)',
+              border: `1px solid ${isAdmin ? 'rgb(var(--m-accent-rgb) / 0.5)' : 'var(--m-border-2)'}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: 12,
               fontWeight: 700,
-              color: 'var(--m-text)',
+              color: isAdmin ? 'var(--m-accent)' : 'var(--m-text)',
               textDecoration: 'none',
             }}
           >

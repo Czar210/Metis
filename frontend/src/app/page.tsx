@@ -38,8 +38,11 @@ type TopChampion = {
   avg_kills: number
   avg_deaths: number
   avg_assists: number
-  /** Enriquecido no frontend — API ainda não retorna. */
   role?: string
+  /** Backend retorna a partir de p-0.9.17. Frontend usa fallback local se ausente. */
+  tier?: Tier
+  z_score?: number
+  role_share?: number
 }
 
 type Suggestion = {
@@ -52,11 +55,17 @@ type Suggestion = {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
-function getTier(winrate: number): Tier {
-  if (winrate >= 54) return 'S+'
-  if (winrate >= 52) return 'S'
-  if (winrate >= 50) return 'A'
-  if (winrate >= 48) return 'B'
+/**
+ * Prefere o tier vindo do backend (z-score por role).
+ * Fallback — só se o backend mais antigo não incluir o campo.
+ */
+function resolveTier(c: TopChampion): Tier {
+  if (c.tier) return c.tier
+  // Fallback legado por winrate absoluto
+  if (c.winrate >= 54) return 'S+'
+  if (c.winrate >= 52) return 'S'
+  if (c.winrate >= 50) return 'A'
+  if (c.winrate >= 48) return 'B'
   return 'C'
 }
 
@@ -518,7 +527,7 @@ export default function HomePage() {
                 }}
               >
                 {top3.map((c) => {
-                  const tier = getTier(c.winrate)
+                  const tier = resolveTier(c)
                   const kda = computeKDA(c.avg_kills, c.avg_deaths, c.avg_assists)
                   return (
                     <Link
@@ -754,7 +763,7 @@ export default function HomePage() {
                 </div>
               )}
               {top8.map((c) => {
-                const tier = getTier(c.winrate)
+                const tier = resolveTier(c)
                 const kda = computeKDA(c.avg_kills, c.avg_deaths, c.avg_assists)
                 return (
                   <Link

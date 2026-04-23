@@ -34,6 +34,9 @@ type ChampionStat = {
   pickrate?: number
   banrate?: number
   kda?: number
+  // Novos em p-0.9.17
+  z_score?: number
+  role_share?: number
 }
 
 const ROLES: { v: '' | Role; label: string; iconRole: Role | null }[] = [
@@ -72,7 +75,7 @@ const ELOS = [
   { value: 'CHALLENGER',  label: 'Challenger',  emblem: 'Challenger' },
 ]
 
-const TIER_ORDER: Tier[] = ['S+', 'S', 'A', 'B', 'C']
+const TIER_ORDER: Tier[] = ['S+', 'S', 'A', 'B', 'C', 'D']
 
 function derivedTier(c: ChampionStat): Tier {
   // Usa o tier da API se vier; senão deriva do winrate.
@@ -157,7 +160,7 @@ export default function ChampionsPage() {
     ? displayed.filter((c) => c.champion.toLowerCase().includes(searchLower))
     : displayed
 
-  const byTier: Record<Tier, ChampionStat[]> = { 'S+': [], S: [], A: [], B: [], C: [] }
+  const byTier: Record<Tier, ChampionStat[]> = { 'S+': [], S: [], A: [], B: [], C: [], D: [] }
   for (const c of visible) {
     byTier[derivedTier(c)].push(c)
   }
@@ -608,6 +611,21 @@ export default function ChampionsPage() {
                             >
                               {ch.winrate.toFixed(1)}%
                             </span>
+                            {ch.z_score !== undefined && (
+                              <span
+                                className="tabular"
+                                title="Desvios padrão acima da média da role"
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                  color: ch.z_score >= 0 ? 'var(--m-green)' : 'var(--m-red)',
+                                  opacity: 0.8,
+                                }}
+                              >
+                                {ch.z_score >= 0 ? '+' : ''}
+                                {ch.z_score.toFixed(1)}σ
+                              </span>
+                            )}
                             <div style={{ flex: 1 }} />
                             {ch.pickrate !== undefined && (
                               <span

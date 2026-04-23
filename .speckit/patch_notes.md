@@ -2,6 +2,66 @@
 
 *Diário de mudanças significativas no ecossistema e na stack do projeto.*
 
+## p-0.9.17 — Tier List por z-score + filtro de nicho (2026-04-22)
+
+Tier agora é calculado estatisticamente (desvios padrão) e filtro de relevância permite nichos legítimos sem poluir com outliers.
+
+### Backend — `stats_service.py`
+- **`_assign_tiers` reescrito**: percentil → **z-score** do winrate dentro da role
+  - S+ ≥ +2σ · S ≥ +1σ · A ≥ 0 · B ≥ -1σ · C ≥ -2σ · D < -2σ
+  - Se meta balanceado (stddev baixo), ninguém é S+ — sem "S+ forçado"
+- **Filtro de significância** novo: entra se `total_matches >= min_matches` **OU** (`role_share >= min_role_share` AND `total_matches >= min_matches_relative`)
+  - Miss Fortune em JUNGLE com 2 matches: cortada (role_share muito baixa + sample baixo)
+  - Volibear em JUNGLE com 13 matches e 100% role_share: **entra** (nicho legítimo)
+- **Response** inclui 2 campos novos: `z_score` (float) e `role_share` (% float)
+
+### Backend — `routes/stats.py`
+- `/api/v1/stats/tierlist` ganhou 2 query params: `min_role_share` (default 0.15) e `min_matches_relative` (default 10)
+- Backwards compat: `min_matches` segue existindo como piso absoluto
+
+### Frontend
+- **Home** (`app/page.tsx`): substitui `getTier(winrate)` local por `resolveTier(c)` que prefere `c.tier` do backend, com fallback legado pro pior caso
+- **Tier List** (`app/champions/page.tsx`): cards mostram `z_score` em formato `+1.8σ` ou `-0.5σ` como sub-label (cor verde/vermelho, tooltip "Desvios padrão acima da média da role")
+- **TIER_COLORS**: tier `D` adicionado (vermelho escuro) pra cobrir z < -2σ
+- **TIER_ORDER + byTier**: incluem D
+
+### Distribuição esperada (sanity)
+Em JUNGLE patch 16.7 no banco atual:
+```
+S+: 1 (Volibear +3.22σ, 76.9% WR, 100% role_share)
+S:  9
+A:  13
+B:  23
+C:  5
+D:  1 (Gragas JG -3.01σ, 25% WR)
+```
+
+---
+
+## p-0.9.16 — Admin redesign + bugfix avatar (2026-04-22)
+
+Última tela fora do redesign original (admin não estava no handoff do Claude Design) + bugfix urgente do avatar do header.
+
+### Bugfix — `AppHeader.tsx`
+- Avatar linkava pra `/admin` pra todo mundo. Agora condiciona em `user.app_metadata?.is_admin === true`
+- Usuário normal: link vai pra `/` (home), title "Minha conta"
+- Usuário admin: link vai pra `/admin`, avatar ganha borda accent
+- Listener `onAuthStateChange` agora também atualiza `isAdmin` (reage a login/logout)
+
+### Redesign — `app/admin/page.tsx`
+- AppHeader novo substitui Header antigo
+- Header da página: eyebrow accent "// Painel Admin · acesso restrito" + h1 Space Grotesk "Visão geral do sistema"
+- Botão "Invalidar cache da tier list" em accent com spinner animado durante execução + mensagem de feedback inline
+- **8 KPI cards** (2 rows de 4) com Stat primitive e cores semânticas (accent, green, red, violet)
+- Card "Partidas descartadas · por motivo" com bars horizontais vermelhas e % do total
+- Auth check preservado (redirect pra `/` se não é admin, `/auth` se deslogado)
+- Footer sutil mencionando requisito `app_metadata.is_admin = true`
+
+### Redesign Metis 1.0 — **AGORA SIM 100% COMPLETO**
+11 telas migradas ao todo (10 do handoff + admin fora do handoff).
+
+---
+
 ## p-0.9.15 — Redesign: Match Detail + Fim do Redesign 🎉 (2026-04-22)
 
 **Décima e última tela do redesign.** Match detail completo com 3 tabs (Overview / Análise de Equipe / Builds & Runas). Toda a lógica preservada (fetch match + timeline lazy, Metis Score, bans, runas_raw parsing, summoner spells, highlight de jogador via `?as=puuid`).

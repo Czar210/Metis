@@ -72,13 +72,24 @@ def tierlist(
     server: str | None = Query(default=None, description="Servidor (BR1, NA1, KR, EUW1...)"),
     patch: str | None = Query(default=None, description="Patch único (ex: 15.1)"),
     patches: str | None = Query(default=None, description="Range de patches separados por vírgula (ex: 16.5,16.6,16.7)"),
-    min_matches: int = Query(default=5, ge=1, description="Mínimo de partidas para incluir campeão"),
+    min_matches: int = Query(default=5, ge=1, description="Piso absoluto de partidas (default 5)"),
+    min_role_share: float = Query(default=0.15, ge=0.0, le=1.0, description="% mínima de jogos do champ nessa role pra considerar nicho legítimo (default 15%)"),
+    min_matches_relative: int = Query(default=10, ge=1, description="Piso relativo (default 10) — usado junto com min_role_share"),
 ):
     """
-    🏆 Tier List Global
+    🏆 Tier List Global — z-score + filtro de significância
 
-    Retorna todos os campeões com estatísticas agregadas, ordenados por winrate.
-    Filtros opcionais: role, server, patch (único) ou patches (range comma-separated).
+    Retorna todos os campeões com estatísticas agregadas, tier por desvio padrão
+    do winrate dentro da role.
+
+    Filtro de significância (entra se qualquer um bater):
+      - total_matches >= min_matches (piso absoluto)
+      - role_share >= min_role_share AND total_matches >= min_matches_relative (nicho legítimo)
+
+    Cada row retorna:
+      - tier: S+/S/A/B/C/D
+      - z_score: desvios padrão acima da média da role
+      - role_share: % dos jogos do campeão nessa role específica
     """
     try:
         db = _get_supabase()
@@ -90,6 +101,8 @@ def tierlist(
             patch=patch,
             patch_list=patch_list,
             min_matches=min_matches,
+            min_role_share=min_role_share,
+            min_matches_relative=min_matches_relative,
         )
     except RuntimeError as err:
         raise HTTPException(status_code=500, detail=str(err))
