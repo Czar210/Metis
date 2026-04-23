@@ -2,15 +2,30 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { Star, StarOff, ChevronDown, ShieldCheck, RefreshCw, UserX } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { MatchCard } from '@/components/matches/MatchCard'
-import type { MatchData } from '@/components/matches/MatchCard'
-import { Header } from '@/components/ui/Header'
-import { championIconUrl, DDRAGON_VERSION } from '@/lib/ddragon'
+import { createClient } from '@/lib/supabase/client'
+import { DDRAGON_VERSION, championIconUrl, roleIconPath } from '@/lib/ddragon'
 import { apiFetch } from '@/lib/api'
+import {
+  AppHeader,
+  Card,
+  SectionLabel,
+  Stat,
+  Bar,
+  Pill,
+  Icon,
+  ChampPortrait,
+  Donut,
+  AreaChart,
+  RadarChart as DsRadarChart,
+  StackedBar,
+  WinLossDots,
+  ROLES_PT,
+  type Role,
+} from '@/components/design'
+
+// ── Types ──────────────────────────────────────────────────────────
 const PAGE_SIZE = 10
 const SERVERS = ['BR1', 'NA1', 'EUW1', 'KR', 'EUNE1', 'JP1', 'LA1', 'LA2', 'OC1']
 
@@ -22,9 +37,113 @@ type PlayerInfo = {
   tier: string | null
 }
 
+type MatchData = {
+  champion_name: string
+  team_position: string
+  team_id: number | null
+  win: boolean
+  kills: number
+  deaths: number
+  assists: number
+  gold_earned: number
+  total_damage_dealt_to_champions: number
+  vision_score: number | null
+  kill_participation: number | null
+  damage_per_minute: number | null
+  total_cs: number | null
+  cs_per_minute: number | null
+  champion_level: number | null
+  items: number[] | null
+  rune_keystone: number | null
+  summoner1_id: number | null
+  summoner2_id: number | null
+  matches: {
+    match_id: string
+    game_version: string
+    game_duration: number
+    queue_id: number
+    end_type: string
+    game_end_timestamp: number | null
+  }
+}
+
+type ChampStat = {
+  champion: string
+  games: number
+  wins: number
+  winrate: number
+  avg_kills: number
+  avg_deaths: number
+  avg_assists: number
+  avg_cs_per_minute: number
+}
+
+type AllyData = {
+  puuid: string
+  game_name: string
+  tag_line: string
+  server: string | null
+  games_together: number
+  wins_together: number
+  winrate: number
+}
+
+type NemesisData = {
+  puuid: string
+  game_name: string
+  tag_line: string
+  server: string | null
+  times_faced: number
+  wins_against: number
+  winrate_against: number
+  champions_used: string[]
+}
+
+type Recommendation = {
+  champion: string
+  role: string
+  role_label: string
+  similarity: number
+  confidence: number
+  winrate: number
+  games_in_db: number
+  times_played: number
+  reasons?: string[]
+  player_profile?: number[]
+  champion_profile?: number[]
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+function formatRelativeDate(ts: number | null): string {
+  if (!ts) return '—'
+  const diff = Date.now() - ts
+  const mins = Math.floor(diff / 60_000)
+  const hours = Math.floor(diff / 3_600_000)
+  const days = Math.floor(diff / 86_400_000)
+  if (mins < 1) return 'agora'
+  if (mins < 60) return `há ${mins}m`
+  if (hours < 24) return `há ${hours}h`
+  if (days < 7) return `há ${days}d`
+  return new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+}
+
+const RANK_COLOR: Record<string, string> = {
+  IRON: '#857668',        BRONZE: '#A96C3C',      SILVER: '#B4C0CF',
+  GOLD: '#E8B841',        PLATINUM: '#4FC6CC',    EMERALD: '#44D19E',
+  DIAMOND: '#9FB7E6',     MASTER: '#C581E6',      GRANDMASTER: '#E87070',
+  CHALLENGER: '#66D7F0',
+}
+
+// ── Page ───────────────────────────────────────────────────────────
 export default function PlayerPage() {
-  const params  = useParams()
-  const router  = useRouter()
+  const params = useParams()
+  const router = useRouter()
   const supabase = createClient()
 
   const rawParam = decodeURIComponent(params.puuid as string)
@@ -32,31 +151,27 @@ export default function PlayerPage() {
   const [riotName, riotTag] = isRiotId ? rawParam.split('#', 2) : ['', '']
 
   const [resolvedPuuid, setResolvedPuuid] = useState<string | null>(isRiotId ? null : rawParam)
-  const [playerInfo,    setPlayerInfo]    = useState<PlayerInfo | null>(null)
-  const [notInDb,       setNotInDb]       = useState(false)   // Riot ID buscado, não encontrado
-  const [syncServer,    setSyncServer]    = useState('BR1')
-  const [syncing,       setSyncing]       = useState(false)
-  const [syncMsg,       setSyncMsg]       = useState<string | null>(null)
-  const [cooldownEnd,   setCooldownEnd]   = useState<number | null>(null)  // ms timestamp
-  const [cooldownLeft,  setCooldownLeft]  = useState(0)  // segundos restantes
+  const [playerInfo, setPlayerInfo] = useState<PlayerInfo | null>(null)
+  const [notInDb, setNotInDb] = useState(false)
 
-  const [userId,         setUserId]         = useState<string | null>(null)
-  const [watched,        setWatched]        = useState(false)
-  const [watchLabel,     setWatchLabel]     = useState('')
+  const [syncServer, setSyncServer] = useState('BR1')
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  const [cooldownEnd, setCooldownEnd] = useState<number | null>(null)
+  const [cooldownLeft, setCooldownLeft] = useState(0)
+
+  const [userId, setUserId] = useState<string | null>(null)
+  const [watched, setWatched] = useState(false)
+  const [watchLabel, setWatchLabel] = useState('')
   const [showLabelInput, setShowLabelInput] = useState(false)
-  const [savingWatch,    setSavingWatch]    = useState(false)
+  const [savingWatch, setSavingWatch] = useState(false)
 
-  const [matches,        setMatches]       = useState<MatchData[]>([])
+  const [matches, setMatches] = useState<MatchData[]>([])
   const [loadingMatches, setLoadingMatches] = useState(true)
-  const [loadingMore,    setLoadingMore]   = useState(false)
-  const [matchError,     setMatchError]    = useState<string | null>(null)
-  const [hasMore,        setHasMore]       = useState(false)
-  const [offset,         setOffset]        = useState(0)
-
-  // ── Dados extras do jogador ─────────────────────────────────────────────
-  type ChampStat = { champion: string; games: number; wins: number; winrate: number; avg_kills: number; avg_deaths: number; avg_assists: number; avg_cs_per_minute: number }
-  type AllyData = { puuid: string; game_name: string; tag_line: string; server: string | null; games_together: number; wins_together: number; winrate: number }
-  type NemesisData = { puuid: string; game_name: string; tag_line: string; server: string | null; times_faced: number; wins_against: number; winrate_against: number; champions_used: string[] }
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [matchError, setMatchError] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [offset, setOffset] = useState(0)
 
   const [champStats, setChampStats] = useState<ChampStat[]>([])
   const [showAllChamps, setShowAllChamps] = useState(false)
@@ -65,17 +180,17 @@ export default function PlayerPage() {
   const [champPatch, setChampPatch] = useState('')
   const [seasons, setSeasons] = useState<string[]>([])
   const [patchList, setPatchList] = useState<string[]>([])
+
   const [allies, setAllies] = useState<AllyData[]>([])
   const [nemeses, setNemeses] = useState<NemesisData[]>([])
-  const [showAllAllies, setShowAllAllies] = useState(false)
-  const [showAllNemeses, setShowAllNemeses] = useState(false)
-  const [nameHistory, setNameHistory] = useState<{ old_game_name: string; old_tag_line: string; changed_at: string }[]>([])
+  const [nameHistory, setNameHistory] = useState<
+    { old_game_name: string; old_tag_line: string; changed_at: string }[]
+  >([])
 
-  type Recommendation = { champion: string; role: string; role_label: string; similarity: number; confidence: number; winrate: number; games_in_db: number; times_played: number; reasons?: string[]; player_profile?: number[]; champion_profile?: number[] }
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [selectedRec, setSelectedRec] = useState<string | null>(null)
 
-  // ── Cooldown: carrega do localStorage e inicia countdown ──────────────────
+  // ── Cooldown
   const cooldownKey = `sync_cooldown_${resolvedPuuid ?? rawParam}`
   useEffect(() => {
     const stored = localStorage.getItem(cooldownKey)
@@ -84,10 +199,14 @@ export default function PlayerPage() {
       if (end > Date.now()) setCooldownEnd(end)
       else localStorage.removeItem(cooldownKey)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedPuuid])
 
   useEffect(() => {
-    if (!cooldownEnd) { setCooldownLeft(0); return }
+    if (!cooldownEnd) {
+      setCooldownLeft(0)
+      return
+    }
     const tick = () => {
       const left = Math.ceil((cooldownEnd - Date.now()) / 1000)
       if (left <= 0) {
@@ -101,24 +220,29 @@ export default function PlayerPage() {
     tick()
     const interval = setInterval(tick, 1000)
     return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cooldownEnd])
 
-  // ── 1. Se Riot ID → tenta resolver o PUUID no nosso banco ──────────────────
+  // ── Resolver Riot ID → PUUID
   useEffect(() => {
     if (!isRiotId) return
-
     supabase
       .from('players')
       .select('puuid, game_name, tag_line, server, profile_icon_id, tier')
       .ilike('game_name', riotName.trim())
-      .ilike('tag_line',  riotTag.trim())
+      .ilike('tag_line', riotTag.trim())
       .maybeSingle()
       .then(async ({ data }) => {
         if (data) {
           setResolvedPuuid(data.puuid)
-          setPlayerInfo({ game_name: data.game_name, tag_line: data.tag_line, server: data.server, profile_icon_id: data.profile_icon_id, tier: data.tier ?? null })
+          setPlayerInfo({
+            game_name: data.game_name,
+            tag_line: data.tag_line,
+            server: data.server,
+            profile_icon_id: data.profile_icon_id,
+            tier: data.tier ?? null,
+          })
         } else {
-          // Nao achou pelo nome atual — tentar nome antigo
           const { data: oldData } = await supabase
             .from('player_name_history')
             .select('puuid, players(game_name, tag_line, server, profile_icon_id, tier)')
@@ -126,10 +250,8 @@ export default function PlayerPage() {
             .ilike('old_tag_line', riotTag.trim())
             .limit(1)
             .maybeSingle()
-
           if (oldData?.players) {
             const p = oldData.players as unknown as Record<string, unknown>
-            // Redirecionar pro nome novo
             router.replace(`/players/${encodeURIComponent(`${p.game_name}#${p.tag_line}`)}`)
           } else {
             setNotInDb(true)
@@ -137,9 +259,10 @@ export default function PlayerPage() {
           }
         }
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── 2. Com PUUID resolvido → busca info completa do jogador ────────────────
+  // ── PUUID → info completa
   useEffect(() => {
     if (!resolvedPuuid || playerInfo) return
     supabase
@@ -150,9 +273,10 @@ export default function PlayerPage() {
       .then(({ data }) => {
         if (data) setPlayerInfo(data as PlayerInfo)
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedPuuid])
 
-  // ── 3. Auth + watched ──────────────────────────────────────────────────────
+  // ── Auth + watched
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -164,32 +288,49 @@ export default function PlayerPage() {
         .eq('puuid', puuidToCheck)
         .maybeSingle()
         .then(({ data }) => {
-          if (data) { setWatched(true); setWatchLabel(data.label ?? '') }
+          if (data) {
+            setWatched(true)
+            setWatchLabel(data.label ?? '')
+          }
         })
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedPuuid])
 
-  // ── 4. Histórico do banco (persistente) + dados extras ──────────────────────
+  // ── Fetches agregados
   useEffect(() => {
     if (!resolvedPuuid) return
     loadHistory(resolvedPuuid, 0)
 
     const p = encodeURIComponent(resolvedPuuid)
     apiFetch(`/api/v1/player/frequent-allies?puuid=${p}&min_games=2`)
-      .then(r => r.ok ? r.json() : []).then(setAllies).catch(() => {})
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setAllies)
+      .catch(() => {})
     apiFetch(`/api/v1/player/nemesis?puuid=${p}&min_games=2`)
-      .then(r => r.ok ? r.json() : []).then(setNemeses).catch(() => {})
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setNemeses)
+      .catch(() => {})
     apiFetch(`/api/v1/player/name-history?puuid=${p}`)
-      .then(r => r.ok ? r.json() : []).then(setNameHistory).catch(() => {})
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setNameHistory)
+      .catch(() => {})
     apiFetch(`/api/v1/player/recommendations?puuid=${p}&top_n=6&reasons=true`)
-      .then(r => r.ok ? r.json() : []).then(setRecommendations).catch(() => {})
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setRecommendations)
+      .catch(() => {})
     apiFetch('/api/v1/player/seasons')
-      .then(r => r.ok ? r.json() : []).then(setSeasons).catch(() => {})
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setSeasons)
+      .catch(() => {})
     apiFetch('/api/v1/stats/patches')
-      .then(r => r.ok ? r.json() : []).then(setPatchList).catch(() => {})
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setPatchList)
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedPuuid])
 
-  // ── 4b. Champion stats com filtros ─────────────────────────────────────────
+  // ── Champ stats (filtros)
   useEffect(() => {
     if (!resolvedPuuid) return
     const params = new URLSearchParams({ puuid: resolvedPuuid })
@@ -197,7 +338,9 @@ export default function PlayerPage() {
     if (champPatch) params.set('patch', champPatch)
     else if (champSeason) params.set('season', champSeason)
     apiFetch(`/api/v1/player/champion-stats?${params}`)
-      .then(r => r.ok ? r.json() : []).then(setChampStats).catch(() => {})
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setChampStats)
+      .catch(() => {})
   }, [resolvedPuuid, champRole, champPatch, champSeason])
 
   async function loadHistory(puuid: string, startOffset: number) {
@@ -228,18 +371,19 @@ export default function PlayerPage() {
       )
       if (!res.ok) throw new Error()
       const data = await res.json()
-      setMatches(prev => [...prev, ...(data.matches ?? [])])
+      setMatches((prev) => [...prev, ...(data.matches ?? [])])
       setHasMore(data.has_more ?? false)
-      setOffset(prev => prev + (data.matches?.length ?? 0))
-    } catch { /* falha silenciosa */ } finally {
+      setOffset((prev) => prev + (data.matches?.length ?? 0))
+    } catch {
+      /* silencioso */
+    } finally {
       setLoadingMore(false)
     }
   }
 
-  // ── 5. Sincronizar partidas novas com a Riot ───────────────────────────────
   async function handleSync() {
-    const name   = isRiotId ? riotName : playerInfo?.game_name
-    const tag    = isRiotId ? riotTag  : playerInfo?.tag_line
+    const name = isRiotId ? riotName : playerInfo?.game_name
+    const tag = isRiotId ? riotTag : playerInfo?.tag_line
     const server = playerInfo?.server ?? syncServer
     if (!name || !tag) return
 
@@ -260,25 +404,18 @@ export default function PlayerPage() {
         setSyncMsg(`Aguarde ${Math.ceil(retryAfter / 60)} min para sincronizar novamente.`)
         return
       }
-      if (!res.ok) throw new Error(
-        typeof data.detail === 'string' ? data.detail : 'Erro desconhecido'
-      )
-
-      // Se era Riot ID não conhecido, agora temos o PUUID → redireciona
+      if (!res.ok)
+        throw new Error(typeof data.detail === 'string' ? data.detail : 'Erro desconhecido')
       if (isRiotId && data.puuid) {
         router.replace(`/players/${encodeURIComponent(data.puuid)}`)
         return
       }
-
       const novas = data.novas ?? 0
       setSyncMsg(novas > 0 ? `${novas} nova(s) partida(s) importada(s)` : 'Nenhuma partida nova encontrada')
-
-      // Inicia cooldown de 5 min após sync bem-sucedido
       const end = Date.now() + 300_000
       setCooldownEnd(end)
       setCooldownLeft(300)
       localStorage.setItem(cooldownKey, String(end))
-
       if (resolvedPuuid) loadHistory(resolvedPuuid, 0)
     } catch (e: unknown) {
       setSyncMsg(`Erro: ${e instanceof Error ? e.message : 'falha na sincronização'}`)
@@ -288,12 +425,17 @@ export default function PlayerPage() {
   }
 
   async function handleToggleWatch() {
-    if (!userId) { router.push('/auth'); return }
+    if (!userId) {
+      router.push('/auth')
+      return
+    }
     const puuidToUse = resolvedPuuid ?? rawParam
     if (watched) {
       setSavingWatch(true)
       await supabase.from('watched_players').delete().eq('puuid', puuidToUse)
-      setWatched(false); setWatchLabel(''); setSavingWatch(false)
+      setWatched(false)
+      setWatchLabel('')
+      setSavingWatch(false)
     } else {
       setShowLabelInput(true)
     }
@@ -303,685 +445,1629 @@ export default function PlayerPage() {
     if (!userId) return
     const puuidToUse = resolvedPuuid ?? rawParam
     setSavingWatch(true)
-    await supabase.from('watched_players').upsert(
-      { user_id: userId, puuid: puuidToUse, label: watchLabel || null },
-      { onConflict: 'user_id,puuid' }
-    )
-    setWatched(true); setShowLabelInput(false); setSavingWatch(false)
+    await supabase
+      .from('watched_players')
+      .upsert(
+        { user_id: userId, puuid: puuidToUse, label: watchLabel || null },
+        { onConflict: 'user_id,puuid' }
+      )
+    setWatched(true)
+    setShowLabelInput(false)
+    setSavingWatch(false)
   }
 
-  // ── Resumo agregado ────────────────────────────────────────────────────────
+  // ── Computed
   const summary = useMemo(() => {
     if (!matches.length) return null
-    const wins   = matches.filter(m => m.win).length
+    const wins = matches.filter((m) => m.win).length
     const losses = matches.length - wins
-    const avgCspm = matches.reduce((acc, m) => acc + (m.cs_per_minute ?? 0), 0) / matches.length
-    const avgKda  = matches.reduce((acc, m) => {
-      return acc + (m.deaths === 0 ? (m.kills + m.assists) : (m.kills + m.assists) / m.deaths)
-    }, 0) / matches.length
-    const champMap: Record<string, { games: number; wins: number }> = {}
-    for (const m of matches) {
-      if (!champMap[m.champion_name]) champMap[m.champion_name] = { games: 0, wins: 0 }
-      champMap[m.champion_name].games++
-      if (m.win) champMap[m.champion_name].wins++
-    }
-    const [topChampName, topChampStats] = Object.entries(champMap).sort((a, b) => b[1].games - a[1].games)[0]
+    const avgCspm =
+      matches.reduce((acc, m) => acc + (m.cs_per_minute ?? 0), 0) / matches.length
+    const avgKda =
+      matches.reduce((acc, m) => {
+        return acc + (m.deaths === 0 ? m.kills + m.assists : (m.kills + m.assists) / m.deaths)
+      }, 0) / matches.length
+    const avgKills = matches.reduce((a, m) => a + m.kills, 0) / matches.length
+    const avgDeaths = matches.reduce((a, m) => a + m.deaths, 0) / matches.length
+    const avgAssists = matches.reduce((a, m) => a + m.assists, 0) / matches.length
+    const avgVision =
+      matches.reduce((a, m) => a + (m.vision_score ?? 0), 0) / matches.length
     return {
-      wins, losses,
-      winrate:      Math.round((wins / matches.length) * 100),
-      avgCspm:      avgCspm.toFixed(1),
-      avgKda:       avgKda.toFixed(2),
-      topChampName,
-      topChampGames: topChampStats.games,
-      topChampWr:    Math.round((topChampStats.wins / topChampStats.games) * 100),
+      wins,
+      losses,
+      winrate: Math.round((wins / matches.length) * 100),
+      avgCspm: avgCspm.toFixed(1),
+      avgKda: avgKda.toFixed(2),
+      avgKills: avgKills.toFixed(1),
+      avgDeaths: avgDeaths.toFixed(1),
+      avgAssists: avgAssists.toFixed(1),
+      avgVision: avgVision.toFixed(0),
     }
   }, [matches])
 
-  // ── Resumo da temporada (baseado em champStats = todos os dados) ───────────
   const seasonSummary = useMemo(() => {
     if (!champStats.length) return null
     const totalGames = champStats.reduce((acc, c) => acc + c.games, 0)
     const wins = champStats.reduce((acc, c) => acc + c.wins, 0)
-    const avgKda = champStats.reduce((acc, c) => {
-      const kda = c.avg_deaths > 0 ? (c.avg_kills + c.avg_assists) / c.avg_deaths : (c.avg_kills + c.avg_assists)
-      return acc + kda * c.games
-    }, 0) / totalGames
-    const top = champStats[0]
     return {
       totalGames,
       wins,
+      losses: totalGames - wins,
       winrate: Math.round((wins / totalGames) * 100),
-      avgKda: avgKda.toFixed(2),
       uniqueChamps: champStats.length,
-      topChampName: top.champion,
-      topChampGames: top.games,
-      topChampWr: Math.round(top.winrate),
     }
   }, [champStats])
 
-  // ── Display helpers ────────────────────────────────────────────────────────
+  // Role distribution a partir das matches carregadas.
+  const roleDist = useMemo(() => {
+    if (!matches.length) return null
+    const counts: Record<Role, number> = {
+      TOP: 0, JUNGLE: 0, MIDDLE: 0, BOTTOM: 0, UTILITY: 0,
+    }
+    for (const m of matches) {
+      const r = m.team_position as Role
+      if (r && r in counts) counts[r]++
+    }
+    const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1
+    return {
+      TOP: Math.round((counts.TOP / total) * 100),
+      JUNGLE: Math.round((counts.JUNGLE / total) * 100),
+      MIDDLE: Math.round((counts.MIDDLE / total) * 100),
+      BOTTOM: Math.round((counts.BOTTOM / total) * 100),
+      UTILITY: Math.round((counts.UTILITY / total) * 100),
+    }
+  }, [matches])
+
+  // Winrate vector (últimas 20) — pro sparkline
+  const wrVector = useMemo(
+    () =>
+      matches
+        .slice(0, 20)
+        .reverse()
+        .map((_, i, arr) => {
+          const wins = arr.slice(0, i + 1).reduce((a, _m, idx) => a + (arr[idx] ? 0 : 0), 0)
+          // Winrate cumulativo das matches do perfil (mais recentes → antigas invertidas)
+          const partial = arr.slice(0, i + 1)
+          const w = partial.filter((_, idx) => matches[idx]?.win).length
+          return Math.round((w / partial.length) * 100)
+        }),
+    [matches]
+  )
+
+  const wrSeries = useMemo(() => {
+    if (!matches.length) return []
+    // Serie de WR cumulativa das últimas 20 partidas (da mais antiga pra mais nova)
+    const recent = matches.slice(0, 20)
+    const oldestFirst = [...recent].reverse()
+    const series: number[] = []
+    let w = 0
+    oldestFirst.forEach((m, i) => {
+      if (m.win) w++
+      series.push(Math.round((w / (i + 1)) * 100))
+    })
+    return series
+  }, [matches])
+
+  const winLossResults = useMemo(() => {
+    // Últimas 10 partidas: 1=win, 0=loss. Array pra WinLossDots (da antiga pra nova).
+    return matches
+      .slice(0, 10)
+      .reverse()
+      .map((m) => (m.win ? 1 : 0)) as Array<0 | 1>
+  }, [matches])
+
+  // Perfil do jogador (pra radar) — vem das recomendações.
+  const playerRadarAxes = useMemo(() => {
+    const labels = ['Agressão', 'Mapa', 'Eficiência', 'Pressão', 'Sobrev.', 'Utilid.', 'Early', 'Consist.']
+    const src = recommendations.find((r) => r.player_profile)?.player_profile
+    if (!src) return null
+    return src.map((v, i) => ({ label: labels[i] ?? '', value: Math.min(1, v / 10) }))
+  }, [recommendations])
+
   const displayName = playerInfo
     ? `${playerInfo.game_name}#${playerInfo.tag_line}`
-    : isRiotId ? rawParam : null
+    : isRiotId
+    ? rawParam
+    : null
 
   const profileIconUrl = playerInfo?.profile_icon_id
     ? `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/profileicon/${playerInfo.profile_icon_id}.png`
     : null
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  const tierColor = playerInfo?.tier
+    ? RANK_COLOR[playerInfo.tier.toUpperCase()] ?? 'var(--m-accent)'
+    : 'var(--m-accent)'
+
+  // ── Render ─────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-metis-bg text-metis-text">
-      <Header />
+    <div className="metis-scope" style={{ minHeight: '100vh', background: 'var(--m-bg)' }}>
+      <AppHeader active="home" />
 
-      <main className="max-w-7xl mx-auto px-4 py-10">
-
-        {/* ── Card do jogador ── */}
-        <div className="bg-metis-surface border border-metis-border rounded-xl p-6 mb-6">
-          <div className="flex items-start gap-4">
-
-            {/* Ícone do invocador */}
-            <div className="relative flex-shrink-0">
-              {profileIconUrl ? (
-                <div className="w-16 h-16 rounded-xl overflow-hidden border-2 border-metis-border">
-                  <Image
-                    src={profileIconUrl}
-                    alt="Ícone do invocador"
-                    width={64} height={64}
-                    className="object-cover"
-                    unoptimized
-                  />
-                </div>
-              ) : (
-                <div className="w-16 h-16 rounded-xl border-2 border-metis-border bg-metis-bg flex items-center justify-center">
-                  <UserX className="w-7 h-7 text-metis-text-dim" />
-                </div>
-              )}
-            </div>
-
-            {/* Nome + info */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <p className="text-lg font-bold text-metis-text break-all">
-                  {displayName ?? rawParam}
-                </p>
-                {playerInfo?.server && (
-                  <span className="text-[10px] border border-metis-border text-metis-text-dim rounded px-1.5 py-0.5 uppercase flex-shrink-0">
-                    {playerInfo.server}
-                  </span>
-                )}
-                {playerInfo?.tier && (
-                  <span className="text-[10px] font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-400 rounded px-2 py-0.5 uppercase flex-shrink-0">
-                    {playerInfo.tier}
-                  </span>
-                )}
+      {/* ══════════ Banner ══════════ */}
+      <div
+        style={{
+          position: 'relative',
+          borderBottom: '1px solid var(--m-border)',
+          background:
+            'linear-gradient(180deg, rgb(var(--m-accent-rgb) / 0.1) 0%, transparent 100%), var(--m-bg)',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            top: -80,
+            right: -60,
+            width: 320,
+            height: 320,
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgb(var(--m-accent-rgb) / 0.18), transparent 70%)',
+            filter: 'blur(40px)',
+            pointerEvents: 'none',
+          }}
+        />
+        <div
+          style={{
+            maxWidth: 1200,
+            margin: '0 auto',
+            padding: '32px 28px 24px',
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 20,
+            flexWrap: 'wrap',
+          }}
+        >
+          {/* Avatar */}
+          <div
+            style={{
+              width: 88,
+              height: 88,
+              borderRadius: 16,
+              background: 'var(--m-surface-2)',
+              border: `2px solid ${tierColor}66`,
+              overflow: 'hidden',
+              flexShrink: 0,
+              position: 'relative',
+            }}
+          >
+            {profileIconUrl ? (
+              <Image
+                src={profileIconUrl}
+                alt=""
+                width={88}
+                height={88}
+                unoptimized
+                style={{ objectFit: 'cover' }}
+              />
+            ) : (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 36,
+                  fontWeight: 800,
+                  color: tierColor,
+                  background: `linear-gradient(135deg, ${tierColor}33, #1a1510)`,
+                }}
+              >
+                {(displayName ?? rawParam).charAt(0).toUpperCase()}
               </div>
-              {nameHistory.length > 0 && (
-                <p className="text-[10px] text-metis-muted mt-0.5">
-                  Antes: {nameHistory.map(n => `${n.old_game_name}#${n.old_tag_line}`).join(' → ')}
-                </p>
-              )}
-              {watched && watchLabel && (
-                <p className="mt-1 text-sm font-semibold text-metis-accent">{watchLabel}</p>
-              )}
-            </div>
-
-            {/* Botão supervisionar */}
-            <button
-              onClick={handleToggleWatch}
-              disabled={savingWatch}
-              className="flex items-center gap-1.5 text-xs border rounded-lg px-3 py-2 transition-colors disabled:opacity-50 flex-shrink-0
-                         border-metis-border text-metis-text-dim hover:border-metis-accent hover:text-metis-accent"
-            >
-              {watched
-                ? <><StarOff className="w-4 h-4" /><span className="hidden sm:block">Remover</span></>
-                : <><Star    className="w-4 h-4" /><span className="hidden sm:block">Supervisionar</span></>}
-            </button>
+            )}
           </div>
 
-          {/* Label input */}
+          {/* Nome + tier */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+              <h1
+                className="font-display"
+                style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', wordBreak: 'break-all' }}
+              >
+                {playerInfo?.game_name ?? (isRiotId ? riotName : rawParam)}
+                {playerInfo?.tag_line && (
+                  <span style={{ color: 'var(--m-text-dim)', fontWeight: 500 }}>#{playerInfo.tag_line}</span>
+                )}
+              </h1>
+              {playerInfo?.server && (
+                <span
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    background: 'var(--m-surface-2)',
+                    border: '1px solid var(--m-border-2)',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: 'var(--m-text-dim)',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {playerInfo.server}
+                </span>
+              )}
+            </div>
+            {playerInfo?.tier && (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '4px 10px 4px 6px',
+                  borderRadius: 999,
+                  background: 'var(--m-surface-2)',
+                  border: '1px solid var(--m-border-2)',
+                }}
+              >
+                <div
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: '50%',
+                    background: `radial-gradient(circle at 30% 30%, ${tierColor}, ${tierColor}88)`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 9,
+                    fontWeight: 800,
+                    color: '#0B0D12',
+                  }}
+                >
+                  ◆
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    color: tierColor,
+                  }}
+                >
+                  {playerInfo.tier}
+                </span>
+              </div>
+            )}
+            {nameHistory.length > 0 && (
+              <div style={{ fontSize: 10, color: 'var(--m-muted)', marginTop: 6 }}>
+                antes: {nameHistory.map((n) => `${n.old_game_name}#${n.old_tag_line}`).join(' → ')}
+              </div>
+            )}
+            {watched && watchLabel && (
+              <div style={{ fontSize: 12, color: 'var(--m-accent)', fontWeight: 600, marginTop: 6 }}>
+                {watchLabel}
+              </div>
+            )}
+          </div>
+
+          {/* Ações */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={handleToggleWatch}
+              disabled={savingWatch}
+              className="m-hover-surface"
+              style={{
+                padding: '9px 14px',
+                background: 'var(--m-surface-2)',
+                border: '1px solid var(--m-border-2)',
+                borderRadius: 10,
+                color: 'var(--m-text)',
+                fontSize: 12,
+                fontWeight: 500,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: savingWatch ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                opacity: savingWatch ? 0.5 : 1,
+              }}
+            >
+              <Icon name="star" size={14} style={{ color: watched ? 'var(--m-accent)' : 'var(--m-text-dim)' }} />
+              {watched ? 'Remover' : 'Supervisionar'}
+            </button>
+            <Link
+              href="/chat"
+              className="m-hover-accent"
+              style={{
+                padding: '9px 14px',
+                background: 'var(--m-accent)',
+                border: 'none',
+                borderRadius: 10,
+                color: '#1a1510',
+                fontSize: 12,
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                textDecoration: 'none',
+              }}
+            >
+              <Icon name="brain" size={14} />
+              Analisar com IA
+            </Link>
+          </div>
+        </div>
+
+        {/* Label input + Sync */}
+        <div
+          style={{
+            maxWidth: 1200,
+            margin: '0 auto',
+            padding: '0 28px 20px',
+            position: 'relative',
+          }}
+        >
           {showLabelInput && (
-            <div className="mt-4 flex gap-2">
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
               <input
-                type="text"
                 value={watchLabel}
-                onChange={e => setWatchLabel(e.target.value)}
+                onChange={(e) => setWatchLabel(e.target.value)}
                 placeholder="Apelido (opcional)"
-                className="flex-1 bg-metis-bg border border-metis-border rounded-lg px-3 py-2 text-sm text-metis-text placeholder-metis-muted outline-none focus:border-metis-accent transition-colors"
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  background: 'var(--m-bg)',
+                  border: '1px solid var(--m-border-2)',
+                  borderRadius: 8,
+                  color: 'var(--m-text)',
+                  fontSize: 13,
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  maxWidth: 320,
+                }}
               />
               <button
+                type="button"
                 onClick={handleSaveWatch}
                 disabled={savingWatch}
-                className="bg-metis-accent hover:bg-metis-accent-hover text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                className="m-hover-accent"
+                style={{
+                  padding: '8px 16px',
+                  background: 'var(--m-accent)',
+                  color: '#1a1510',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: savingWatch ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit',
+                  opacity: savingWatch ? 0.5 : 1,
+                }}
               >
                 Salvar
               </button>
             </div>
           )}
 
-          {/* Bloco de sincronização */}
-          <div className="mt-4 pt-4 border-t border-metis-border/50">
-            <div className="flex items-center gap-2 flex-wrap">
-              {!playerInfo?.server && (
-                <select
-                  value={syncServer}
-                  onChange={e => setSyncServer(e.target.value)}
-                  className="bg-metis-bg border border-metis-border rounded-lg px-2 py-1.5 text-xs text-metis-text outline-none"
-                >
-                  {SERVERS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              )}
-
-              <button
-                onClick={handleSync}
-                disabled={syncing || cooldownLeft > 0 || (!isRiotId && !playerInfo)}
-                className="flex items-center gap-1.5 text-xs bg-metis-accent hover:bg-metis-accent-hover text-white px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[140px] justify-center"
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+              paddingTop: 12,
+              borderTop: '1px solid var(--m-border)',
+            }}
+          >
+            {!playerInfo?.server && (
+              <select
+                value={syncServer}
+                onChange={(e) => setSyncServer(e.target.value)}
+                style={{
+                  padding: '6px 10px',
+                  background: 'var(--m-bg)',
+                  border: '1px solid var(--m-border-2)',
+                  borderRadius: 7,
+                  color: 'var(--m-text)',
+                  fontSize: 11,
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                }}
               >
-                <RefreshCw className={`w-3.5 h-3.5 flex-shrink-0 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing
-                  ? 'Sincronizando...'
-                  : cooldownLeft > 0
-                    ? `${Math.floor(cooldownLeft / 60)}m ${String(cooldownLeft % 60).padStart(2, '0')}s`
-                    : 'Ver partidas novas'}
-              </button>
-
-              {syncMsg && (
-                <span className={`text-xs ${syncMsg.startsWith('Erro') ? 'text-red-400' : 'text-green-400'}`}>
-                  {syncMsg}
-                </span>
-              )}
-            </div>
-            <p className="text-[11px] text-metis-text-dim mt-1.5">
-              O histórico abaixo é o cache do nosso banco. Clique para buscar as últimas 15 partidas ranqueadas na Riot API e preencher eventuais lacunas.
-            </p>
+                {SERVERS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              type="button"
+              onClick={handleSync}
+              disabled={syncing || cooldownLeft > 0 || (!isRiotId && !playerInfo)}
+              className="m-hover-surface"
+              style={{
+                padding: '6px 12px',
+                background: 'var(--m-surface-2)',
+                border: '1px solid var(--m-border-2)',
+                borderRadius: 7,
+                color: 'var(--m-text)',
+                fontSize: 11,
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor:
+                  syncing || cooldownLeft > 0 || (!isRiotId && !playerInfo)
+                    ? 'not-allowed'
+                    : 'pointer',
+                fontFamily: 'inherit',
+                opacity:
+                  syncing || cooldownLeft > 0 || (!isRiotId && !playerInfo) ? 0.55 : 1,
+                minWidth: 160,
+                justifyContent: 'center',
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-block',
+                  transition: 'transform 0.2s',
+                  transform: syncing ? 'rotate(360deg)' : 'none',
+                  animation: syncing ? 'm-spin 1s linear infinite' : 'none',
+                }}
+              >
+                <Icon name="compass" size={12} />
+              </span>
+              {syncing
+                ? 'Sincronizando...'
+                : cooldownLeft > 0
+                ? `${Math.floor(cooldownLeft / 60)}m ${String(cooldownLeft % 60).padStart(2, '0')}s`
+                : 'Ver partidas novas'}
+            </button>
+            {syncMsg && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: syncMsg.startsWith('Erro') ? 'var(--m-red)' : 'var(--m-green)',
+                }}
+              >
+                {syncMsg}
+              </span>
+            )}
+            <span style={{ fontSize: 10, color: 'var(--m-muted)', marginLeft: 'auto', maxWidth: 420 }}>
+              O histórico abaixo é o cache do banco. Clique pra puxar as últimas 15 partidas da Riot.
+            </span>
           </div>
         </div>
+      </div>
 
-        {/* ── Estado: jogador não encontrado no banco ── */}
-        {notInDb && (
-          <div className="bg-metis-surface border border-metis-border rounded-xl p-6 mb-6 text-center">
-            <UserX className="w-8 h-8 text-metis-text-dim mx-auto mb-3" />
-            <p className="text-sm font-semibold text-metis-text mb-1">
-              {rawParam} não está no nosso banco ainda
-            </p>
-            <p className="text-xs text-metis-text-dim mb-4">
-              Escolha o servidor e clique em "Ver partidas novas" para importar o histórico deste jogador.
-            </p>
-          </div>
-        )}
-
-        {/* ── Resumos lado a lado ── */}
-        {(summary || seasonSummary) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            {/* Resumo recente */}
-            {summary && (
-              <div className="bg-metis-surface border border-metis-border rounded-xl p-4">
-                <p className="text-[10px] text-metis-text-dim uppercase tracking-wide font-medium mb-3">
-                  Ultimas {matches.length} partidas
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
-                    <div className="flex items-center gap-2 text-sm font-bold">
-                      <span className="text-blue-400">{summary.wins}V</span>
-                      <span className="text-metis-text-dim text-xs">/</span>
-                      <span className="text-red-400">{summary.losses}D</span>
-                    </div>
-                    <span className={`text-lg font-bold ${
-                      summary.winrate >= 55 ? 'text-green-400' : summary.winrate >= 50 ? 'text-metis-accent' : 'text-red-400'
-                    }`}>{summary.winrate}%</span>
-                    <span className="text-[10px] text-metis-text-dim">Winrate</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
-                    <span className="text-lg font-bold text-metis-text">{summary.avgKda}</span>
-                    <span className="text-[10px] text-metis-text-dim">KDA Medio</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
-                    <span className={`text-lg font-bold ${
-                      parseFloat(summary.avgCspm) >= 8 ? 'text-green-400' : parseFloat(summary.avgCspm) >= 6 ? 'text-yellow-400' : 'text-metis-text-dim'
-                    }`}>{summary.avgCspm}</span>
-                    <span className="text-[10px] text-metis-text-dim">CS/min</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
-                    <div className="flex items-center gap-1.5">
-                      <div className="relative w-8 h-8 rounded-md overflow-hidden border border-metis-border flex-shrink-0">
-                        <Image src={championIconUrl(summary.topChampName, DDRAGON_VERSION)} alt={summary.topChampName} fill className="object-cover" unoptimized />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-metis-text truncate">{summary.topChampName}</p>
-                        <p className="text-[10px] text-metis-text-dim">{summary.topChampGames}j · {summary.topChampWr}%</p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-metis-text-dim mt-0.5">Mais jogado</span>
-                  </div>
-                </div>
+      {/* ══════════ Not in DB ══════════ */}
+      {notInDb && (
+        <div style={{ maxWidth: 1200, margin: '20px auto 0', padding: '0 28px' }}>
+          <Card>
+            <div style={{ textAlign: 'center', padding: '8px 0' }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+                {rawParam} não está no nosso banco ainda
               </div>
-            )}
-
-            {/* Resumo da temporada (todos os dados) */}
-            {seasonSummary && (
-              <div className="bg-metis-surface border border-metis-border rounded-xl p-4">
-                <p className="text-[10px] text-metis-text-dim uppercase tracking-wide font-medium mb-3">
-                  Temporada ({seasonSummary.totalGames} partidas)
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
-                    <div className="flex items-center gap-2 text-sm font-bold">
-                      <span className="text-blue-400">{seasonSummary.wins}V</span>
-                      <span className="text-metis-text-dim text-xs">/</span>
-                      <span className="text-red-400">{seasonSummary.totalGames - seasonSummary.wins}D</span>
-                    </div>
-                    <span className={`text-lg font-bold ${
-                      seasonSummary.winrate >= 55 ? 'text-green-400' : seasonSummary.winrate >= 50 ? 'text-metis-accent' : 'text-red-400'
-                    }`}>{seasonSummary.winrate}%</span>
-                    <span className="text-[10px] text-metis-text-dim">Winrate geral</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
-                    <span className="text-lg font-bold text-metis-text">{seasonSummary.avgKda}</span>
-                    <span className="text-[10px] text-metis-text-dim">KDA Medio</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
-                    <span className="text-lg font-bold text-metis-text">{seasonSummary.uniqueChamps}</span>
-                    <span className="text-[10px] text-metis-text-dim">Campeoes</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 bg-metis-bg/50 rounded-lg p-3">
-                    <div className="flex items-center gap-1.5">
-                      <div className="relative w-8 h-8 rounded-md overflow-hidden border border-metis-border flex-shrink-0">
-                        <Image src={championIconUrl(seasonSummary.topChampName, DDRAGON_VERSION)} alt={seasonSummary.topChampName} fill className="object-cover" unoptimized />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-metis-text truncate">{seasonSummary.topChampName}</p>
-                        <p className="text-[10px] text-metis-text-dim">{seasonSummary.topChampGames}j · {seasonSummary.topChampWr}%</p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-metis-text-dim mt-0.5">Mais jogado</span>
-                  </div>
-                </div>
+              <div style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>
+                Escolha o servidor e clique em &quot;Ver partidas novas&quot; acima pra importar o histórico.
               </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Layout 2 colunas: sidebar + historico ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
-
-        {/* ── Coluna esquerda: campeoes + social ── */}
-        <div>
-
-        {/* ── Stats por Campeão ── */}
-        {resolvedPuuid && (
-          <section className="mb-6">
-            <h2 className="text-sm font-semibold text-metis-text-dim uppercase tracking-wide mb-2">
-              Campeoes Jogados
-            </h2>
-
-            {/* Filtros */}
-            <div className="flex gap-1.5 flex-wrap mb-3">
-              <select value={champSeason} onChange={e => { setChampSeason(e.target.value); setChampPatch('') }}
-                className="bg-metis-bg border border-metis-border rounded px-2 py-1 text-xs text-metis-text outline-none">
-                <option value="">Geral</option>
-                {seasons.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <select value={champPatch} onChange={e => { setChampPatch(e.target.value); if (e.target.value) setChampSeason('') }}
-                className="bg-metis-bg border border-metis-border rounded px-2 py-1 text-xs text-metis-text outline-none">
-                <option value="">Patch</option>
-                {patchList.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-              <select value={champRole} onChange={e => setChampRole(e.target.value)}
-                className="bg-metis-bg border border-metis-border rounded px-2 py-1 text-xs text-metis-text outline-none">
-                <option value="">Role</option>
-                <option value="TOP">Top</option>
-                <option value="JUNGLE">Jungle</option>
-                <option value="MIDDLE">Mid</option>
-                <option value="BOTTOM">ADC</option>
-                <option value="UTILITY">Suporte</option>
-              </select>
             </div>
+          </Card>
+        </div>
+      )}
 
-            {/* Melhor campeao */}
-            {champStats.length > 0 && champStats[0].games >= 2 && (
-              <div className="flex items-center gap-3 bg-metis-bg/50 border border-metis-border/50 rounded-lg px-3 py-2 mb-3">
-                <div className="relative w-8 h-8 rounded overflow-hidden border border-metis-accent/50 flex-shrink-0">
-                  <Image src={championIconUrl(champStats[0].champion, DDRAGON_VERSION)} alt={champStats[0].champion} fill className="object-cover" unoptimized />
-                </div>
-                <div>
-                  <p className="text-xs text-metis-text-dim">Melhor campeao</p>
-                  <p className="text-sm font-semibold text-metis-accent">{champStats[0].champion}</p>
-                </div>
-                <div className="ml-auto text-right">
-                  <p className={`text-sm font-bold ${champStats[0].winrate > 55 ? 'text-green-400' : 'text-metis-text'}`}>{champStats[0].winrate}% WR</p>
-                  <p className="text-[10px] text-metis-text-dim">{champStats[0].games} jogos</p>
-                </div>
-              </div>
-            )}
-
-            {champStats.length === 0 ? (
-              <p className="text-xs text-metis-text-dim py-4 text-center">Sem dados para os filtros selecionados.</p>
-            ) : (
-              <div className="bg-metis-surface border border-metis-border rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-metis-border">
-                      <th className="px-3 py-2 text-left text-xs font-medium text-metis-text-dim uppercase">Campeao</th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-metis-text-dim uppercase">Jogos</th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-metis-text-dim uppercase">WR</th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-metis-text-dim uppercase">KDA</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {champStats.slice(0, showAllChamps ? undefined : 5).map((c, i) => (
-                      <tr key={c.champion} className={`border-b border-metis-border/50 ${i % 2 ? 'bg-metis-bg/20' : ''}`}>
-                        <td className="px-3 py-2">
-                          <Link href={`/champions/${c.champion}`} className="flex items-center gap-2 group">
-                            <div className="relative w-6 h-6 rounded overflow-hidden border border-metis-border flex-shrink-0">
-                              <Image src={championIconUrl(c.champion, DDRAGON_VERSION)} alt={c.champion} fill className="object-cover" unoptimized />
-                            </div>
-                            <span className="text-xs font-medium text-metis-text group-hover:text-metis-accent transition-colors truncate">{c.champion}</span>
-                          </Link>
-                        </td>
-                        <td className="px-2 py-2 text-xs text-metis-text-dim">{c.games}</td>
-                        <td className={`px-2 py-2 text-xs font-semibold ${c.winrate > 55 ? 'text-green-400' : c.winrate < 45 ? 'text-red-400' : 'text-metis-text'}`}>
-                          {c.winrate}%
-                        </td>
-                        <td className="px-2 py-2 text-xs text-metis-text-dim">
-                          {c.avg_kills}/{c.avg_deaths}/{c.avg_assists}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {champStats.length > 5 && (
-                  <button
-                    onClick={() => setShowAllChamps(v => !v)}
-                    className="w-full py-2 text-xs text-metis-text-dim hover:text-metis-accent transition-colors border-t border-metis-border"
+      {/* ══════════ Main grid ══════════ */}
+      <div
+        style={{
+          maxWidth: 1200,
+          margin: '0 auto',
+          padding: '24px 28px 48px',
+          display: 'grid',
+          gridTemplateColumns: '1fr 320px',
+          gap: 20,
+        }}
+      >
+        {/* ─── LEFT COL ─── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
+          {/* KPI row */}
+          {summary && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: 12,
+              }}
+            >
+              <Card>
+                <SectionLabel icon="target">Últimas {matches.length}</SectionLabel>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <Donut
+                    value={summary.winrate}
+                    size={84}
+                    thickness={9}
+                    color="var(--m-accent)"
+                    track="rgb(var(--m-accent-rgb) / 0.1)"
                   >
-                    {showAllChamps ? 'Mostrar menos' : `Ver todos (${champStats.length})`}
-                  </button>
-                )}
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* ── Jogou com + Nemesis ── */}
-        {resolvedPuuid && (allies.length > 0 || nemeses.length > 0) && (
-          <div className="flex flex-col gap-4 mb-6">
-            {/* Allies */}
-            {allies.length > 0 && (
-              <section>
-                <h2 className="text-sm font-semibold text-metis-text-dim uppercase tracking-wide mb-3">
-                  Jogou com ({allies.length})
-                </h2>
-                <div className="bg-metis-surface border border-metis-border rounded-xl overflow-hidden">
-                  {allies.slice(0, showAllAllies ? undefined : 5).map((a, i) => (
-                    <Link
-                      key={a.puuid}
-                      href={`/players/${encodeURIComponent(`${a.game_name}#${a.tag_line}`)}`}
-                      className={`flex items-center gap-3 px-3 py-2.5 hover:bg-metis-bg/40 transition-colors ${i > 0 ? 'border-t border-metis-border/50' : ''}`}
+                    <div
+                      className="tabular font-display"
+                      style={{ fontSize: 20, fontWeight: 700 }}
                     >
-                      <div className="w-7 h-7 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-[10px] font-bold text-blue-300 flex-shrink-0">
-                        {a.game_name.charAt(0)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-metis-text truncate">{a.game_name}#{a.tag_line}</p>
-                        <p className="text-[10px] text-metis-text-dim">{a.games_together}j · {a.wins_together}V {a.games_together - a.wins_together}D</p>
-                      </div>
-                      <span className={`text-xs font-semibold flex-shrink-0 ${a.winrate > 55 ? 'text-green-400' : a.winrate < 45 ? 'text-red-400' : 'text-metis-text-dim'}`}>
-                        {a.winrate}%
+                      {summary.winrate}
+                      <span style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>%</span>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 9,
+                        color: 'var(--m-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                      }}
+                    >
+                      winrate
+                    </div>
+                  </Donut>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                      <span className="tabular" style={{ color: 'var(--m-green)', fontWeight: 600 }}>
+                        {summary.wins}V
                       </span>
-                    </Link>
-                  ))}
-                  {allies.length > 5 && (
-                    <button onClick={() => setShowAllAllies(v => !v)}
-                      className="w-full py-2 text-xs text-metis-text-dim hover:text-metis-accent transition-colors border-t border-metis-border">
-                      {showAllAllies ? 'Mostrar menos' : `Ver todos (${allies.length})`}
+                      <span className="tabular" style={{ color: 'var(--m-red)', fontWeight: 600 }}>
+                        {summary.losses}D
+                      </span>
+                    </div>
+                    {winLossResults.length > 0 && (
+                      <WinLossDots results={winLossResults} size={7} gap={3} />
+                    )}
+                  </div>
+                </div>
+              </Card>
+
+              <Card>
+                <SectionLabel icon="sword">KDA médio</SectionLabel>
+                <div className="tabular font-display" style={{ fontSize: 28, fontWeight: 700 }}>
+                  {summary.avgKda}
+                </div>
+                <div className="tabular" style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 4 }}>
+                  <span style={{ color: 'var(--m-green)' }}>{summary.avgKills}</span> /{' '}
+                  <span style={{ color: 'var(--m-red)' }}>{summary.avgDeaths}</span> /{' '}
+                  <span style={{ color: 'var(--m-cyan)' }}>{summary.avgAssists}</span>
+                </div>
+              </Card>
+
+              <Card>
+                <SectionLabel icon="crosshair">CS / min</SectionLabel>
+                <div className="tabular font-display" style={{ fontSize: 28, fontWeight: 700 }}>
+                  {summary.avgCspm}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 4 }}>
+                  média por partida
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <Bar
+                    value={Math.min(parseFloat(summary.avgCspm), 10)}
+                    max={10}
+                    color={
+                      parseFloat(summary.avgCspm) >= 8
+                        ? 'var(--m-green)'
+                        : parseFloat(summary.avgCspm) >= 6
+                        ? 'var(--m-accent)'
+                        : 'var(--m-red)'
+                    }
+                    height={4}
+                  />
+                </div>
+              </Card>
+
+              <Card>
+                <SectionLabel icon="eye">Score de visão</SectionLabel>
+                <div className="tabular font-display" style={{ fontSize: 28, fontWeight: 700 }}>
+                  {summary.avgVision}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 4 }}>
+                  média por partida
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <Bar
+                    value={Math.min(parseFloat(summary.avgVision), 60)}
+                    max={60}
+                    color="var(--m-cyan)"
+                    height={4}
+                  />
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* Winrate ao longo das últimas 20 partidas */}
+          {wrSeries.length > 2 && (
+            <Card>
+              <SectionLabel icon="trending">
+                Winrate cumulativo · últimas {wrSeries.length} partidas
+              </SectionLabel>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: 10,
+                  marginBottom: 10,
+                }}
+              >
+                <span className="tabular font-display" style={{ fontSize: 32, fontWeight: 700 }}>
+                  {wrSeries[wrSeries.length - 1]}
+                  <span style={{ fontSize: 14, color: 'var(--m-text-dim)' }}>%</span>
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--m-text-dim)' }}>
+                  no fim da janela
+                </span>
+                <span
+                  className="tabular"
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    marginLeft: 'auto',
+                    color:
+                      wrSeries[wrSeries.length - 1] - wrSeries[0] >= 0
+                        ? 'var(--m-green)'
+                        : 'var(--m-red)',
+                  }}
+                >
+                  {wrSeries[wrSeries.length - 1] - wrSeries[0] >= 0 ? '+' : ''}
+                  {wrSeries[wrSeries.length - 1] - wrSeries[0]}% vs início
+                </span>
+              </div>
+              <AreaChart data={wrSeries} height={140} color="var(--m-accent)" />
+            </Card>
+          )}
+
+          {/* Stats por campeão */}
+          {resolvedPuuid && (
+            <Card pad={0}>
+              <div style={{ padding: '16px 20px 12px' }}>
+                <SectionLabel
+                  icon="gamepad"
+                  right={
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      <select
+                        value={champSeason}
+                        onChange={(e) => {
+                          setChampSeason(e.target.value)
+                          setChampPatch('')
+                        }}
+                        style={{
+                          padding: '4px 8px',
+                          background: 'var(--m-bg)',
+                          border: '1px solid var(--m-border-2)',
+                          borderRadius: 6,
+                          color: 'var(--m-text)',
+                          fontSize: 10,
+                          fontFamily: 'inherit',
+                          outline: 'none',
+                        }}
+                      >
+                        <option value="">Geral</option>
+                        {seasons.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={champPatch}
+                        onChange={(e) => {
+                          setChampPatch(e.target.value)
+                          if (e.target.value) setChampSeason('')
+                        }}
+                        style={{
+                          padding: '4px 8px',
+                          background: 'var(--m-bg)',
+                          border: '1px solid var(--m-border-2)',
+                          borderRadius: 6,
+                          color: 'var(--m-text)',
+                          fontSize: 10,
+                          fontFamily: 'inherit',
+                          outline: 'none',
+                        }}
+                      >
+                        <option value="">Patch</option>
+                        {patchList.map((p) => (
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={champRole}
+                        onChange={(e) => setChampRole(e.target.value)}
+                        style={{
+                          padding: '4px 8px',
+                          background: 'var(--m-bg)',
+                          border: '1px solid var(--m-border-2)',
+                          borderRadius: 6,
+                          color: 'var(--m-text)',
+                          fontSize: 10,
+                          fontFamily: 'inherit',
+                          outline: 'none',
+                        }}
+                      >
+                        <option value="">Role</option>
+                        <option value="TOP">Top</option>
+                        <option value="JUNGLE">Jungle</option>
+                        <option value="MIDDLE">Mid</option>
+                        <option value="BOTTOM">ADC</option>
+                        <option value="UTILITY">Sup</option>
+                      </select>
+                    </div>
+                  }
+                >
+                  Campeões jogados
+                </SectionLabel>
+              </div>
+              {champStats.length === 0 ? (
+                <div
+                  style={{
+                    padding: '24px 20px',
+                    textAlign: 'center',
+                    fontSize: 12,
+                    color: 'var(--m-text-dim)',
+                  }}
+                >
+                  Sem dados pros filtros selecionados.
+                </div>
+              ) : (
+                <>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 60px 90px 80px 80px',
+                      gap: 8,
+                      padding: '6px 20px',
+                      fontSize: 10,
+                      color: 'var(--m-muted)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      fontWeight: 600,
+                      borderTop: '1px solid var(--m-border)',
+                      borderBottom: '1px solid var(--m-border)',
+                    }}
+                  >
+                    <span>Campeão</span>
+                    <span className="tabular">Jogos</span>
+                    <span>WR</span>
+                    <span className="tabular">KDA</span>
+                    <span className="tabular">CS/m</span>
+                  </div>
+                  {champStats.slice(0, showAllChamps ? undefined : 5).map((c) => {
+                    const kda =
+                      c.avg_deaths > 0
+                        ? ((c.avg_kills + c.avg_assists) / c.avg_deaths).toFixed(2)
+                        : '∞'
+                    return (
+                      <Link
+                        key={c.champion}
+                        href={`/champions/${encodeURIComponent(c.champion)}`}
+                        className="m-hover-row"
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 60px 90px 80px 80px',
+                          gap: 8,
+                          padding: '10px 20px',
+                          alignItems: 'center',
+                          borderBottom: '1px solid rgba(34,40,56,0.4)',
+                          textDecoration: 'none',
+                          color: 'inherit',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                          <ChampPortrait name={c.champion} size={32} />
+                          <span style={{ fontSize: 13, fontWeight: 500 }}>{c.champion}</span>
+                        </div>
+                        <span className="tabular" style={{ fontSize: 13, fontWeight: 600 }}>
+                          {c.games}
+                        </span>
+                        <div>
+                          <div
+                            className="tabular"
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color:
+                                c.winrate > 55
+                                  ? 'var(--m-green)'
+                                  : c.winrate > 45
+                                  ? 'var(--m-text)'
+                                  : 'var(--m-red)',
+                            }}
+                          >
+                            {c.winrate.toFixed(0)}%
+                          </div>
+                          <div style={{ fontSize: 10, color: 'var(--m-text-dim)' }}>
+                            {c.wins}V {c.games - c.wins}D
+                          </div>
+                        </div>
+                        <span className="tabular" style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>
+                          {kda}
+                        </span>
+                        <span className="tabular" style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>
+                          {c.avg_cs_per_minute?.toFixed(1) ?? '—'}
+                        </span>
+                      </Link>
+                    )
+                  })}
+                  {champStats.length > 5 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllChamps((v) => !v)}
+                      className="m-hover-surface"
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        background: 'transparent',
+                        border: 'none',
+                        borderTop: '1px solid var(--m-border)',
+                        color: 'var(--m-text-dim)',
+                        fontSize: 11,
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      {showAllChamps ? 'Mostrar menos' : `Ver todos (${champStats.length})`}
                     </button>
                   )}
-                </div>
-              </section>
-            )}
+                </>
+              )}
+            </Card>
+          )}
 
-            {/* Nemesis */}
-            {nemeses.length > 0 && (
-              <section>
-                <h2 className="text-sm font-semibold text-metis-text-dim uppercase tracking-wide mb-3">
-                  Nemesis ({nemeses.length})
-                </h2>
-                <div className="bg-metis-surface border border-metis-border rounded-xl overflow-hidden">
-                  {nemeses.slice(0, showAllNemeses ? undefined : 5).map((n, i) => (
-                    <Link
-                      key={n.puuid}
-                      href={`/players/${encodeURIComponent(`${n.game_name}#${n.tag_line}`)}`}
-                      className={`flex items-center gap-3 px-3 py-2.5 hover:bg-metis-bg/40 transition-colors ${i > 0 ? 'border-t border-metis-border/50' : ''}`}
+          {/* Recomendações */}
+          {recommendations.length > 0 && (
+            <Card pad={0}>
+              <div style={{ padding: '16px 20px 12px' }}>
+                <SectionLabel icon="sparkles">Recomendados pra você</SectionLabel>
+              </div>
+              {recommendations.map((r, i) => {
+                const key = `${r.champion}-${r.role}`
+                const expanded = selectedRec === key
+                return (
+                  <div key={key}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRec(expanded ? null : key)}
+                      className="m-hover-row"
+                      style={{
+                        width: '100%',
+                        display: 'grid',
+                        gridTemplateColumns: '36px 1fr 80px 80px',
+                        gap: 12,
+                        padding: '10px 20px',
+                        alignItems: 'center',
+                        background: 'transparent',
+                        border: 'none',
+                        borderTop: i ? '1px solid rgba(34,40,56,0.4)' : 'none',
+                        color: 'inherit',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        textAlign: 'left',
+                      }}
                     >
-                      <div className="w-7 h-7 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center text-[10px] font-bold text-red-300 flex-shrink-0">
-                        {n.game_name.charAt(0)}
+                      <ChampPortrait name={r.champion} size={32} role={r.role as Role} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>
+                          {r.champion}{' '}
+                          <span
+                            style={{
+                              fontSize: 9,
+                              padding: '1px 5px',
+                              background: 'var(--m-surface-2)',
+                              borderRadius: 3,
+                              color: 'var(--m-text-dim)',
+                              marginLeft: 4,
+                            }}
+                          >
+                            {r.role_label}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 2 }}>
+                          {r.winrate.toFixed(0)}% WR · {r.games_in_db}j
+                          {r.times_played > 0 && ` · jogou ${r.times_played}×`}
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-metis-text truncate">{n.game_name}#{n.tag_line}</p>
-                        <p className="text-[10px] text-metis-text-dim">{n.times_faced}x · {n.champions_used.slice(0, 3).join(', ')}</p>
+                      <div style={{ textAlign: 'right' }}>
+                        <div
+                          className="tabular"
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 700,
+                            color:
+                              r.confidence >= 80
+                                ? 'var(--m-green)'
+                                : r.confidence >= 60
+                                ? 'var(--m-accent)'
+                                : r.confidence >= 40
+                                ? 'var(--m-orange)'
+                                : 'var(--m-text-dim)',
+                          }}
+                        >
+                          {r.confidence.toFixed(0)}%
+                        </div>
+                        <div style={{ fontSize: 9, color: 'var(--m-muted)' }}>match</div>
                       </div>
-                      <span className={`text-xs font-semibold flex-shrink-0 ${n.winrate_against > 55 ? 'text-green-400' : n.winrate_against < 45 ? 'text-red-400' : 'text-metis-text-dim'}`}>
-                        {n.winrate_against}%
-                      </span>
-                    </Link>
-                  ))}
-                  {nemeses.length > 5 && (
-                    <button onClick={() => setShowAllNemeses(v => !v)}
-                      className="w-full py-2 text-xs text-metis-text-dim hover:text-metis-accent transition-colors border-t border-metis-border">
-                      {showAllNemeses ? 'Mostrar menos' : `Ver todos (${nemeses.length})`}
+                      <Icon
+                        name={expanded ? 'chevronUp' : 'chevronDown'}
+                        size={14}
+                        style={{ color: 'var(--m-text-dim)', justifySelf: 'end' }}
+                      />
                     </button>
-                  )}
-                </div>
-              </section>
-            )}
-          </div>
-        )}
-
-        {/* ── Recomendacoes de Campeao ── */}
-        {recommendations.length > 0 && (
-          <section className="mb-6">
-            <h2 className="text-sm font-semibold text-metis-text-dim uppercase tracking-wide mb-3">
-              Recomendados pra voce
-            </h2>
-            <div className="bg-metis-surface border border-metis-border rounded-xl overflow-hidden">
-              {recommendations.map((r, i) => (
-                <div key={`${r.champion}-${r.role}`}>
-                  <button
-                    onClick={() => setSelectedRec(selectedRec === `${r.champion}-${r.role}` ? null : `${r.champion}-${r.role}`)}
-                    className={`w-full flex items-center gap-3 px-3 py-3 hover:bg-metis-bg/40 transition-colors text-left ${i > 0 ? 'border-t border-metis-border/50' : ''}`}
-                  >
-                    <div className="relative w-9 h-9 rounded-lg overflow-hidden border border-metis-accent/30 flex-shrink-0">
-                      <Image src={championIconUrl(r.champion, DDRAGON_VERSION)} alt={r.champion} fill className="object-cover" unoptimized />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-medium text-metis-text">{r.champion}</span>
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-metis-border/50 text-metis-text-dim">{r.role_label}</span>
-                      </div>
-                      <p className="text-[10px] text-metis-text-dim">
-                        {r.winrate}% WR · {r.games_in_db}j
-                        {r.times_played > 0 && ` · jogou ${r.times_played}x`}
-                      </p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className={`text-sm font-bold ${
-                        r.confidence >= 80 ? 'text-green-400' :
-                        r.confidence >= 60 ? 'text-metis-accent' :
-                        r.confidence >= 40 ? 'text-amber-400' : 'text-metis-text-dim'
-                      }`}>{r.confidence}%</p>
-                      <p className="text-[10px] text-metis-text-dim">match</p>
-                    </div>
-                  </button>
-
-                  {/* Detalhes expandidos com radar chart */}
-                  {selectedRec === `${r.champion}-${r.role}` && r.player_profile && r.champion_profile && (
-                    <div className="px-3 pb-4 border-t border-metis-border/30">
-                      {/* Radar SVG */}
-                      <div className="flex justify-center py-3">
-                        <RadarChart
+                    {expanded && r.player_profile && r.champion_profile && (
+                      <div
+                        style={{
+                          padding: '12px 20px 16px',
+                          borderTop: '1px solid rgba(34,40,56,0.4)',
+                          background: 'var(--m-bg)',
+                        }}
+                      >
+                        <DualRadar
                           playerProfile={r.player_profile}
                           championProfile={r.champion_profile}
-                          labels={['AGR', 'MAP', 'EFC', 'PRS', 'SBV', 'UTL', 'ERL', 'CST']}
                         />
-                      </div>
-                      {/* Legenda */}
-                      <div className="flex justify-center gap-4 text-[10px] mb-2">
-                        <span className="flex items-center gap-1"><span className="w-2.5 h-0.5 bg-metis-accent rounded" /> Voce</span>
-                        <span className="flex items-center gap-1"><span className="w-2.5 h-0.5 bg-amber-400 rounded" /> {r.champion}</span>
-                      </div>
-                      {/* Dimensoes detalhadas */}
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {['Agressividade', 'Mapa', 'Eficiencia', 'Pressao', 'Sobrevivencia', 'Utilidade', 'Early Game', 'Consistencia'].map((label, idx) => (
-                          <div key={idx} className="flex items-center gap-1.5">
-                            <span className="text-[9px] text-metis-text-dim w-20 truncate">{label}</span>
-                            <div className="flex-1 bg-metis-border/30 rounded-full h-1.5 overflow-hidden">
-                              <div className="h-full bg-metis-accent/70 rounded-full" style={{ width: `${((r.player_profile?.[idx] ?? 0) / 10) * 100}%` }} />
-                            </div>
-                            <span className="text-[9px] text-metis-text-dim w-6 text-right">{(r.player_profile?.[idx] ?? 0).toFixed(1)}</span>
+                        {r.reasons && r.reasons.length > 0 && (
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: 'var(--m-accent)',
+                              textAlign: 'center',
+                              marginTop: 8,
+                            }}
+                          >
+                            {r.reasons.join(' · ')}
                           </div>
-                        ))}
+                        )}
                       </div>
-                      {/* Reasons */}
-                      {r.reasons && r.reasons.length > 0 && (
-                        <p className="text-[9px] text-metis-accent mt-2 text-center">{r.reasons.join(' · ')}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            <p className="text-[10px] text-metis-muted mt-1.5 text-center">
-              8 dimensoes · similaridade de cosseno + distancia euclidiana
-            </p>
-          </section>
-        )}
+                    )}
+                  </div>
+                )
+              })}
+              <div
+                style={{
+                  padding: '10px',
+                  textAlign: 'center',
+                  fontSize: 10,
+                  color: 'var(--m-muted)',
+                  borderTop: '1px solid var(--m-border)',
+                }}
+              >
+                8 dimensões · similaridade de cosseno + distância euclidiana
+              </div>
+            </Card>
+          )}
 
-        </div>{/* fim coluna esquerda */}
-
-        {/* ── Coluna direita: historico ── */}
-        <div>
-
-        {/* ── Histórico de partidas ── */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-metis-text-dim uppercase tracking-wide">
-              Últimas Partidas
-            </h2>
-            <div className="flex items-center gap-1.5 text-[11px] text-metis-text-dim bg-metis-surface border border-metis-border rounded-full px-2.5 py-1">
-              <ShieldCheck className="w-3 h-3 text-metis-accent" />
-              Somente SoloQ / Flex
+          {/* Match history */}
+          <Card pad={0}>
+            <div
+              style={{
+                padding: '16px 20px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <SectionLabel icon="clock">Últimas partidas</SectionLabel>
+              <Pill color="accent" icon="shield" active>
+                SoloQ / Flex
+              </Pill>
             </div>
-          </div>
-
-          {loadingMatches ? (
-            <div className="flex gap-1 py-8 justify-center">
-              <span className="w-2 h-2 bg-metis-accent rounded-full animate-bounce [animation-delay:0ms]" />
-              <span className="w-2 h-2 bg-metis-accent rounded-full animate-bounce [animation-delay:150ms]" />
-              <span className="w-2 h-2 bg-metis-accent rounded-full animate-bounce [animation-delay:300ms]" />
-            </div>
-          ) : !resolvedPuuid ? null
-          : matchError ? (
-            <div className="bg-metis-surface border border-metis-border rounded-xl p-6 text-center">
-              <p className="text-sm text-metis-text-dim">{matchError}</p>
-            </div>
-          ) : matches.length === 0 ? (
-            <div className="bg-metis-surface border border-metis-border rounded-xl p-6 text-center">
-              <p className="text-sm text-metis-text-dim">Nenhuma partida ranqueada encontrada no banco.</p>
-              <p className="text-xs text-metis-text-dim mt-1">Clique em "Ver partidas novas" para importar ou aguarde o pipeline diário.</p>
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-col gap-2">
-                {matches.map((m, i) => (
-                  <MatchCard key={m.matches?.match_id ?? i} match={m} puuid={resolvedPuuid!} />
+            {loadingMatches ? (
+              <div
+                style={{
+                  padding: '40px 20px',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                {[0, 150, 300].map((d) => (
+                  <span
+                    key={d}
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: 'var(--m-accent)',
+                      animation: 'm-bounce 1.4s infinite ease-in-out both',
+                      animationDelay: `${d}ms`,
+                    }}
+                  />
                 ))}
               </div>
-              {hasMore && (
-                <button
-                  onClick={loadMore}
-                  disabled={loadingMore}
-                  className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 text-sm text-metis-text-dim border border-metis-border rounded-xl hover:border-metis-accent hover:text-metis-accent transition-colors disabled:opacity-50"
-                >
-                  {loadingMore ? (
-                    <>
-                      <span className="w-1.5 h-1.5 bg-metis-accent rounded-full animate-bounce [animation-delay:0ms]" />
-                      <span className="w-1.5 h-1.5 bg-metis-accent rounded-full animate-bounce [animation-delay:150ms]" />
-                      <span className="w-1.5 h-1.5 bg-metis-accent rounded-full animate-bounce [animation-delay:300ms]" />
-                    </>
-                  ) : (
-                    <><ChevronDown className="w-4 h-4" />Carregar mais partidas</>
-                  )}
-                </button>
-              )}
-            </>
-          )}
-        </section>
+            ) : matchError ? (
+              <div
+                style={{
+                  padding: '20px',
+                  textAlign: 'center',
+                  fontSize: 12,
+                  color: 'var(--m-text-dim)',
+                }}
+              >
+                {matchError}
+              </div>
+            ) : matches.length === 0 ? (
+              <div
+                style={{
+                  padding: '20px',
+                  textAlign: 'center',
+                  fontSize: 12,
+                  color: 'var(--m-text-dim)',
+                }}
+              >
+                Nenhuma partida ranqueada encontrada no banco. Clique em &quot;Ver partidas novas&quot; pra importar.
+              </div>
+            ) : (
+              <>
+                {matches.map((m, i) => (
+                  <MatchRow
+                    key={m.matches?.match_id ?? i}
+                    m={m}
+                    puuid={resolvedPuuid!}
+                  />
+                ))}
+                {hasMore && (
+                  <button
+                    type="button"
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="m-hover-surface"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      background: 'transparent',
+                      border: 'none',
+                      borderTop: '1px solid var(--m-border)',
+                      color: 'var(--m-text-dim)',
+                      fontSize: 12,
+                      cursor: loadingMore ? 'not-allowed' : 'pointer',
+                      fontFamily: 'inherit',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      opacity: loadingMore ? 0.5 : 1,
+                    }}
+                  >
+                    {loadingMore ? (
+                      <>
+                        {[0, 150, 300].map((d) => (
+                          <span
+                            key={d}
+                            style={{
+                              width: 5,
+                              height: 5,
+                              borderRadius: '50%',
+                              background: 'var(--m-accent)',
+                              animation: 'm-bounce 1.4s infinite ease-in-out both',
+                              animationDelay: `${d}ms`,
+                            }}
+                          />
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        <Icon name="chevronDown" size={12} />
+                        Carregar mais partidas
+                      </>
+                    )}
+                  </button>
+                )}
+              </>
+            )}
+          </Card>
+        </div>
 
-        </div>{/* fim coluna direita */}
-        </div>{/* fim grid */}
-      </main>
+        {/* ─── RIGHT COL ─── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Season summary */}
+          {seasonSummary && (
+            <Card>
+              <SectionLabel icon="medal">Temporada</SectionLabel>
+              <div className="tabular font-display" style={{ fontSize: 26, fontWeight: 700 }}>
+                {seasonSummary.totalGames}
+                <span style={{ fontSize: 12, color: 'var(--m-text-dim)', fontWeight: 500 }}>
+                  {' '}partidas
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+                <span
+                  className="tabular"
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 700,
+                    color:
+                      seasonSummary.winrate >= 55
+                        ? 'var(--m-green)'
+                        : seasonSummary.winrate >= 50
+                        ? 'var(--m-accent)'
+                        : 'var(--m-red)',
+                  }}
+                >
+                  {seasonSummary.winrate}%
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--m-text-dim)' }}>
+                  {seasonSummary.wins}V {seasonSummary.losses}D · {seasonSummary.uniqueChamps} campeões
+                </span>
+              </div>
+            </Card>
+          )}
+
+          {/* Role distribution */}
+          {roleDist && (
+            <Card>
+              <SectionLabel icon="pieChart">Roles · {matches.length} partidas</SectionLabel>
+              <div style={{ marginTop: 6, marginBottom: 12 }}>
+                <StackedBar
+                  segments={[
+                    { label: 'Top', value: roleDist.TOP, color: 'var(--m-violet)' },
+                    { label: 'Jungle', value: roleDist.JUNGLE, color: 'var(--m-accent)' },
+                    { label: 'Mid', value: roleDist.MIDDLE, color: 'var(--m-cyan)' },
+                    { label: 'ADC', value: roleDist.BOTTOM, color: 'var(--m-pink)' },
+                    { label: 'Sup', value: roleDist.UTILITY, color: 'var(--m-green)' },
+                  ]}
+                  height={10}
+                  radius={5}
+                />
+              </div>
+              {(
+                [
+                  { label: 'Top', value: roleDist.TOP, color: 'var(--m-violet)', role: 'TOP' },
+                  { label: 'Jungle', value: roleDist.JUNGLE, color: 'var(--m-accent)', role: 'JUNGLE' },
+                  { label: 'Mid', value: roleDist.MIDDLE, color: 'var(--m-cyan)', role: 'MIDDLE' },
+                  { label: 'ADC', value: roleDist.BOTTOM, color: 'var(--m-pink)', role: 'BOTTOM' },
+                  { label: 'Sup', value: roleDist.UTILITY, color: 'var(--m-green)', role: 'UTILITY' },
+                ] as const
+              ).map((s) => (
+                <div
+                  key={s.label}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}
+                >
+                  <Image
+                    src={roleIconPath(s.role)}
+                    alt=""
+                    width={14}
+                    height={14}
+                    unoptimized
+                    style={{ objectFit: 'contain', opacity: 0.8 }}
+                  />
+                  <span style={{ fontSize: 12, flex: 1 }}>{s.label}</span>
+                  <span
+                    className="tabular"
+                    style={{ fontSize: 12, fontWeight: 600, color: s.value > 0 ? s.color : 'var(--m-muted)' }}
+                  >
+                    {s.value}%
+                  </span>
+                </div>
+              ))}
+            </Card>
+          )}
+
+          {/* Player radar (das recomendações) */}
+          {playerRadarAxes && (
+            <Card>
+              <SectionLabel icon="target">Perfil de jogo</SectionLabel>
+              <div style={{ display: 'flex', justifyContent: 'center', margin: '4px -10px -10px' }}>
+                <DsRadarChart size={220} color="var(--m-accent)" axes={playerRadarAxes} />
+              </div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: 'var(--m-muted)',
+                  textAlign: 'center',
+                  padding: '4px 0 0',
+                }}
+              >
+                8 dimensões Neo-Artemis
+              </div>
+            </Card>
+          )}
+
+          {/* Insights teaser */}
+          <Card accent>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 8,
+                  background: 'rgb(var(--m-accent-rgb) / 0.15)',
+                  color: 'var(--m-accent)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Icon name="brain" size={15} />
+              </div>
+              <div className="font-display" style={{ fontSize: 13, fontWeight: 600 }}>
+                Pergunte à Metis
+              </div>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--m-text-dim)', lineHeight: 1.55 }}>
+              A Metis pode analisar suas últimas {matches.length || 'N'} partidas, identificar padrões
+              e sugerir o que mudar na próxima ranqueada.
+            </p>
+            <Link
+              href="/chat"
+              className="m-hover-accent"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                width: '100%',
+                marginTop: 12,
+                padding: '9px 12px',
+                background: 'var(--m-accent)',
+                border: 'none',
+                borderRadius: 8,
+                color: '#1a1510',
+                fontSize: 12,
+                fontWeight: 600,
+                textDecoration: 'none',
+              }}
+            >
+              <Icon name="messageCircle" size={13} />
+              Abrir Chat
+            </Link>
+          </Card>
+
+          {/* Allies */}
+          {allies.length > 0 && (
+            <Card pad={0}>
+              <div style={{ padding: '16px 20px 12px' }}>
+                <SectionLabel icon="users">Jogou com</SectionLabel>
+              </div>
+              {allies.slice(0, 5).map((a, i) => (
+                <Link
+                  key={a.puuid}
+                  href={`/players/${encodeURIComponent(`${a.game_name}#${a.tag_line}`)}`}
+                  className="m-hover-row"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '8px 20px',
+                    borderTop: i ? '1px solid rgba(34,40,56,0.4)' : '1px solid var(--m-border)',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 6,
+                      background: 'var(--m-surface-2)',
+                      border: '1px solid var(--m-border-2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: 'var(--m-text-dim)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {a.game_name.charAt(0)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {a.game_name}#{a.tag_line}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 2 }}>
+                      {a.games_together}j · {a.wins_together}V {a.games_together - a.wins_together}D
+                    </div>
+                  </div>
+                  <span
+                    className="tabular"
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color:
+                        a.winrate > 55
+                          ? 'var(--m-green)'
+                          : a.winrate < 45
+                          ? 'var(--m-red)'
+                          : 'var(--m-text-dim)',
+                    }}
+                  >
+                    {a.winrate}%
+                  </span>
+                </Link>
+              ))}
+            </Card>
+          )}
+
+          {/* Nemeses */}
+          {nemeses.length > 0 && (
+            <Card pad={0}>
+              <div style={{ padding: '16px 20px 12px' }}>
+                <SectionLabel icon="crosshair">Nemesis</SectionLabel>
+              </div>
+              {nemeses.slice(0, 5).map((n, i) => (
+                <Link
+                  key={n.puuid}
+                  href={`/players/${encodeURIComponent(`${n.game_name}#${n.tag_line}`)}`}
+                  className="m-hover-row"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '8px 20px',
+                    borderTop: i ? '1px solid rgba(34,40,56,0.4)' : '1px solid var(--m-border)',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 6,
+                      background: 'rgba(248,113,113,0.1)',
+                      border: '1px solid rgba(248,113,113,0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: 'var(--m-red)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {n.game_name.charAt(0)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {n.game_name}#{n.tag_line}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 2 }}>
+                      {n.times_faced}× · {n.champions_used.slice(0, 3).join(', ')}
+                    </div>
+                  </div>
+                  <span
+                    className="tabular"
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color:
+                        n.winrate_against > 55
+                          ? 'var(--m-green)'
+                          : n.winrate_against < 45
+                          ? 'var(--m-red)'
+                          : 'var(--m-text-dim)',
+                    }}
+                  >
+                    {n.winrate_against}%
+                  </span>
+                </Link>
+              ))}
+            </Card>
+          )}
+        </div>
+      </div>
+
+      <style jsx>{`
+        @keyframes m-bounce {
+          0%, 80%, 100% { transform: scale(0); }
+          40% { transform: scale(1); }
+        }
+        @keyframes m-spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   )
 }
 
-// ── Radar Chart SVG ─────────────────────────────────────────────
+// ── Inline MatchRow ───────────────────────────────────────────────
+function MatchRow({ m, puuid }: { m: MatchData; puuid: string }) {
+  const dur = formatDuration(m.matches?.game_duration ?? 0)
+  const when = formatRelativeDate(m.matches?.game_end_timestamp ?? null)
+  const mode = m.matches?.queue_id === 440 ? 'Flex' : 'Ranked Solo'
+  const items = (m.items ?? []).filter((id) => id && id > 0).slice(0, 6)
 
-function RadarChart({ playerProfile, championProfile, labels }: {
+  return (
+    <Link
+      href={`/matches/${encodeURIComponent(m.matches?.match_id ?? '')}?as=${encodeURIComponent(puuid)}`}
+      className="m-hover-row"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '4px 44px 1fr 220px 110px 80px 70px',
+        gap: 14,
+        padding: '14px 20px',
+        alignItems: 'center',
+        borderTop: '1px solid rgba(34,40,56,0.4)',
+        background: m.win
+          ? 'linear-gradient(90deg, rgba(74,222,128,0.05), transparent 30%)'
+          : 'linear-gradient(90deg, rgba(248,113,113,0.05), transparent 30%)',
+        textDecoration: 'none',
+        color: 'inherit',
+      }}
+    >
+      <div
+        style={{
+          width: 4,
+          height: 44,
+          borderRadius: 2,
+          background: m.win ? 'var(--m-green)' : 'var(--m-red)',
+        }}
+      />
+      <ChampPortrait
+        name={m.champion_name}
+        size={44}
+        role={m.team_position as Role | undefined}
+      />
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: m.win ? 'var(--m-green)' : 'var(--m-red)',
+            }}
+          >
+            {m.win ? 'Vitória' : 'Derrota'}
+          </span>
+          <span style={{ fontSize: 11, color: 'var(--m-text-dim)' }}>· {mode}</span>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--m-muted)', marginTop: 2 }}>
+          {when} · {dur} · {m.team_position && ROLES_PT[m.team_position as Role] ? ROLES_PT[m.team_position as Role] : m.team_position}
+        </div>
+      </div>
+      {/* Items */}
+      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+        {items.length === 0
+          ? Array.from({ length: 6 }, (_, i) => (
+              <div
+                key={i}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 4,
+                  background: 'var(--m-surface-2)',
+                  border: '1px solid var(--m-border-2)',
+                }}
+              />
+            ))
+          : items.map((id, i) => (
+              <div
+                key={i}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 4,
+                  background: 'var(--m-surface-2)',
+                  border: '1px solid var(--m-border-2)',
+                  backgroundImage: `url(https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/item/${id}.png)`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+              />
+            ))}
+      </div>
+      <div>
+        <div className="tabular" style={{ fontSize: 13, fontWeight: 600 }}>
+          <span>{m.kills}</span>
+          <span style={{ color: 'var(--m-muted)' }}> / </span>
+          <span style={{ color: 'var(--m-red)' }}>{m.deaths}</span>
+          <span style={{ color: 'var(--m-muted)' }}> / </span>
+          <span>{m.assists}</span>
+        </div>
+        {m.kill_participation != null && (
+          <div className="tabular" style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 2 }}>
+            {Math.round((m.kill_participation ?? 0) * 100)}% KP
+          </div>
+        )}
+      </div>
+      <div>
+        <div className="tabular" style={{ fontSize: 12, fontWeight: 500 }}>
+          {m.total_cs ?? 0} CS
+        </div>
+        <div className="tabular" style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 2 }}>
+          {m.cs_per_minute?.toFixed(1) ?? '—'} /min
+        </div>
+      </div>
+      <span
+        className="tabular"
+        style={{ fontSize: 11, color: 'var(--m-text-dim)', justifySelf: 'end' }}
+      >
+        {m.champion_level ? `lvl ${m.champion_level}` : '—'}
+      </span>
+    </Link>
+  )
+}
+
+// ── DualRadar (usado nas recomendações expandidas) ──────────────
+function DualRadar({
+  playerProfile,
+  championProfile,
+}: {
   playerProfile: number[]
   championProfile: number[]
-  labels: string[]
 }) {
+  const labels = ['AGR', 'MAP', 'EFC', 'PRS', 'SBV', 'UTL', 'ERL', 'CST']
   const n = labels.length
-  const cx = 90, cy = 90, r = 70
-  const angleStep = (2 * Math.PI) / n
+  const cx = 100
+  const cy = 100
+  const r = 78
 
   function point(idx: number, val: number): [number, number] {
-    const angle = angleStep * idx - Math.PI / 2
-    const dist = (val / 10) * r
+    const angle = ((2 * Math.PI) / n) * idx - Math.PI / 2
+    const dist = Math.min(1, val / 10) * r
     return [cx + dist * Math.cos(angle), cy + dist * Math.sin(angle)]
   }
 
-  function polygon(values: number[]): string {
-    return values.map((v, i) => point(i, v).join(',')).join(' ')
-  }
-
-  // Grid rings
+  const polygonPts = (vs: number[]) => vs.map((v, i) => point(i, v).join(',')).join(' ')
   const rings = [2.5, 5, 7.5, 10]
 
   return (
-    <svg viewBox="0 0 180 180" className="w-44 h-44">
-      {/* Grid */}
-      {rings.map(rv => (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <svg viewBox="0 0 200 200" width={200} height={200}>
+        {rings.map((rv) => (
+          <polygon
+            key={rv}
+            points={Array.from({ length: n }, (_, i) => point(i, rv).join(',')).join(' ')}
+            fill="none"
+            stroke="var(--m-border)"
+            strokeWidth="0.8"
+            opacity="0.4"
+          />
+        ))}
+        {labels.map((_, i) => {
+          const [x, y] = point(i, 10)
+          return (
+            <line
+              key={i}
+              x1={cx}
+              y1={cy}
+              x2={x}
+              y2={y}
+              stroke="var(--m-border)"
+              strokeWidth="0.6"
+              opacity="0.3"
+            />
+          )
+        })}
         <polygon
-          key={rv}
-          points={Array.from({ length: n }, (_, i) => point(i, rv).join(',')).join(' ')}
-          fill="none" stroke="rgb(var(--metis-border))" strokeWidth="0.5" opacity="0.4"
+          points={polygonPts(championProfile)}
+          fill="rgba(251,191,36,0.18)"
+          stroke="rgba(251,191,36,0.85)"
+          strokeWidth="1.5"
         />
-      ))}
-      {/* Axes */}
-      {labels.map((_, i) => {
-        const [px, py] = point(i, 10)
-        return <line key={i} x1={cx} y1={cy} x2={px} y2={py} stroke="rgb(var(--metis-border))" strokeWidth="0.5" opacity="0.3" />
-      })}
-      {/* Champion polygon */}
-      <polygon
-        points={polygon(championProfile)}
-        fill="rgba(251,191,36,0.15)" stroke="rgba(251,191,36,0.7)" strokeWidth="1.5"
-      />
-      {/* Player polygon */}
-      <polygon
-        points={polygon(playerProfile)}
-        fill="rgba(59,130,246,0.15)" stroke="rgba(59,130,246,0.8)" strokeWidth="1.5"
-      />
-      {/* Labels */}
-      {labels.map((label, i) => {
-        const [px, py] = point(i, 12)
-        return (
-          <text key={i} x={px} y={py} textAnchor="middle" dominantBaseline="central"
-            className="fill-metis-text-dim" style={{ fontSize: '7px' }}>
-            {label}
-          </text>
-        )
-      })}
-    </svg>
+        <polygon
+          points={polygonPts(playerProfile)}
+          fill="rgb(var(--m-accent-rgb) / 0.2)"
+          stroke="var(--m-accent)"
+          strokeWidth="1.5"
+        />
+        {labels.map((l, i) => {
+          const [x, y] = point(i, 11.5)
+          return (
+            <text
+              key={i}
+              x={x}
+              y={y}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize="8"
+              fill="var(--m-text-dim)"
+              fontWeight="600"
+              style={{ letterSpacing: '0.06em' }}
+            >
+              {l}
+            </text>
+          )
+        })}
+      </svg>
+      <div style={{ display: 'flex', gap: 14, fontSize: 10, color: 'var(--m-text-dim)', marginTop: 6 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 10, height: 2, background: 'var(--m-accent)' }} />
+          Você
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 10, height: 2, background: 'rgb(251,191,36)' }} />
+          Campeão
+        </span>
+      </div>
+    </div>
   )
 }

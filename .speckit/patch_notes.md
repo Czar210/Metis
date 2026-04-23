@@ -2,6 +2,437 @@
 
 *Diário de mudanças significativas no ecossistema e na stack do projeto.*
 
+## p-0.9.15 — Redesign: Match Detail + Fim do Redesign 🎉 (2026-04-22)
+
+**Décima e última tela do redesign.** Match detail completo com 3 tabs (Overview / Análise de Equipe / Builds & Runas). Toda a lógica preservada (fetch match + timeline lazy, Metis Score, bans, runas_raw parsing, summoner spells, highlight de jogador via `?as=puuid`).
+
+### Frontend — `app/matches/[match_id]/page.tsx`
+- **Banner**: ícone grande verde/vermelho dependendo de quem venceu (check/x), headline "Vitória X · em MM:SS" com accent na cor do vencedor, meta (queue label, patch), breadcrumb com jogador em destaque (se URL tiver `?as=puuid`)
+- **Bans**: card com "Bans Azul" + "Bans Vermelho" (grayscale + opacity), separados por divisor
+- **Tabs** com ícones: Overview / Análise de Equipe / Builds & Runas
+- **Overview (1fr 360px grid)**:
+  - Card **Times** com dois `TeamBlock` (azul em cima, vermelho embaixo): header colorido com label/gold/kills totais + grid 7-col por jogador (role icon / portrait+level / nome+champ / KDA / dano+bar+CS / items 6 + keystone / Metis Score colorido por tier de elo)
+  - Card **Timeline** colapsável: abre/fecha carregando `TimelineChart` (reusado do legado — funciona com frames CS/Gold/XP por minuto). Nota explícita que timeline interativa com mapa/eventos chega com o Bloco 0 do roadmap
+  - **Sidebar**: "Análise da Metis" accent card (placeholder + CTA `/chat` com `match_id` na URL) + "Resumo rápido" 4 stats (Duração, Kills, Ouro total, Dif. ouro)
+- **Team Analysis**:
+  - Grid auto-fit com `SplitDonut` inline pra 5 métricas (Abates, Ouro, Dano, Visão, CS) — círculo split azul/vermelho + valores + %
+  - Card **Dano por jogador** com bars ordenadas do maior pro menor
+  - Sidebar com "Perfil dos times" (placeholder honesto) + "Leitura da Metis" accent
+- **Builds & Runas**:
+  - Grid por jogador: role icon · portrait · nome · 6 items + trinket · keystone + árvore primária/secundária · summoner spells · V/D
+
+### Lógica preservada
+Fetch do endpoint `/api/v1/match/{id}`, lazy fetch de `/timeline` ao expandir, parse de `runes_raw.styles` pra árvores primária e secundária, `SUMMONER_SPELL` map, Metis Score com 10 faixas de cor (Iron → Challenger), breadcrumb de jogador ativo via query param.
+
+### Desvio consciente do design
+O handoff pede uma **timeline interativa** com minimap SVG, heatmap de kills, 768 linhas de eventos posicionais, modal de evento, scrubbing. **Não é viável agora** — o backend só retorna frames progressivos por minuto, não eventos com coordenadas. Placeholder explícito vinculado ao roadmap (Bloco 0 — parsing de eventos do Riot timeline). Quando esse bloco entregar, posso voltar e implementar a timeline completa.
+
+### Build final
+```
+Route (app)                              Size  First Load JS
+├ ƒ /matches/[match_id]                  9.84 kB         191 kB
+├ ƒ /players/[puuid]                       10 kB         191 kB
+├ ƒ /champions/[champion]                5.71 kB         187 kB
+```
+- `npm run build` passa 13/13 rotas, `npx tsc --noEmit` limpo
+- Smoke test: `/matches/BR1_3229307733` responde HTTP 200
+
+---
+
+## 🎉 Redesign Metis 1.0 — COMPLETO
+
+Em **7 versões** (p-0.9.5 fundação + p-0.9.6 a p-0.9.15 uma tela por versão), o redesign inteiro baseado no handoff do Claude Design foi entregue:
+
+| Versão | Tela | Status |
+|--------|------|--------|
+| p-0.9.5  | Fundação (tokens + 18 primitives + fontes) | ✅ |
+| p-0.9.6  | Home | ✅ |
+| p-0.9.7  | Tier List | ✅ |
+| p-0.9.8  | Itens | ✅ |
+| p-0.9.8.1 | Backend: catálogo de itens (tabela + sync) | ✅ |
+| p-0.9.9  | Planos + Cupons (feature nova) | ✅ |
+| p-0.9.10 | Changelog | ✅ |
+| p-0.9.11 | Team | ✅ |
+| p-0.9.12 | Chat Metis + easter egg de cupom | ✅ |
+| p-0.9.13 | Player Dashboard | ✅ |
+| p-0.9.14 | Champion Page (4 sub-tabs) | ✅ |
+| p-0.9.15 | Match Detail (3 tabs) | ✅ |
+
+**O que sobra no design system:** o sistema antigo `--metis-*` + classes tailwind `bg-metis-*` ainda vivem no `globals.css` porque `/admin` e `/auth` não foram migradas (estão fora do handoff). Manter como está — só revisitar se a prioridade mudar.
+
+**Pró-0.10.0**: com o redesign entregue, próximos blocos naturais são (a) Bloco 0 do roadmap analytics (parsing de eventos → destrava timeline interativa + builds filtradas + matchup profundo) ou (b) retomar bloqueios do M2 (Mobafire scraper, process_timelines cron).
+
+---
+
+## p-0.9.14 — Redesign: Champion Page (2026-04-22)
+
+Nona tela do redesign. 4 sub-tabs (Overview / Builds / Matchups / Sinergias) com toda a lógica de filtros preservada (role, server, patch) + detecção de role impopular mantida.
+
+### Frontend — `app/champions/[champion]/page.tsx`
+- **Hero banner violet**: portrait 96px com glow violet, título do campeão em Space Grotesk 42px, contagem de partidas no banco, aviso de role impopular quando aplicável, CTA "Perguntar à IA" (link `/chat`) + breadcrumb "← Tier List"
+- **Filtros**: 6 pills de role com ícones PNG oficiais + selects de servidor e patch
+- **Tabs**: Overview / Builds / Matchups / Sinergias — underline accent, ícones por tab
+- **Role impopular**: overlay central alaranjado quando `total_role / total_all < 5%`, grayscale + opacity no conteúdo, pointer-events bloqueado exceto no aviso
+
+### Sub-tab Overview
+- **4 KPI cards** (Winrate / KDA / CS/min / DPM) com barras comparativas e labels contextuais
+- **Curva de poder** — card placeholder anotando que depende do parsing de eventos de timeline (Bloco 0 do roadmap)
+- **Sidebar**: "Insight da Metis" accent card + "Estatísticas adicionais" (Kill partic., Ouro médio, Avg Kills/Deaths)
+
+### Sub-tab Builds
+- **Tabela principal**: item (portrait 32px + nome) + Picks (+ bar) + Winrate (+ bar colorida) + Patch
+- **Sidebar**: "Build mais comum" (top 6 itens por picks, com setas `→` entre eles) + placeholder de Runas (Bloco 4 do roadmap)
+
+### Sub-tab Matchups
+- Tabela 5-col: oponente (ChampPortrait) · partidas · winrate · vs média (diff colorido) · barra de dificuldade centralizada em 50% (verde à direita = fácil, vermelho à esquerda = difícil)
+- Labels: "Fácil" (>+5%) / "Neutro" / "Difícil" (<-2%) / "Muito difícil" (<-10%)
+- Row é Link pra `/champions/[oponente]`
+
+### Sub-tab Synergies
+- Tabela 4-col: aliado · partidas · winrate · barra de sinergia + label (Excelente >60 / Ok >45 / Evitar)
+- **Duo sugerido** (card accent sidebar): champ atual + sinergy de maior WR, contador de partidas, CTA de chat
+
+### Dados omitidos (anotados como "em breve")
+- **Champion title** ("A Caçadora Noturna") — DDragon tem, mas requer fetch extra. Deixei fora
+- **Power curve** — precisa eventos de timeline parsed
+- **Ability order** — precisa `SKILL_LEVEL_UP` do parsing
+- **Radar do campeão** — precisa endpoint de perfil 8D por campeão (temos só do player)
+- **Runas recomendadas** — agregação por campeão ainda não existe
+
+### Verificação
+- `npx tsc --noEmit` limpo
+- Smoke test: `/champions/Kayn` HTTP 200 · markers "Kayn" (7x), "Overview/Matchups/Sinergias", breadcrumb, CTA IA todos renderizados
+
+### Próxima (última!)
+`p-0.9.15` — Match detail + timeline interativa. Fecha o redesign.
+
+---
+
+## p-0.9.13 — Redesign: Player Dashboard (2026-04-22)
+
+Oitava tela do redesign — a mais densa até agora. Toda a lógica preservada (resolve Riot ID, fallback de nomes antigos, sync Riot com cooldown, watched toggle, pagination, 10+ fetches paralelos). Reescrita visual completa com o design system.
+
+### Frontend — `app/players/[puuid]/page.tsx` (~1300 linhas novas)
+- **Banner**: avatar quadrado 88px (profile_icon_id da Riot ou fallback com inicial em gradient da cor do tier), nome em Space Grotesk 28px + tag cinza, badge de server, orb circular do tier com nome, histórico de nomes antigos, label de watched
+- **Ações**: botão "Supervisionar" (surface com star accent) + "Analisar com IA" (accent filled, link pra `/chat`)
+- **Input de apelido** abaixo do banner quando `showLabelInput`, sync row com select de server (quando não conhecido) + botão "Ver partidas novas" com cooldown de 5min countdown + mensagem de feedback
+- **4 KPI cards** (grid auto-fit 200px min):
+  - Winrate: Donut + WinLossDots das últimas 10 partidas
+  - KDA médio: valor + breakdown k/d/a colorido
+  - CS/min: valor + barra comparativa
+  - Score de visão: valor + barra
+- **Winrate cumulativo** (card novo, substitui o LP chart do design — que requer dado de LP que não temos): AreaChart das últimas 20 partidas com delta vs início
+- **Tabela de campeões**: Card com filtros no header (season, patch, role), grid 5-col (Campeão, Jogos, WR com W/L, KDA, CS/m), links pra `/champions/[nome]`, "Ver todos" toggle
+- **Recomendações Neo-Artemis**: expansível com DualRadar (player vs champion em 8 dimensões), razões inline, confidence colorido por threshold
+- **Match history**: Card denso com `MatchRow` inline — linha colorida win/loss, ChampPortrait com role badge, items (6 slots), KDA + KP%, CS + CS/min, level final; link pra `/matches/[id]?as=puuid`; "Carregar mais" com loading dots
+- **Sidebar direita**:
+  - Season summary (total de partidas + WR global + unique champs)
+  - Role distribution com StackedBar + lista de roles com ícones PNG oficiais
+  - Perfil de jogo (RadarChart 8 eixos, usa `player_profile` da primeira recomendação)
+  - Ask Metis teaser (card accent com CTA `/chat`)
+  - Allies (5 primeiros, link pra perfil)
+  - Nemeses (5 primeiros, indicador vermelho, lista de champs usados)
+- **Not in DB**: bloco especial quando Riot ID não está no banco, com orientação pra sincronizar
+- Hover em tudo que é clicável (rows, botões, links)
+
+### Componente legado removido
+- `components/matches/MatchCard.tsx` — `MatchRow` agora vive inline na page. `runes.ts` continua pro `/matches/[match_id]` que ainda não foi migrado
+
+### Verificação
+- `npx tsc --noEmit` limpo
+- Smoke test: `/players/Zaras%230210` responde HTTP 200 com banner completo, botões de ação, Supervisionar/Analisar, nome renderizado 5x
+- 10+ fetches em paralelo preservados (history, frequent-allies, nemesis, name-history, recommendations, seasons, patches, champion-stats, watched_players, player lookup)
+
+### Observação sobre o design original
+O handoff pede um LP chart com histórico de LP. Não temos endpoint/tabela pra isso hoje; substituí por **winrate cumulativo** das últimas 20 partidas — métrica útil, computável com dados que já temos, e visualmente compatível com o AreaChart.
+
+### Última tela não migrada
+`/champions/[champion]` (p-0.9.14) + `/matches/[match_id]` (p-0.9.15 · timeline interativa).
+
+---
+
+## p-0.9.12 — Redesign: Chat Metis + Easter egg de cupom (2026-04-22)
+
+Sétima tela do redesign. Lógica de chat 100% preservada (auth check, gate premium, usage tracking, handling de 429, scroll automático) — só o chrome visual foi reescrito pelo design system.
+
+### Frontend — `app/chat/page.tsx`
+- **Token bar compacta no topo**: ícone bolt accent + `X / Y tokens hoje` + bar de progresso (muda cor: accent < 70%, orange >= 70%, red >= 90%) + hora de reset + plano + nick do invocador
+- **Gate premium** (quando usuário sem plano): card central com ícone cérebro em glow, headline "Chat com a Metis", explicação do benefício, botões "Ver planos" (accent) e "Voltar" (outline)
+- **Thread de mensagens**:
+  - Bubble do usuário em accent gold, alinhada direita, `72%` max width
+  - Bubble da Metis com avatar cérebro em box accent e border, `92%` max width, `whiteSpace: pre-wrap` pra preservar quebras
+  - Indicador de "digitando" durante `loading` com 3 dots animados e mesmo estilo do message
+- **Input area**:
+  - Textarea com ícone messageCircle + botão send (accent) + `Enter` envia (Shift+Enter faz quebra)
+  - Row de 4 quick prompts ("Review minha última derrota", "Quem contra Kayn?", "Como farmar melhor?", "Builds pra ADC") — clicam direto pra enviar
+  - Disclaimer final "A Metis só fala de League of Legends..."
+- Todos os botões com `m-hover-accent` / `m-hover-surface` adequados
+
+### Componentes legados removidos
+- `components/ui/ChatInput.tsx` e `components/ui/ChatMessage.tsx` — inline agora dentro da page, menos indireção
+- Nenhum outro arquivo consumia esses componentes, remoção limpa
+
+### Backend — `backend/services/coupon_service.py` (easter egg)
+- Campo `code` NÃO é mais retornado em `/api/v1/coupons/public` — cupons visíveis mostram o benefício mas o código fica secreto. A pessoa precisa descobrir/adivinhar pra resgatar.
+- Frontend `/pricing` renderiza `? ? ? ? ? ? ?` em mono com borda tracejada + legenda italic "descubra o código" ao lado
+- Decisão César, 2026-04-22: engajamento através de mistério — o Modo Mestre de Abril aparece listado mas o código `MESTRE2604` só aparece quando descoberto
+
+### Verificação
+- `npx tsc --noEmit` limpo
+- `/chat` sem sessão → HTTP 307 pra `/auth` (middleware faz o redirect corretamente)
+- Endpoint público de cupons confirmado sem `code` no response
+
+### Telas ainda não migradas
+`/players/[puuid]`, `/champions/[champion]`, `/matches/[match_id]` — últimas 3 versões p-0.9.13 → p-0.9.15.
+
+---
+
+## p-0.9.11 — Redesign: Team (2026-04-22)
+
+Sexta tela do redesign. Conteúdo preservado (3 membros com mesmas cores semânticas, títulos, empresas, tags e links); visual inteiramente reescrito pelo design system.
+
+### Frontend — `app/team/page.tsx`
+- **Header centralizado**: eyebrow "// Equipe" em accent + h1 Space Grotesk "Quem faz a Metis" com "Metis" em accent
+- **3 cards responsivos** (grid `auto-fit minmax(280px)`):
+  - Glow radial decorativo na cor do membro (blur 30px)
+  - Avatar circular 48px na cor accent do membro com iniciais
+  - Nome + título + empresa (quando existe)
+  - Tags em chips com borda/fundo na cor do membro
+  - Quote em blockquote com barra lateral (quando existe, do César)
+  - Botão de link (Portfolio/LinkedIn) com hover outline
+- **Stats footer**: 4 cards grid (Dias construindo / Commits / Linhas / Cafés) usando `Stat` primitive — accent cyan e gold em 2 deles
+- Cores preservadas: César gold `#F5C842`, Enzo vermelho `#F87171`, André verde `#4ADE80`
+
+---
+
+## p-0.9.10 — Redesign: Changelog (2026-04-22)
+
+Quinta tela do redesign. Timeline vertical com spine + nodes + cards de entries coloridos por tag.
+
+### Frontend — `app/changelog/page.tsx`
+- **Header**: eyebrow "Novidades" + h1 Space Grotesk "O que é novo?"
+- **Timeline vertical** com spine de 2px, nodes circulares no lado esquerdo, node do current release em gold com glow radial
+- **Por release**:
+  - Header com `h2` da versão + pill "ATUAL" quando apropriado + data alinhada à direita
+  - Label destaque (ex: "Big Update", "Security Update") em card violet com tag BIG UPDATE
+  - Box de entries com tags coloridas por tipo: `BIG UPDATE` (violet), `NOVO` (green), `MELHORIA` (accent), `FIX` (blue)
+- **Conteúdo atualizado**: adicionei as entries p-0.9.5 → p-0.9.9 (todo o redesign), preservei as entries históricas (p-0.9.0 em diante)
+- **Footer** com link pra `/chat` pra reportar bugs
+
+### Tags & cores
+| Tag | Cor | Uso |
+|-----|-----|-----|
+| `BIG UPDATE` | violet | Mudanças estruturais (redesign, infra, segurança) |
+| `NOVO` | green | Feature nova |
+| `MELHORIA` | accent (segue switcher) | Feature existente melhorada |
+| `FIX` | blue | Bug resolvido |
+
+### Verificação (ambas)
+- `npx tsc --noEmit` limpo
+- `/changelog` HTTP 200 · 17 labels "BIG UPDATE" renderizadas · timeline completa
+- `/team` HTTP 200 · 3 membros + stats footer + botões de link
+
+### Telas ainda não migradas
+`/chat`, `/players/[puuid]`, `/champions/[champion]`, `/matches/[match_id]` — p-0.9.12 → p-0.9.15.
+
+---
+
+## p-0.9.9 — Redesign: Planos + Cupons (2026-04-22)
+
+Quarta tela do redesign + feature nova: **sistema de cupons** (tabela no Supabase + endpoint + UI).
+
+### Database — `database/migrations/002_create_coupons_table.sql`
+- Nova tabela `coupons` com: `code` (PK), `title`, `description`, `effect` (JSONB flexível), `valid_from/until`, `max_uses` + `uses_count`, `public_list`, `active`, `created_at`
+- Índice parcial em `valid_until` pra cupons listáveis
+- **RLS**: `coupons_public_select` pra leitura pública filtrando `public_list AND active AND valid_until > now()`. Writes só via service_role
+- **Seed de teste**: `MESTRE2604 — Modo Mestre de Abril` (Premium com 10k tokens/dia até 30/04, max 100 usos)
+
+### Backend — `backend/services/coupon_service.py` + `backend/api/routes/coupon.py`
+- `GET /api/v1/coupons/public` retorna cupons visíveis (public_list, active, não expirados, com usos disponíveis)
+- Filtro adicional em Python pra `uses_count < max_uses` (a RLS simples não cobre bem)
+- Registrado no `main.py` junto dos outros routers
+- Resgate (mutation) fica pra versão futura — por ora só listagem
+
+### Frontend — `app/pricing/page.tsx` (reescrito)
+- **Header** com badge "Planos Metis", headline `Suba de Elo no Metis` (accent em "Metis"), toggle mensal/anual dentro de pill container
+- **4 tier cards** responsivos com orb circular em glow radial na cor do tier, diamante interno, nome + rank em caps, preço R$ grande em Space Grotesk, CTA com hover adequado (accent pra pago, surface pro Free). Card do Premium com glow e badge "Mais popular"
+- **Seção "Cupons disponíveis"** (só aparece se a API retornar cupons): card com icon de medalha, código em `font-mono` estilizado, título, descrição, validade formatada em pt-BR, contador de "N restantes" quando `max_uses` definido
+- **Footer de trust** (3 cards): Cancele quando quiser / Ativação imediata / IA atualizada — novo, do handoff
+- **Preservados do visual antigo reestilizados**: Comparativo tabular, FAQ (5 perguntas), Card "Para Times e Empresas" com CTA mailto
+- Período `yearly` calcula preço anual com 20% OFF (`price * 12 * 0.8`)
+
+### Validação
+- Migration aplicada via MCP — RLS + índices confirmados
+- Cupom de teste inserido e retornando no endpoint: `GET /api/v1/coupons/public` responde com `[{ code, title, description, effect, valid_until, max_uses, uses_count }]`
+- Frontend SSR de `/pricing` responde HTTP 200 (63KB), markers "Planos Metis", "Mais popular", "Comparativo", "Para Times" todos presentes
+- Cupons aparecem após hidratação client-side (fetch via `apiFetch`)
+- `tsc --noEmit` limpo
+
+### Fora de escopo (combinado antes)
+- Checkout/pagamento — botões continuam "decorativos"
+- Aplicar efeito do cupom no user_metadata via fluxo de resgate
+- Admin UI pra criar cupons — por ora inserção via SQL
+
+### Operacional
+Pra adicionar um cupom novo, César roda SQL tipo:
+```sql
+INSERT INTO coupons (code, title, description, effect, valid_until, public_list)
+VALUES ('SEUCUPOM', 'Nome', 'Descrição...',
+        '{"tier":"premium","tokens_per_day":5000}'::jsonb,
+        '2026-05-31 23:59:59-03', true);
+```
+
+### Telas ainda não migradas
+`/changelog`, `/team`, `/chat`, `/players/[puuid]`, `/champions/[champion]`, `/matches/[match_id]` — próximas versões p-0.9.10 → p-0.9.15.
+
+---
+
+## p-0.9.8.1 — Backend: Enriquecer catálogo de itens (2026-04-22)
+
+Patch cirúrgico antes da p-0.9.9. Introduz a tabela `items` no Supabase como fonte de verdade pro catálogo (nome/gold/tags/categoria/tendência), removendo a dependência do JSON estático em runtime. Frontend `/items` consome os novos campos.
+
+### Database — `database/migrations/001_create_items_table.sql`
+- **Nova tabela `items`** com: `item_id` (PK), `name`, `gold_total/base/sell`, `purchasable`, `tags` (jsonb), `plaintext`, `category` (nullable · curadoria manual), `trend` (nullable · 'up'/'down'/'flat'), `updated_at`
+- Índice parcial em `category` (só rows populadas) e GIN em `tags`
+- RLS: `items_select_public` pra leitura pública; writes só via service_role
+- 688 itens populados via sync inicial (patch 16.4.1 do Data Dragon)
+
+### Scripts — `scripts/processing/sync_items.py` (novo)
+- Lê `data/static/item.json` e faz upsert em lote (batch default 200) na tabela `items`
+- **Não toca** `category` nem `trend` no upsert — preserva curadoria manual/cálculos futuros
+- Rodável via `python -m scripts.processing.sync_items` ou CI agendado
+- Idempotente via `on_conflict=item_id`
+
+### Backend — `backend/services/item_service.py`
+- **Removido** `_load_item_dict` que lia `item.json` estático em runtime
+- **Novo** `_load_items_catalog(db)` que query tabela `items` via supabase-py
+- `buscar_item_ranking` agora retorna campos adicionais: `gold_cost`, `tags`, `category`, `trend` (None até populado/calculado)
+- Assinatura pública do endpoint `/api/v1/items/ranking` retrocompatível (campos só adicionados)
+
+### Frontend — `app/items/page.tsx`
+- Tabela ganhou 2 colunas: **Categoria** (pill escuro ou `—` quando NULL) e **Custo** (`1100g` em accent) e **Tendência** (`▲ em alta` / `▼ em queda` / `━ estável` / `—`)
+- **Tags** agora aparecem como chips pequenos abaixo do nome do item (top 3 + contador `+N`)
+- Spotlights também mostram custo em gold
+- Type `ItemStat` atualizado (campos opcionais pra ficar retrocompatível com qualquer consumidor que não recarregue)
+
+### Verificação
+- Migration aplicada via Supabase MCP (`apply_migration`) — 11 colunas + RLS + índices confirmados
+- Sync popularmente concluído: 688 rows upserted em ~3s
+- Spot check: `Lâmina de Doran` (1055) tem `gold_total=450, tags=[Health, Damage, LifeSteal, SpellVamp, Lane]`
+- Endpoint `/api/v1/items/ranking` responde 200 com os 4 novos campos
+- `tsc --noEmit` + `npm run build` limpos
+- Dev server em 8002 + frontend em 3000 (ajuste temporário de `NEXT_PUBLIC_API_URL` devido a sockets zombies na 8000)
+
+### TODO futuro
+- Script de cálculo de `trend` (delta WR entre patches) — fica pra quando o backlog de analytics profundo virar prioridade
+- Curadoria de `category` — César popula `Lendário / Botas / Inicial / Utilitário / Consumível / Lenda-Jungle / etc` quando quiser
+
+---
+
+## p-0.9.8 — Redesign: Itens (2026-04-22)
+
+Terceira tela do redesign. Lógica de filtros preservada (role, patch, busca client-side, sort picks/winrate); visual redesenhado com 2 spotlights computados client-side + tabela densa.
+
+### Frontend — `app/items/page.tsx`
+- **Title block**: subtítulo dinâmico `patch X · Banco Metis`, headline `Estatísticas de Itens`, contador de itens no recorte
+- **Spotlight duplo** (grid `auto-fit minmax(420px, 1fr)`):
+  - Card **"Mais comprados"**: top 3 itens por `picks` com rank gold + ícone 44px + total de picks
+  - Card **"Top winrate (min 10 picks)"**: top 3 itens por `winrate` filtrando amostra pequena, rank verde + WR destacado
+- **Filter bar em Card único**: busca + 6 pills de role (ícones oficiais) + select de patch + pills de sort (Popular / Winrate)
+- **Tabela em Card**: grid 5 colunas (# / Item / Picks+bar / Winrate+bar / Vitórias) com hover row, cores semânticas no WR (>52 verde, >48 neutro, senão vermelho)
+- **Empty states**: loading dots, erro, "nenhum item encontrado"
+
+### O que NÃO entrou (API não fornece ainda)
+Categoria, custo em gold, tags e tendência (up/down/flat) do design original foram omitidos — não estão no endpoint `/api/v1/items/ranking`. Quando entrarem (provavelmente no Bloco 2 do roadmap de analytics profundo), volto e completo a página.
+
+### Verificação
+- `npx tsc --noEmit` limpo
+- Smoke test: `/items` responde HTTP 200 com `.metis-scope`, h1 "Estatísticas de Itens", 25KB SSR
+
+---
+
+## p-0.9.7 — Redesign: Tier List (2026-04-22)
+
+Segunda tela do redesign. Toda a lógica de filtros da versão antiga preservada (patch range, server, elo, role, busca, toggle impopulares). Visual completamente reescrito pra casar com o design do handoff (`screen-tierlist.jsx`).
+
+### Frontend — `app/champions/page.tsx`
+- **Title block**: subtítulo dinâmico com `patch · elo · região`, headline `Tier List` em Space Grotesk, contador de partidas real do recorte, pill de toggle "Campeões populares / Ocultar impopulares"
+- **Barra de filtros em 2 linhas** (dentro de um Card unificado):
+  - Linha 1: busca + 6 pills de role (ícones PNG oficiais) + select de servidor + patch range (inicial → final)
+  - Linha 2: row de 11 pills de elo com emblemas Riot (Todos → Challenger), ainda com aviso "filtro em breve" quando algum é selecionado
+- **Agrupamento por tier** (S+/S/A/B/C) substituindo a StatsTable única:
+  - Badge gigante do tier à esquerda (72px) com cor semântica (gold/orange/green/blue/muted)
+  - Grid responsivo à direita (`repeat(auto-fill, minmax(260px, 1fr))`) com cards de campeão
+  - Cada card: `ChampPortrait` 48px com badge de role (PNG oficial) + nome + role_label + WR% grande + bar de WR + pickrate + grid KDA/Ban/Games
+  - Cards são `<Link>` pra `/champions/[champion]` com hover (`m-hover-card`)
+- **Empty states**: loading dots, erro, "nenhum campeão com os filtros atuais" com link pra mostrar impopulares
+- **Deriva tier local** quando a API não retorna (com thresholds: 54/52/50/48)
+
+### StatsTable legada
+`components/stats/StatsTable.tsx` ainda existe mas não é mais consumida. Será removida quando o Player dashboard (p-0.9.13) também parar de depender dela — por ora, mantém pra não quebrar nada.
+
+### Verificação
+- `npx tsc --noEmit` limpo
+- Smoke test: `/champions` responde HTTP 200 com `.metis-scope`, h1 "Tier List", filtros completos, 33KB SSR (cards renderizam após fetch client-side)
+
+---
+
+## p-0.9.6 — Redesign: Home + Ajustes do Design System (2026-04-22)
+
+Primeira tela do redesign consumindo a fundação p-0.9.5. Lógica de dados 100% preservada (Supabase auth, watched_players, autocomplete debounced, tierlist via API); só o chrome visual foi reescrito. Rodada também incluiu refinamentos no design system que afetam todas as próximas telas.
+
+### Frontend — `app/page.tsx`
+- **Hero novo**: badge "Patch X.Y · ao vivo" (do endpoint `/api/v1/stats/patches`), headline `Space Grotesk 52px` com accent, search + servidor (9 regiões) + botão Analisar com hover, suggestions inline com autocomplete, strip de 4 stats (`Partidas analisadas`, `Jogadores mapeados`, `Chat IA`, `Status`) puxando counts reais do Supabase via `count:exact, head:true`, decorativos em blur (radial gradient gold + cyan)
+- **Main grid 2-col (2fr : 1fr)**:
+  - Esquerda: Card **Destaques do meta** (top 3 campeões em spotlight com `min_matches=10` pra evitar 100% WR de sample pequeno) + Card **Tier list · top 8 com filtro de role** (pills Todos/Top/Jungle/Mid/ADC/Sup usando ícones oficiais da Riot, pool de 60 campeões pra filtrar sem refetch)
+  - Direita: Card **Em supervisão** (watched_players, gated para login com CTA `/auth`) + Card **Pergunte à Metis** (accent glow, 3 prompt buttons → `/chat`) + Card **Novidades recentes** (últimas 4 entradas do changelog inline)
+- **Links reais** pra `/champions/[champion]` em cada card do spotlight e da tier list
+
+### Design system — ajustes que afetam todas as telas do redesign
+- **AppHeader com auth real**: botão "Entrar →" (hover outline em accent) quando deslogado, avatar circular com inicial do email quando logado (link pra `/admin`); auto-descobre via `supabase.auth.getUser()` + escuta `onAuthStateChange`
+- **ThemeSwitcher mantido** no AppHeader — 5 cores de accent (azul/roxo/verde/vermelho/dourado), persiste em localStorage e em `user_metadata` do Supabase
+- **Modo claro removido**: o redesign é dark-only por design. `ThemeProvider` simplificado (só `color`, sem `mode`), `[data-mode="light"]` e derivados tirados do `globals.css`, script inline do layout não seta mais `data-mode`
+- **`--m-accent` segue o switcher**: expõe `--m-accent-rgb` pra uso em `rgb(var(--m-accent-rgb) / 0.x)` em backgrounds translúcidos. Glows decorativos e tier badge S+ continuam gold fixo (intencional — convenções universais)
+- **Ícones oficiais de role**: `ChampPortrait` agora renderiza PNGs `/roles/position-*.png` da Riot em vez do SVG inline `RoleGlyph` (que continua disponível pra uso fora de portraits)
+- **Hover utilities**: 6 classes no `globals.css` (`m-hover-accent`, `m-hover-surface`, `m-hover-outline`, `m-hover-row`, `m-hover-card`, `m-hover-link`) pra compensar ausência de `:hover` em style inline — aplicadas em todos os botões/linhas/links clicáveis
+
+### Verificação
+- `npm run build` passa (13/13 rotas)
+- `npx tsc --noEmit` limpo
+- Smoke test em `npm run dev`: HTTP 200, SSR renderiza `.metis-scope`, fontes carregam, hero + spotlight + watched + switcher + auth state todos funcionando
+
+### Telas ainda não migradas
+`/champions`, `/items`, `/pricing`, `/changelog`, `/team`, `/chat`, `/players/[puuid]`, `/champions/[champion]`, `/matches/[match_id]` continuam no visual antigo — chegam nas próximas versões p-0.9.7 → p-0.9.15.
+
+---
+
+## p-0.9.5 — Redesign: Fundação (2026-04-22)
+
+Ponto de partida do redesign baseado no handoff do Claude Design (10 telas). Esta versão é **fundação apenas** — nenhuma página muda ainda. As próximas versões (p-0.9.6 → p-0.9.15) consomem o novo sistema, uma tela por versão.
+
+### Frontend
+- **Novo sistema de tokens** em `globals.css` (`--m-bg`, `--m-accent` gold LoL, `--m-cyan`, `--m-violet`, etc.) isolado dentro de `.metis-scope` — coexiste com o sistema antigo `--metis-*` sem conflito
+- **Fontes adicionais**: Space Grotesk (display) e JetBrains Mono (tabular/code) expostas como CSS variables via `next/font/google`. Inter passou a ser CSS variable também
+- **Helpers CSS**: `.metis-scope`, `.font-display`, `.font-mono`, `.tabular`, `.metis-grid-bg`
+
+### components/design/ (novo) — design system portado do handoff
+- **Primitives**: `Card`, `SectionLabel`, `Pill`, `Stat`, `Bar`, `WinLossDots`, `Sparkline`, `Donut`, `StackedBar`
+- **Charts**: `AreaChart` (progressão LP), `RadarChart` (perfil de jogo/campeão)
+- **Game-specific**: `ChampPortrait` (via Data Dragon), `RoleGlyph`, `TierBadge`, `RankBadge`
+- **Chrome**: `AppHeader` (nav com 5 itens + CTA Chat), `Logo`, `Icon` (~40 glyphs inline estilo Lucide — sem custo de bundle adicional)
+- **Tokens TS**: `TIER_COLORS`, `ROLES_PT`, `RANK_COLORS`, `PILL_COLORS` em `tokens.ts`
+- **Barrel export** `components/design/index.ts`
+
+### Verificação
+- `npx tsc --noEmit` limpo
+- `npm run build` passa (13/13 rotas, sem warnings novos)
+- Todas as páginas existentes continuam renderizando idêntico — os novos tokens só ativam dentro de `.metis-scope`
+
+### Próxima versão
+`p-0.9.6` — Home redesign (primeira tela a consumir `.metis-scope` + primitives)
+
+---
+
 ## p-0.9.4 — Bronze HTML Guides + Bug Fix Playwright (2026-04-20)
 
 ### Scripts

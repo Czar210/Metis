@@ -4,15 +4,24 @@ import { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowLeft, Clock, Sword, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
-import { Header } from '@/components/ui/Header'
 import { championIconUrl, roleIconPath, DDRAGON_VERSION } from '@/lib/ddragon'
 import { runeIconUrl, RUNE_TREES } from '@/lib/runes'
 import { TimelineChart } from '@/components/matches/TimelineChart'
 import { apiFetch } from '@/lib/api'
+import {
+  AppHeader,
+  Card,
+  SectionLabel,
+  Pill,
+  Bar,
+  Icon,
+  Donut,
+  ChampPortrait,
+  ROLES_PT,
+  type Role,
+} from '@/components/design'
 
-// ── Tipos ─────────────────────────────────────────────────────
-
+// ── Types ─────────────────────────────────────────────────────
 type Participant = {
   puuid: string
   champion_name: string
@@ -67,271 +76,85 @@ type MatchDetails = {
   red_team: Participant[]
 }
 
-// ── Helpers ───────────────────────────────────────────────────
+type TimelineFrame = {
+  t_min: number
+  t_ms: number
+  p: Record<string, { cs: number; cspm: number; gold: number; level: number; xp: number }>
+}
 
-function formatDuration(s: number) {
+type Tab = 'overview' | 'teams' | 'builds'
+
+// ── Helpers ───────────────────────────────────────────────────
+function formatDuration(s: number): string {
   const m = Math.floor(s / 60)
   const sec = s % 60
-  return `${m}m ${sec.toString().padStart(2, '0')}s`
+  return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
-function formatGold(g: number) {
-  return g >= 1000 ? `${(g / 1000).toFixed(1)}k` : String(g)
-}
+const QUEUE_LABEL: Record<number, string> = { 420: 'Ranked Solo/Duo', 440: 'Ranked Flex' }
 
-function csColor(cspm: number) {
-  if (cspm >= 8) return 'text-green-400'
-  if (cspm >= 6) return 'text-yellow-400'
-  if (cspm >= 4) return 'text-metis-text-dim'
-  return 'text-red-400'
-}
-
-const QUEUE_LABEL: Record<number, string> = { 420: 'SoloQ', 440: 'Flex' }
-const POSITION_LABEL: Record<string, string> = {
-  TOP: 'Top', JUNGLE: 'Jungle', MIDDLE: 'Mid',
-  BOTTOM: 'ADC', UTILITY: 'Suporte', UNKNOWN: '—',
-}
 const ROLE_ORDER: Record<string, number> = {
   TOP: 0, JUNGLE: 1, MIDDLE: 2, BOTTOM: 3, UTILITY: 4, UNKNOWN: 5,
 }
-function sortByRole(participants: Participant[]): Participant[] {
-  return [...participants].sort((a, b) =>
-    (ROLE_ORDER[a.team_position] ?? 5) - (ROLE_ORDER[b.team_position] ?? 5)
+const sortByRole = (list: Participant[]) =>
+  [...list].sort(
+    (a, b) => (ROLE_ORDER[a.team_position] ?? 5) - (ROLE_ORDER[b.team_position] ?? 5)
   )
+
+const SUMMONER_SPELL: Record<number, string> = {
+  1: 'SummonerBoost', 3: 'SummonerExhaust', 4: 'SummonerFlash', 6: 'SummonerHaste',
+  7: 'SummonerHeal', 11: 'SummonerSmite', 12: 'SummonerTeleport', 14: 'SummonerDot',
+  21: 'SummonerBarrier', 32: 'SummonerSnowball',
 }
 
-// ── Sub-componente: linha de participante ────────────────────
-
-function ParticipantRow({
-  p,
-  maxDamage,
-  isHighlighted,
-  matchId,
-}: {
-  p: Participant
-  maxDamage: number
-  isHighlighted: boolean
-  matchId: string
-}) {
-  const kda = p.deaths === 0
-    ? '∞'
-    : ((p.kills + p.assists) / p.deaths).toFixed(2)
-
-  const cspm      = p.cs_per_minute ?? 0
-  const items     = p.items ?? Array(7).fill(0)
-  const damage    = p.total_damage_dealt_to_champions ?? 0
-  const damageBar = Math.round((damage / maxDamage) * 100)
-  const keystoneUrl = p.rune_keystone ? runeIconUrl(p.rune_keystone, DDRAGON_VERSION) : null
-  const roleIcon    = roleIconPath(p.team_position)
-  const playerName  = p.players
-    ? `${p.players.game_name}#${p.players.tag_line}`
-    : p.puuid.slice(0, 12) + '…'
-
-  return (
-    <div className={`flex flex-col gap-1.5 px-3 py-2.5 border-b border-metis-border/40 last:border-b-0 ${
-      isHighlighted ? 'bg-metis-accent/5' : 'hover:bg-metis-bg/30'
-    } transition-colors`}>
-
-      {/* Linha 1 — campeão + nome + KDA */}
-      <div className="flex items-center gap-2 min-w-0">
-        {/* Ícone do campeão com nível */}
-        <div className="relative w-9 h-9 rounded-md overflow-hidden border border-metis-border flex-shrink-0">
-          <Image
-            src={championIconUrl(p.champion_name, DDRAGON_VERSION)}
-            alt={p.champion_name}
-            fill className="object-cover" unoptimized
-          />
-          {p.champion_level && (
-            <span className="absolute bottom-0 right-0 text-[8px] font-bold bg-black/70 text-white px-0.5 rounded-tl leading-none py-0.5">
-              {p.champion_level}
-            </span>
-          )}
-        </div>
-
-        {/* Nome + posição */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1">
-            {roleIcon && (
-              <Image src={roleIcon} alt={p.team_position} width={11} height={11} unoptimized className="opacity-50 flex-shrink-0" />
-            )}
-            <Link
-              href={`/players/${encodeURIComponent(p.puuid)}`}
-              className={`text-xs font-medium truncate hover:underline ${
-                isHighlighted ? 'text-metis-accent' : 'text-metis-text'
-              }`}
-            >
-              {playerName}
-            </Link>
-          </div>
-          <span className="text-[10px] text-metis-text-dim">{p.champion_name}</span>
-        </div>
-
-        {/* KDA */}
-        <div className="text-right flex-shrink-0">
-          <p className="text-xs font-semibold text-metis-text">
-            {p.kills}/{p.deaths}/{p.assists}
-          </p>
-          <p className="text-[10px] text-metis-text-dim">{kda} KDA</p>
-        </div>
-
-        {/* Metis Score — cores de elo (2 tons) */}
-        {p.metis_score != null && (() => {
-          const s = p.metis_score
-          return (
-            <div
-              className="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold border"
-              style={
-                s >= 100 ? { background: 'linear-gradient(135deg, rgba(34,211,238,0.2), rgba(212,175,55,0.15))', borderColor: 'rgba(34,211,238,0.5)', color: '#22d3ee' } :        /* Challenger: ciano + dourado */
-                s >= 90  ? { background: 'linear-gradient(135deg, rgba(239,68,68,0.2), rgba(156,163,175,0.15))', borderColor: 'rgba(239,68,68,0.5)', color: '#ef4444' } :          /* GM: vermelho + cinza metalico */
-                s >= 80  ? { background: 'rgba(168,85,247,0.15)', borderColor: 'rgba(168,85,247,0.4)', color: '#a855f7' } :                                                        /* Master: roxo */
-                s >= 70  ? { background: 'rgba(30,64,175,0.2)', borderColor: 'rgba(30,64,175,0.5)', color: '#3b82f6' } :                                                           /* Diamond: azul escuro */
-                s >= 60  ? { background: 'rgba(16,185,129,0.15)', borderColor: 'rgba(16,185,129,0.4)', color: '#10b981' } :                                                        /* Emerald: esmeralda */
-                s >= 50  ? { background: 'rgba(20,184,166,0.15)', borderColor: 'rgba(20,184,166,0.4)', color: '#14b8a6' } :                                                        /* Platinum: teal */
-                s >= 40  ? { background: 'rgba(212,175,55,0.15)', borderColor: 'rgba(212,175,55,0.4)', color: '#d4af37' } :                                                        /* Gold: dourado */
-                s >= 30  ? { background: 'rgba(203,213,225,0.1)', borderColor: 'rgba(203,213,225,0.3)', color: '#cbd5e1' } :                                                       /* Silver: cinza claro */
-                s >= 20  ? { background: 'rgba(154,82,40,0.15)', borderColor: 'rgba(154,82,40,0.4)', color: '#b45a2a' } :                                                          /* Bronze: laranja escuro */
-                           { background: 'linear-gradient(135deg, rgba(120,113,108,0.15), rgba(168,162,158,0.1))', borderColor: 'rgba(120,113,108,0.4)', color: '#a8a29e' }         /* Iron: stone + cinza */
-              }
-            >
-              {Math.round(s)}
-            </div>
-          )
-        })()}
-      </div>
-
-      {/* Linha 2 — CS + ouro + dano */}
-      <div className="flex items-center gap-3 text-[10px] text-metis-text-dim flex-wrap">
-        {p.total_cs !== null && (
-          <span className={`font-medium ${csColor(cspm)}`}>
-            {p.total_cs}cs <span className="text-metis-text-dim font-normal">({cspm.toFixed(1)}/m)</span>
-          </span>
-        )}
-        <span>{formatGold(p.gold_earned)} ouro</span>
-        {p.vision_score !== null && <span>VS {p.vision_score}</span>}
-      </div>
-
-      {/* Linha 3 — Barra de dano */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1 bg-metis-border/30 rounded-full h-1.5 overflow-hidden">
-          <div
-            className={`h-full rounded-full ${p.win ? 'bg-blue-500/70' : 'bg-red-500/70'}`}
-            style={{ width: `${damageBar}%` }}
-          />
-        </div>
-        <span className="text-[10px] text-metis-text-dim flex-shrink-0 w-12 text-right">
-          {damage >= 1000 ? `${(damage / 1000).toFixed(1)}k` : damage}
-        </span>
-      </div>
-
-      {/* Linha 4 — Items + keystone */}
-      <div className="flex items-center gap-0.5">
-        {items.map((id, i) =>
-          id > 0 ? (
-            <Image
-              key={i}
-              src={`https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/item/${id}.png`}
-              alt={String(id)} width={22} height={22}
-              className="rounded border border-metis-border/50"
-              unoptimized
-            />
-          ) : (
-            <div key={i} className="w-[22px] h-[22px] rounded border border-metis-border/20 bg-metis-bg/40" />
-          )
-        )}
-        {keystoneUrl && (
-          <Image
-            src={keystoneUrl}
-            alt="Keystone" width={20} height={20}
-            className="ml-1.5 rounded-full border border-metis-border/40 bg-metis-bg"
-            unoptimized
-          />
-        )}
-      </div>
-    </div>
-  )
+type RuneStyle = {
+  description: string
+  style: number
+  selections: { perk: number; var1: number; var2: number; var3: number }[]
 }
 
-// ── Componente: coluna de time ────────────────────────────────
-
-function TeamColumn({
-  participants,
-  win,
-  label,
-  maxDamage,
-  highlightedPuuid,
-  matchId,
-}: {
-  participants: Participant[]
-  win: boolean
-  label: string
-  maxDamage: number
-  highlightedPuuid: string | null
-  matchId: string
-}) {
-  return (
-    <div className={`rounded-xl border overflow-hidden ${
-      win
-        ? 'border-blue-500/30 bg-blue-500/5'
-        : 'border-red-500/30  bg-red-500/5'
-    }`}>
-      {/* Header do time */}
-      <div className={`flex items-center gap-2 px-3 py-2 border-b ${
-        win ? 'border-blue-500/20 bg-blue-500/10' : 'border-red-500/20 bg-red-500/10'
-      }`}>
-        <span className={`text-xs font-bold ${win ? 'text-blue-400' : 'text-red-400'}`}>
-          {label}
-        </span>
-        <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-          win
-            ? 'bg-blue-500/20 text-blue-300'
-            : 'bg-red-500/20  text-red-300'
-        }`}>
-          {win ? 'Vitória' : 'Derrota'}
-        </span>
-      </div>
-
-      {/* Participantes — ordenados por role */}
-      {sortByRole(participants).map(p => (
-        <ParticipantRow
-          key={p.puuid}
-          p={p}
-          maxDamage={maxDamage}
-          isHighlighted={p.puuid === highlightedPuuid}
-          matchId={matchId}
-        />
-      ))}
-    </div>
-  )
+// ── Metis Score color (baseado em tier de elo) ────────────────
+function metisScoreStyle(s: number) {
+  if (s >= 100) return { bg: 'linear-gradient(135deg, rgba(34,211,238,0.2), rgba(212,175,55,0.15))', bd: 'rgba(34,211,238,0.5)', fg: '#22d3ee' }
+  if (s >= 90)  return { bg: 'linear-gradient(135deg, rgba(239,68,68,0.2), rgba(156,163,175,0.15))', bd: 'rgba(239,68,68,0.5)',  fg: '#ef4444' }
+  if (s >= 80)  return { bg: 'rgba(168,85,247,0.15)',  bd: 'rgba(168,85,247,0.4)',  fg: '#a855f7' }
+  if (s >= 70)  return { bg: 'rgba(30,64,175,0.2)',    bd: 'rgba(30,64,175,0.5)',   fg: '#3b82f6' }
+  if (s >= 60)  return { bg: 'rgba(16,185,129,0.15)',  bd: 'rgba(16,185,129,0.4)',  fg: '#10b981' }
+  if (s >= 50)  return { bg: 'rgba(20,184,166,0.15)',  bd: 'rgba(20,184,166,0.4)',  fg: '#14b8a6' }
+  if (s >= 40)  return { bg: 'rgba(212,175,55,0.15)',  bd: 'rgba(212,175,55,0.4)',  fg: '#d4af37' }
+  if (s >= 30)  return { bg: 'rgba(203,213,225,0.1)',  bd: 'rgba(203,213,225,0.3)', fg: '#cbd5e1' }
+  if (s >= 20)  return { bg: 'rgba(154,82,40,0.15)',   bd: 'rgba(154,82,40,0.4)',   fg: '#b45a2a' }
+  return           { bg: 'linear-gradient(135deg, rgba(120,113,108,0.15), rgba(168,162,158,0.1))', bd: 'rgba(120,113,108,0.4)', fg: '#a8a29e' }
 }
 
-// ── Página principal ──────────────────────────────────────────
-
+// ══════════════ PAGE ═══════════════════════════════════════════
 export default function MatchPage() {
   const { match_id } = useParams() as { match_id: string }
   const searchParams = useSearchParams()
-  const puuid = searchParams.get('puuid')
+  const highlightPuuid = searchParams.get('as') ?? searchParams.get('puuid')
 
-  const [match, setMatch]       = useState<MatchDetails | null>(null)
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState<string | null>(null)
-  const [tab, setTab]           = useState<'scoreboard' | 'analysis' | 'build'>('scoreboard')
+  const [match, setMatch] = useState<MatchDetails | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>('overview')
 
-  // ── Timeline ─────────────────────────────────────────────────
-  type TimelineFrame = {
-    t_min: number; t_ms: number
-    p: Record<string, { cs: number; cspm: number; gold: number; level: number; xp: number }>
-  }
-  const [showTimeline, setShowTimeline]     = useState(false)
+  const [showTimeline, setShowTimeline] = useState(false)
   const [timelineFrames, setTimelineFrames] = useState<TimelineFrame[] | null>(null)
   const [timelineLoading, setTimelineLoading] = useState(false)
-  const [timelineError, setTimelineError]   = useState<string | null>(null)
+  const [timelineError, setTimelineError] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
       try {
         const res = await apiFetch(`/api/v1/match/${match_id}`)
-        if (res.status === 404) { setError('Partida não encontrada.'); return }
-        if (!res.ok) { setError('Erro ao carregar partida.'); return }
+        if (res.status === 404) {
+          setError('Partida não encontrada.')
+          return
+        }
+        if (!res.ok) {
+          setError('Erro ao carregar partida.')
+          return
+        }
         setMatch(await res.json())
       } catch {
         setError('Não foi possível conectar ao servidor.')
@@ -343,14 +166,20 @@ export default function MatchPage() {
   }, [match_id])
 
   async function handleToggleTimeline() {
-    if (showTimeline) { setShowTimeline(false); return }
+    if (showTimeline) {
+      setShowTimeline(false)
+      return
+    }
     setShowTimeline(true)
-    if (timelineFrames !== null) return  // já carregado
+    if (timelineFrames !== null) return
     setTimelineLoading(true)
     setTimelineError(null)
     try {
       const res = await apiFetch(`/api/v1/match/${match_id}/timeline`)
-      if (!res.ok) { setTimelineError('Não foi possível carregar a timeline.'); return }
+      if (!res.ok) {
+        setTimelineError('Não foi possível carregar a timeline.')
+        return
+      }
       const data = await res.json()
       setTimelineFrames(data.frames ?? [])
     } catch {
@@ -360,487 +189,1437 @@ export default function MatchPage() {
     }
   }
 
-  const header = <Header />
-
-  // ── Loading ──────────────────────────────────────────────────
-  if (loading) return (
-    <div className="min-h-screen bg-metis-bg text-metis-text">
-      {header}
-      <div className="flex items-center justify-center py-32 text-metis-text-dim text-sm">
-        Carregando partida…
+  // ── Loading / erro ─────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="metis-scope" style={{ minHeight: '100vh', background: 'var(--m-bg)' }}>
+        <AppHeader active="home" />
+        <div style={{ padding: '80px 0', display: 'flex', justifyContent: 'center', gap: 6 }}>
+          {[0, 150, 300].map((d) => (
+            <span
+              key={d}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: 'var(--m-accent)',
+                animation: 'm-bounce 1.4s infinite ease-in-out both',
+                animationDelay: `${d}ms`,
+              }}
+            />
+          ))}
+        </div>
+        <style jsx>{`
+          @keyframes m-bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+          }
+        `}</style>
       </div>
-    </div>
-  )
+    )
+  }
 
-  // ── Erro ────────────────────────────────────────────────────
-  if (error || !match) return (
-    <div className="min-h-screen bg-metis-bg text-metis-text">
-      {header}
-      <div className="flex flex-col items-center justify-center py-32 gap-3">
-        <p className="text-metis-text-dim text-sm">{error ?? 'Partida não encontrada.'}</p>
-        <Link href="/" className="text-xs text-metis-accent hover:underline">Voltar ao início</Link>
+  if (error || !match) {
+    return (
+      <div className="metis-scope" style={{ minHeight: '100vh', background: 'var(--m-bg)' }}>
+        <AppHeader active="home" />
+        <div
+          style={{
+            padding: '80px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 14,
+          }}
+        >
+          <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>
+            {error ?? 'Partida não encontrada.'}
+          </p>
+          <Link
+            href="/"
+            className="m-hover-link"
+            style={{ fontSize: 12, color: 'var(--m-accent)', textDecoration: 'none' }}
+          >
+            Voltar ao início
+          </Link>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const { meta, blue_team, red_team, max_damage, has_timeline } = match
   const blueWin = blue_team[0]?.win ?? true
   const queueLabel = QUEUE_LABEL[meta.queue_id] ?? 'Ranqueada'
+  const winColor = blueWin ? 'var(--m-green)' : 'var(--m-red)'
+  const winLabel = blueWin ? 'azul' : 'vermelho'
+  const allParticipants = [...blue_team, ...red_team]
+  const highlighted = highlightPuuid
+    ? allParticipants.find((p) => p.puuid === highlightPuuid)
+    : null
 
   return (
-    <div className="min-h-screen bg-metis-bg text-metis-text">
-      {header}
+    <div className="metis-scope" style={{ minHeight: '100vh', background: 'var(--m-bg)' }}>
+      <AppHeader active="home" />
 
-      <main className="max-w-[85%] mx-auto px-4 py-8">
-
-        {/* Meta da partida */}
-        <div className="mb-6">
-          <div className="flex items-center gap-3 flex-wrap mb-1">
-            <span className="text-xs font-medium text-metis-text-dim uppercase tracking-wide">
-              {queueLabel}
-            </span>
-            <span className="text-metis-border">·</span>
-            <span className="flex items-center gap-1 text-xs text-metis-text-dim">
-              <Clock className="w-3 h-3" />
-              {formatDuration(meta.game_duration)}
-            </span>
-            <span className="text-metis-border">·</span>
-            <span className="text-xs text-metis-text-dim">Patch {meta.game_version}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className={`text-lg font-bold ${blueWin ? 'text-blue-400' : 'text-red-400'}`}>
-              {blueWin ? 'Time Azul venceu' : 'Time Vermelho venceu'}
-            </span>
-            <div className="flex items-center gap-2 ml-auto">
-              {has_timeline && (
-                <span className="text-[10px] border border-metis-border text-metis-text-dim px-2 py-0.5 rounded">
-                  Timeline disponível
-                </span>
-              )}
-              {puuid && (
+      {/* ══════════ Banner ══════════ */}
+      <div
+        style={{
+          background: blueWin
+            ? 'linear-gradient(180deg, rgba(74,222,128,0.1), transparent)'
+            : 'linear-gradient(180deg, rgba(248,113,113,0.08), transparent)',
+          borderBottom: '1px solid var(--m-border)',
+        }}
+      >
+        <div style={{ maxWidth: 1260, margin: '0 auto', padding: '20px 28px 16px' }}>
+          {/* Breadcrumb */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: 11,
+              color: 'var(--m-text-dim)',
+              marginBottom: 14,
+              flexWrap: 'wrap',
+            }}
+          >
+            {highlighted?.players && (
+              <>
                 <Link
-                  href={`/chat?match_id=${match_id}&puuid=${puuid}`}
-                  className="flex items-center gap-1.5 text-xs bg-metis-accent hover:bg-metis-accent-hover text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
+                  href={`/players/${encodeURIComponent(`${highlighted.players.game_name}#${highlighted.players.tag_line}`)}`}
+                  className="m-hover-link"
+                  style={{ color: 'var(--m-text-dim)', textDecoration: 'none' }}
                 >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  Analisar com IA
+                  {highlighted.players.game_name}#{highlighted.players.tag_line}
                 </Link>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Bans */}
-        {meta.bans && meta.bans.length > 0 && (
-          <div className="flex items-center gap-4 mb-4 bg-metis-surface border border-metis-border rounded-lg px-4 py-2.5">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-blue-400 font-semibold uppercase">Bans Azul</span>
-              <div className="flex gap-1">
-                {meta.bans.filter(b => b.team_id === 100).map((b, i) => (
-                  <div key={i} className="relative w-7 h-7 rounded overflow-hidden border border-blue-500/30 grayscale opacity-60">
-                    <Image src={championIconUrl(b.champion_name, DDRAGON_VERSION)} alt={b.champion_name} fill className="object-cover" unoptimized />
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="w-px h-6 bg-metis-border" />
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-red-400 font-semibold uppercase">Bans Verm</span>
-              <div className="flex gap-1">
-                {meta.bans.filter(b => b.team_id === 200).map((b, i) => (
-                  <div key={i} className="relative w-7 h-7 rounded overflow-hidden border border-red-500/30 grayscale opacity-60">
-                    <Image src={championIconUrl(b.champion_name, DDRAGON_VERSION)} alt={b.champion_name} fill className="object-cover" unoptimized />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tabs */}
-        <div className="flex gap-1 mb-4 border-b border-metis-border">
-          {([
-            { key: 'scoreboard' as const, label: 'Scoreboard' },
-            { key: 'analysis' as const,   label: 'Analise de Equipe' },
-            { key: 'build' as const,      label: 'Build' },
-          ]).map(t => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-                tab === t.key
-                  ? 'border-metis-accent text-metis-accent'
-                  : 'border-transparent text-metis-text-dim hover:text-metis-text'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab: Scoreboard */}
-        {tab === 'scoreboard' && (
-          <>
-            <div className="flex items-center gap-4 mb-4 text-[10px] text-metis-text-dim">
-              <div className="flex items-center gap-1.5">
-                <Sword className="w-3 h-3" />
-                <span>Barra = dano aos campeoes | Quadrado = Metis Score</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <TeamColumn
-                participants={blue_team}
-                win={blueWin}
-                label="Time Azul"
-                maxDamage={max_damage}
-                highlightedPuuid={puuid}
-                matchId={match_id}
-              />
-              <TeamColumn
-                participants={red_team}
-                win={!blueWin}
-                label="Time Vermelho"
-                maxDamage={max_damage}
-                highlightedPuuid={puuid}
-                matchId={match_id}
-              />
-            </div>
-
-            {/* Timeline colapsavel */}
-            {has_timeline && (
-              <div className="mt-6 rounded-xl border border-metis-border overflow-hidden">
-                <button
-                  onClick={handleToggleTimeline}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-metis-surface hover:bg-metis-border/20 transition-colors"
-                >
-                  <span className="text-sm font-semibold text-metis-text">Timeline da Partida</span>
-                  {showTimeline
-                    ? <ChevronUp className="w-4 h-4 text-metis-text-dim" />
-                    : <ChevronDown className="w-4 h-4 text-metis-text-dim" />
-                  }
-                </button>
-
-                {showTimeline && (
-                  <div className="px-4 py-4 bg-metis-surface/50">
-                    {timelineLoading && (
-                      <p className="text-sm text-metis-text-dim text-center py-8">Carregando timeline...</p>
-                    )}
-                    {timelineError && (
-                      <p className="text-sm text-red-400 text-center py-4">{timelineError}</p>
-                    )}
-                    {!timelineLoading && !timelineError && timelineFrames && (
-                      <TimelineChart
-                        frames={timelineFrames}
-                        participants={[...blue_team, ...red_team]}
-                        highlightedPuuid={puuid}
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
+                <Icon name="chevronRight" size={10} />
+              </>
             )}
-          </>
-        )}
+            <span>Partida</span>
+            <Icon name="chevronRight" size={10} />
+            <span className="font-mono" style={{ color: 'var(--m-accent)' }}>
+              {match_id}
+            </span>
+          </div>
 
-        {/* Tab: Analise de Equipe */}
-        {tab === 'analysis' && (
-          <TeamAnalysis blue={blue_team} red={red_team} blueWin={blueWin} />
-        )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 10,
+                background: blueWin ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.1)',
+                border: `1px solid ${winColor}55`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <Icon
+                name={blueWin ? 'check' : 'x'}
+                size={28}
+                style={{ color: winColor }}
+                strokeWidth={2.5}
+              />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <h1 className="font-display" style={{ fontSize: 24, fontWeight: 700 }}>
+                Vitória <span style={{ color: winColor }}>{winLabel}</span> · em {formatDuration(meta.game_duration)}
+              </h1>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 14,
+                  fontSize: 12,
+                  color: 'var(--m-text-dim)',
+                  marginTop: 4,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span>{queueLabel}</span>
+                <span>·</span>
+                <span>Patch {meta.game_version}</span>
+              </div>
+            </div>
+            <div style={{ flex: 1 }} />
+            {highlightPuuid && (
+              <Link
+                href={`/chat?match_id=${match_id}&puuid=${highlightPuuid}`}
+                className="m-hover-accent"
+                style={{
+                  padding: '9px 14px',
+                  background: 'var(--m-accent)',
+                  border: 'none',
+                  borderRadius: 10,
+                  color: '#1a1510',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  textDecoration: 'none',
+                }}
+              >
+                <Icon name="brain" size={14} />
+                Analisar com IA
+              </Link>
+            )}
+          </div>
 
-        {/* Tab: Build */}
-        {tab === 'build' && (
-          <BuildTab participants={sortByRole([...blue_team, ...red_team])} />
-        )}
+          {/* Bans */}
+          {meta.bans && meta.bans.length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                marginTop: 14,
+                padding: '8px 14px',
+                background: 'var(--m-surface)',
+                border: '1px solid var(--m-border)',
+                borderRadius: 10,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: 'var(--m-green)',
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Bans Azul
+                </span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {meta.bans.filter((b) => b.team_id === 100).map((b, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 5,
+                        overflow: 'hidden',
+                        border: '1px solid rgba(74,222,128,0.3)',
+                        filter: 'grayscale(0.8)',
+                        opacity: 0.65,
+                        position: 'relative',
+                      }}
+                    >
+                      <Image
+                        src={championIconUrl(b.champion_name, DDRAGON_VERSION)}
+                        alt={b.champion_name}
+                        fill
+                        unoptimized
+                        style={{ objectFit: 'cover' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ width: 1, height: 20, background: 'var(--m-border)' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: 'var(--m-red)',
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Bans Vermelho
+                </span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {meta.bans.filter((b) => b.team_id === 200).map((b, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 5,
+                        overflow: 'hidden',
+                        border: '1px solid rgba(248,113,113,0.3)',
+                        filter: 'grayscale(0.8)',
+                        opacity: 0.65,
+                        position: 'relative',
+                      }}
+                    >
+                      <Image
+                        src={championIconUrl(b.champion_name, DDRAGON_VERSION)}
+                        alt={b.champion_name}
+                        fill
+                        unoptimized
+                        style={{ objectFit: 'cover' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
-        {/* Footer */}
-        <p className="text-[11px] text-metis-text-dim text-center mt-8">
-          ID: <span className="font-mono">{match_id}</span>
-        </p>
-      </main>
+      {/* ══════════ Tabs ══════════ */}
+      <div
+        style={{
+          maxWidth: 1260,
+          margin: '0 auto',
+          padding: '0 28px',
+          borderBottom: '1px solid var(--m-border)',
+        }}
+      >
+        <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+          {(
+            [
+              { id: 'overview', l: 'Overview',          ic: 'list' },
+              { id: 'teams',    l: 'Análise de Equipe', ic: 'pieChart' },
+              { id: 'builds',   l: 'Builds & Runas',    ic: 'sword' },
+            ] as const
+          ).map((t) => {
+            const active = tab === t.id
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                style={{
+                  padding: '12px 18px',
+                  background: 'transparent',
+                  border: 'none',
+                  color: active ? 'var(--m-accent)' : 'var(--m-text-dim)',
+                  fontSize: 13,
+                  fontWeight: active ? 600 : 500,
+                  borderBottom: `2px solid ${active ? 'var(--m-accent)' : 'transparent'}`,
+                  marginBottom: -1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                <Icon name={t.ic} size={13} />
+                {t.l}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ══════════ Content ══════════ */}
+      {tab === 'overview' && (
+        <MatchOverview
+          match={match}
+          highlightPuuid={highlightPuuid}
+          hasTimeline={has_timeline}
+          showTimeline={showTimeline}
+          timelineFrames={timelineFrames}
+          timelineLoading={timelineLoading}
+          timelineError={timelineError}
+          onToggleTimeline={handleToggleTimeline}
+        />
+      )}
+      {tab === 'teams' && <MatchTeamAnalysis blue={blue_team} red={red_team} blueWin={blueWin} />}
+      {tab === 'builds' && (
+        <MatchBuilds participants={sortByRole([...blue_team, ...red_team])} />
+      )}
+
+      <div
+        style={{
+          maxWidth: 1260,
+          margin: '0 auto',
+          padding: '0 28px 32px',
+          textAlign: 'center',
+          fontSize: 10,
+          color: 'var(--m-muted)',
+        }}
+      >
+        ID: <span className="font-mono">{match_id}</span>
+      </div>
     </div>
   )
 }
 
-// ── Tab: Analise de Equipe ──────────────────────────────────────
+// ══════════ Overview tab ═══════════════════════════════════════
+function MatchOverview({
+  match,
+  highlightPuuid,
+  hasTimeline,
+  showTimeline,
+  timelineFrames,
+  timelineLoading,
+  timelineError,
+  onToggleTimeline,
+}: {
+  match: MatchDetails
+  highlightPuuid: string | null
+  hasTimeline: boolean
+  showTimeline: boolean
+  timelineFrames: TimelineFrame[] | null
+  timelineLoading: boolean
+  timelineError: string | null
+  onToggleTimeline: () => void
+}) {
+  const { blue_team, red_team, max_damage } = match
+  const blueWin = blue_team[0]?.win ?? true
+  const duration = match.meta.game_duration
 
-function DonutChart({ blue, red, label }: { blue: number; red: number; label: string }) {
-  const total = blue + red || 1
-  const bluePct = Math.round((blue / total) * 100)
-  const redPct = 100 - bluePct
-  const blueAngle = (bluePct / 100) * 360
+  const sum = (team: Participant[], field: keyof Participant) =>
+    team.reduce((acc, p) => acc + (Number(p[field]) || 0), 0)
+
+  const blueGold = sum(blue_team, 'gold_earned')
+  const redGold = sum(red_team, 'gold_earned')
+  const blueKills = sum(blue_team, 'kills')
+  const redKills = sum(red_team, 'kills')
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <span className="text-xs font-medium text-metis-text-dim uppercase tracking-wide">{label}</span>
-      <div className="relative w-24 h-24">
-        <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-          <circle cx="18" cy="18" r="14" fill="none" stroke="rgb(239 68 68 / 0.4)" strokeWidth="4" />
-          <circle
-            cx="18" cy="18" r="14" fill="none"
-            stroke="rgb(59 130 246 / 0.8)" strokeWidth="4"
-            strokeDasharray={`${bluePct * 0.88} ${100 * 0.88}`}
-            strokeLinecap="round"
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-xs font-bold text-blue-400">{blue >= 1000 ? `${(blue/1000).toFixed(1)}k` : blue}</span>
-          <span className="text-xs font-bold text-red-400">{red >= 1000 ? `${(red/1000).toFixed(1)}k` : red}</span>
+    <div
+      style={{
+        maxWidth: 1260,
+        margin: '0 auto',
+        padding: '24px 28px 48px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 20,
+      }}
+    >
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 20 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
+          {/* Times */}
+          <Card pad={0}>
+            <div style={{ padding: '16px 20px 12px' }}>
+              <SectionLabel icon="shield">Times</SectionLabel>
+            </div>
+            <TeamBlock
+              team={blue_team}
+              color="var(--m-green)"
+              label={`Azul · ${blueWin ? 'Vitória' : 'Derrota'}`}
+              goldTotal={blueGold}
+              kills={blueKills}
+              maxDamage={max_damage}
+              highlightPuuid={highlightPuuid}
+              duration={duration}
+            />
+            <div style={{ height: 1, background: 'var(--m-border)' }} />
+            <TeamBlock
+              team={red_team}
+              color="var(--m-red)"
+              label={`Vermelho · ${!blueWin ? 'Vitória' : 'Derrota'}`}
+              goldTotal={redGold}
+              kills={redKills}
+              maxDamage={max_damage}
+              highlightPuuid={highlightPuuid}
+              duration={duration}
+            />
+          </Card>
+
+          {/* Timeline */}
+          {hasTimeline && (
+            <Card pad={0}>
+              <button
+                type="button"
+                onClick={onToggleTimeline}
+                className="m-hover-surface"
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '14px 20px',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Icon name="activity" size={14} style={{ color: 'var(--m-accent)' }} />
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
+                      color: 'var(--m-text-dim)',
+                    }}
+                  >
+                    Timeline da partida
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      padding: '2px 7px',
+                      background: 'rgb(var(--m-accent-rgb) / 0.1)',
+                      border: '1px solid rgb(var(--m-accent-rgb) / 0.25)',
+                      color: 'var(--m-accent)',
+                      borderRadius: 4,
+                      fontWeight: 600,
+                      letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Frames por minuto
+                  </span>
+                </div>
+                <Icon
+                  name={showTimeline ? 'chevronUp' : 'chevronDown'}
+                  size={14}
+                  style={{ color: 'var(--m-text-dim)' }}
+                />
+              </button>
+              {showTimeline && (
+                <div style={{ padding: '0 20px 20px' }}>
+                  {timelineLoading && (
+                    <div
+                      style={{
+                        padding: '32px 0',
+                        textAlign: 'center',
+                        fontSize: 12,
+                        color: 'var(--m-text-dim)',
+                      }}
+                    >
+                      Carregando timeline...
+                    </div>
+                  )}
+                  {timelineError && (
+                    <div
+                      style={{
+                        padding: '16px 0',
+                        textAlign: 'center',
+                        fontSize: 12,
+                        color: 'var(--m-red)',
+                      }}
+                    >
+                      {timelineError}
+                    </div>
+                  )}
+                  {!timelineLoading && !timelineError && timelineFrames && (
+                    <TimelineChart
+                      frames={timelineFrames}
+                      participants={[...blue_team, ...red_team]}
+                      highlightedPuuid={highlightPuuid}
+                    />
+                  )}
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: 'var(--m-muted)',
+                      textAlign: 'center',
+                      marginTop: 10,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Timeline interativa com mapa e eventos posicionais em breve — depende do parsing
+                    de eventos do Riot timeline (Bloco 0 do roadmap de analytics profundo).
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
+        </div>
+
+        {/* RIGHT */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <Card accent>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 8,
+                  background: 'rgb(var(--m-accent-rgb) / 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--m-accent)',
+                }}
+              >
+                <Icon name="brain" size={15} />
+              </div>
+              <div>
+                <div className="font-display" style={{ fontSize: 13, fontWeight: 600 }}>
+                  Análise da Metis
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--m-text-dim)' }}>
+                  IA tática · em breve
+                </div>
+              </div>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--m-text-dim)', lineHeight: 1.55, marginBottom: 10 }}>
+              A análise narrativa automática chega quando o Bloco 0 do roadmap entregar o parsing de eventos da timeline. Enquanto isso, pergunte diretamente à Metis sobre esta partida.
+            </p>
+            {highlightPuuid && (
+              <Link
+                href={`/chat?match_id=${match.match_id}&puuid=${highlightPuuid}`}
+                className="m-hover-accent"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  width: '100%',
+                  padding: '9px 12px',
+                  background: 'var(--m-accent)',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: '#1a1510',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                }}
+              >
+                <Icon name="messageCircle" size={13} />
+                Perguntar à Metis
+              </Link>
+            )}
+          </Card>
+
+          <Card>
+            <SectionLabel icon="activity">Resumo rápido</SectionLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginTop: 6 }}>
+              {[
+                { l: 'Duração', v: formatDuration(duration), c: 'var(--m-text)' },
+                {
+                  l: 'Kills',
+                  v: `${blueKills}-${redKills}`,
+                  c: blueWin ? 'var(--m-green)' : 'var(--m-red)',
+                },
+                {
+                  l: 'Ouro total',
+                  v: `${((blueGold + redGold) / 1000).toFixed(1)}k`,
+                  c: 'var(--m-accent)',
+                },
+                {
+                  l: 'Dif. ouro',
+                  v: `${blueGold > redGold ? '+' : ''}${((blueGold - redGold) / 1000).toFixed(1)}k`,
+                  c: blueGold > redGold ? 'var(--m-green)' : 'var(--m-red)',
+                },
+              ].map((s, i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: '10px 12px',
+                    background: 'var(--m-bg)',
+                    border: '1px solid var(--m-border)',
+                    borderRadius: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 9,
+                      color: 'var(--m-muted)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
+                      fontWeight: 600,
+                      marginBottom: 3,
+                    }}
+                  >
+                    {s.l}
+                  </div>
+                  <div
+                    className="tabular font-display"
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 700,
+                      color: s.c,
+                      letterSpacing: '-0.02em',
+                    }}
+                  >
+                    {s.v}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
         </div>
       </div>
     </div>
   )
 }
 
-function TeamAnalysis({ blue, red, blueWin }: { blue: Participant[]; red: Participant[]; blueWin: boolean }) {
-  const sum = (team: Participant[], field: string) =>
-    team.reduce((acc, p) => acc + (Number((p as Record<string, unknown>)[field]) || 0), 0)
-
-  const metrics = [
-    { label: 'Abates',          blueVal: sum(blue, 'kills'),                            redVal: sum(red, 'kills') },
-    { label: 'Ouro',            blueVal: sum(blue, 'gold_earned'),                      redVal: sum(red, 'gold_earned') },
-    { label: 'Dano',            blueVal: sum(blue, 'total_damage_dealt_to_champions'),  redVal: sum(red, 'total_damage_dealt_to_champions') },
-    { label: 'Visao',           blueVal: sum(blue, 'vision_score'),                     redVal: sum(red, 'vision_score') },
-    { label: 'CS',              blueVal: sum(blue, 'total_cs'),                         redVal: sum(red, 'total_cs') },
-  ]
-
+// ── TeamBlock ─────────────────────────────────────────────────
+function TeamBlock({
+  team,
+  color,
+  label,
+  goldTotal,
+  kills,
+  maxDamage,
+  highlightPuuid,
+  duration,
+}: {
+  team: Participant[]
+  color: string
+  label: string
+  goldTotal: number
+  kills: number
+  maxDamage: number
+  highlightPuuid: string | null
+  duration: number
+}) {
+  const sorted = sortByRole(team)
+  const bgGradient = color === 'var(--m-green)'
+    ? 'linear-gradient(90deg, rgba(74,222,128,0.06), transparent)'
+    : 'linear-gradient(90deg, rgba(248,113,113,0.06), transparent)'
   return (
     <div>
-      <div className="flex items-center justify-center gap-6 mb-6 text-xs">
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-blue-500" />
-          <span className="text-metis-text-dim">{blueWin ? 'Vencedora' : 'Perdedora'}</span>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '10px 20px',
+          background: bgGradient,
+          flexWrap: 'wrap',
+          gap: 10,
+        }}
+      >
+        <div style={{ width: 3, height: 24, background: color, borderRadius: 2 }} />
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+          }}
+        >
+          {label}
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-red-500" />
-          <span className="text-metis-text-dim">{!blueWin ? 'Vencedora' : 'Perdedora'}</span>
+        <div style={{ flex: 1 }} />
+        <div
+          style={{
+            display: 'flex',
+            gap: 14,
+            fontSize: 11,
+            color: 'var(--m-text-dim)',
+            flexWrap: 'wrap',
+          }}
+        >
+          <span>
+            <span className="tabular" style={{ color: 'var(--m-text)', fontWeight: 600 }}>
+              {(goldTotal / 1000).toFixed(1)}k
+            </span>{' '}
+            ouro
+          </span>
+          <span>
+            <span className="tabular" style={{ color: 'var(--m-text)', fontWeight: 600 }}>
+              {kills}
+            </span>{' '}
+            kills
+          </span>
         </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
-        {metrics.map(m => (
-          <DonutChart key={m.label} blue={m.blueVal} red={m.redVal} label={m.label} />
-        ))}
-      </div>
-
-      {/* Barras detalhadas por jogador para cada metrica */}
-      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-6">
-        {metrics.map(m => (
-          <div key={m.label} className="bg-metis-surface border border-metis-border rounded-xl p-4">
-            <h3 className="text-xs font-semibold text-metis-text-dim uppercase tracking-wide mb-3">{m.label}</h3>
-            <div className="space-y-1.5">
-              {sortByRole(blue).map(p => {
-                const val = Number((p as Record<string, unknown>)[
-                  m.label === 'Abates' ? 'kills' :
-                  m.label === 'Ouro' ? 'gold_earned' :
-                  m.label === 'Dano' ? 'total_damage_dealt_to_champions' :
-                  m.label === 'Visao' ? 'vision_score' : 'total_cs'
-                ]) || 0
-                const max = Math.max(m.blueVal, m.redVal) || 1
-                return (
-                  <div key={p.puuid} className="flex items-center gap-2">
-                    <Image src={championIconUrl(p.champion_name, DDRAGON_VERSION)} alt="" width={18} height={18} className="rounded flex-shrink-0" unoptimized />
-                    <div className="flex-1 bg-metis-border/30 rounded-full h-2 overflow-hidden">
-                      <div className="h-full bg-blue-500/70 rounded-full" style={{ width: `${(val / max) * 100}%` }} />
-                    </div>
-                    <span className="text-[10px] text-metis-text-dim w-10 text-right">{val >= 1000 ? `${(val/1000).toFixed(1)}k` : val}</span>
-                  </div>
-                )
-              })}
-              {sortByRole(red).map(p => {
-                const val = Number((p as Record<string, unknown>)[
-                  m.label === 'Abates' ? 'kills' :
-                  m.label === 'Ouro' ? 'gold_earned' :
-                  m.label === 'Dano' ? 'total_damage_dealt_to_champions' :
-                  m.label === 'Visao' ? 'vision_score' : 'total_cs'
-                ]) || 0
-                const max = Math.max(m.blueVal, m.redVal) || 1
-                return (
-                  <div key={p.puuid} className="flex items-center gap-2">
-                    <Image src={championIconUrl(p.champion_name, DDRAGON_VERSION)} alt="" width={18} height={18} className="rounded flex-shrink-0" unoptimized />
-                    <div className="flex-1 bg-metis-border/30 rounded-full h-2 overflow-hidden">
-                      <div className="h-full bg-red-500/70 rounded-full" style={{ width: `${(val / max) * 100}%` }} />
-                    </div>
-                    <span className="text-[10px] text-metis-text-dim w-10 text-right">{val >= 1000 ? `${(val/1000).toFixed(1)}k` : val}</span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Tab: Build ──────────────────────────────────────────────────
-
-const SUMMONER_SPELL: Record<number, string> = {
-  1: 'SummonerBoost', 3: 'SummonerExhaust', 4: 'SummonerFlash', 6: 'SummonerHaste',
-  7: 'SummonerHeal', 11: 'SummonerSmite', 12: 'SummonerTeleport', 14: 'SummonerDot',
-  21: 'SummonerBarrier', 32: 'SummonerSnowball', 39: 'SummonerSnowURFSnowball_Mark',
-}
-
-const SUMMONER_NAMES: Record<number, string> = {
-  1: 'Purificar', 3: 'Exaurir', 4: 'Flash', 6: 'Fantasma',
-  7: 'Curar', 11: 'Golpear', 12: 'Teleporte', 14: 'Incendiar',
-  21: 'Barreira', 32: 'Bola de Neve',
-}
-
-type RuneStyle = {
-  style: number
-  selections: { perk: number; var1: number; var2: number; var3: number }[]
-}
-
-function BuildTab({ participants }: { participants: Participant[] }) {
-  return (
-    <div className="space-y-4">
-      {participants.map(p => {
-        const items = p.items ?? Array(7).fill(0)
-        const spell1 = SUMMONER_SPELL[p.summoner1_id ?? 0]
-        const spell2 = SUMMONER_SPELL[p.summoner2_id ?? 0]
-
-        // Parse runes_raw para todas as runas
-        const runeStyles: RuneStyle[] = (() => {
-          const raw = p.runes_raw as { styles?: RuneStyle[] } | null
-          return raw?.styles ?? []
-        })()
-        const primaryStyle = runeStyles[0]
-        const secondaryStyle = runeStyles[1]
+      {sorted.map((p, i) => {
+        const isYou = p.puuid === highlightPuuid
+        const kda =
+          p.deaths === 0 ? '∞' : ((p.kills + p.assists) / p.deaths).toFixed(2)
+        const damage = p.total_damage_dealt_to_champions ?? 0
+        const damageBar = maxDamage > 0 ? (damage / maxDamage) * 100 : 0
+        const cspm = p.cs_per_minute ?? 0
+        const keystoneUrl = p.rune_keystone
+          ? runeIconUrl(p.rune_keystone, DDRAGON_VERSION)
+          : null
+        const scoreStyle = p.metis_score != null ? metisScoreStyle(p.metis_score) : null
+        const items = (p.items ?? []).filter((id) => id > 0).slice(0, 6)
 
         return (
-          <div key={p.puuid} className={`bg-metis-surface border rounded-xl p-4 ${
-            p.win ? 'border-blue-500/20' : 'border-red-500/20'
-          }`}>
-            {/* Header */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-metis-border flex-shrink-0">
-                <Image src={championIconUrl(p.champion_name, DDRAGON_VERSION)} alt={p.champion_name} fill className="object-cover" unoptimized />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-metis-text">
-                  {p.players ? `${p.players.game_name}#${p.players.tag_line}` : p.champion_name}
-                </p>
-                <p className="text-xs text-metis-text-dim">
-                  {p.champion_name} — {POSITION_LABEL[p.team_position] ?? p.team_position}
-                </p>
-              </div>
-
-              {/* Summoner Spells */}
-              <div className="flex gap-1 flex-shrink-0">
-                {spell1 && (
-                  <Image
-                    src={`https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/spell/${spell1}.png`}
-                    alt={SUMMONER_NAMES[p.summoner1_id ?? 0] ?? spell1} width={28} height={28}
-                    title={SUMMONER_NAMES[p.summoner1_id ?? 0]}
-                    className="rounded border border-metis-border/50" unoptimized
-                  />
+          <div
+            key={p.puuid}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '28px 36px 1.2fr 110px 140px 150px 80px',
+              gap: 12,
+              padding: '10px 20px',
+              alignItems: 'center',
+              borderTop: i ? '1px solid rgba(34,40,56,0.4)' : 'none',
+              background: isYou ? 'rgb(var(--m-accent-rgb) / 0.05)' : 'transparent',
+            }}
+          >
+            <Image
+              src={roleIconPath(p.team_position)}
+              alt={p.team_position}
+              width={16}
+              height={16}
+              unoptimized
+              style={{ objectFit: 'contain', opacity: 0.8 }}
+            />
+            <div style={{ position: 'relative' }}>
+              <ChampPortrait name={p.champion_name} size={32} />
+              {p.champion_level && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    bottom: -2,
+                    right: -2,
+                    fontSize: 8,
+                    fontWeight: 700,
+                    background: 'var(--m-bg)',
+                    color: 'var(--m-text)',
+                    padding: '1px 4px',
+                    borderRadius: 3,
+                    border: '1px solid var(--m-border-2)',
+                    lineHeight: 1,
+                  }}
+                >
+                  {p.champion_level}
+                </span>
+              )}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Link
+                  href={`/players/${encodeURIComponent(p.puuid)}`}
+                  className="m-hover-link"
+                  style={{
+                    fontSize: 12,
+                    fontWeight: isYou ? 700 : 500,
+                    color: isYou ? 'var(--m-accent)' : 'var(--m-text)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    textDecoration: 'none',
+                  }}
+                >
+                  {p.players
+                    ? `${p.players.game_name}#${p.players.tag_line}`
+                    : `${p.puuid.slice(0, 12)}…`}
+                </Link>
+                {isYou && (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 600,
+                      padding: '2px 5px',
+                      background: 'var(--m-accent)',
+                      color: '#1a1510',
+                      borderRadius: 3,
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    VOCÊ
+                  </span>
                 )}
-                {spell2 && (
-                  <Image
-                    src={`https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/spell/${spell2}.png`}
-                    alt={SUMMONER_NAMES[p.summoner2_id ?? 0] ?? spell2} width={28} height={28}
-                    title={SUMMONER_NAMES[p.summoner2_id ?? 0]}
-                    className="rounded border border-metis-border/50" unoptimized
-                  />
-                )}
               </div>
-
-              <span className={`text-xs font-bold px-2 py-1 rounded flex-shrink-0 ${
-                p.win ? 'bg-blue-500/20 text-blue-300' : 'bg-red-500/20 text-red-300'
-              }`}>
-                {p.win ? 'V' : 'D'}
+              <div style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 1 }}>
+                {p.champion_name} · {ROLES_PT[p.team_position as Role] ?? p.team_position}
+              </div>
+            </div>
+            <div className="tabular" style={{ fontSize: 13, fontWeight: 600 }}>
+              <span>{p.kills}</span>
+              <span style={{ color: 'var(--m-muted)' }}> / </span>
+              <span style={{ color: 'var(--m-red)' }}>{p.deaths}</span>
+              <span style={{ color: 'var(--m-muted)' }}> / </span>
+              <span>{p.assists}</span>
+              <span style={{ fontSize: 10, color: 'var(--m-text-dim)', marginLeft: 6 }}>
+                {kda}
               </span>
             </div>
-
-            {/* Items com nomes */}
-            <div className="mb-4">
-              <p className="text-[10px] text-metis-text-dim uppercase tracking-wide mb-2">Itens Finais</p>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {items.slice(0, 6).map((id: number, i: number) =>
-                  id > 0 ? (
-                    <div key={i} className="flex items-center gap-1.5 bg-metis-bg/50 rounded-lg px-2 py-1 border border-metis-border/30">
-                      <Image
-                        src={`https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/item/${id}.png`}
-                        alt={String(id)} width={28} height={28}
-                        className="rounded border border-metis-border/50" unoptimized
-                      />
-                      <span className="text-[10px] text-metis-text-dim">{i + 1}o</span>
-                    </div>
-                  ) : null
-                )}
-                {/* Trinket (slot 6) */}
-                {items[6] > 0 && (
-                  <div className="ml-2">
-                    <Image
-                      src={`https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/item/${items[6]}.png`}
-                      alt="Trinket" width={24} height={24}
-                      className="rounded-full border border-metis-border/50 opacity-70" unoptimized
-                    />
-                  </div>
-                )}
+            <div>
+              <div className="tabular" style={{ fontSize: 11, fontWeight: 500 }}>
+                {damage.toLocaleString('pt-BR')} dano
+              </div>
+              <Bar value={damage} max={maxDamage} color={color} height={3} />
+              <div
+                className="tabular"
+                style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 2 }}
+              >
+                {p.total_cs ?? 0} cs · {cspm.toFixed(1)}/m
               </div>
             </div>
-
-            {/* Runas completas */}
-            <div>
-              <p className="text-[10px] text-metis-text-dim uppercase tracking-wide mb-2">Runas</p>
-              <div className="flex gap-6">
-                {/* Arvore primaria */}
-                {primaryStyle && (
-                  <div>
-                    <p className={`text-[10px] font-medium mb-1.5 ${RUNE_TREES[primaryStyle.style]?.color ?? 'text-metis-text-dim'}`}>
-                      {RUNE_TREES[primaryStyle.style]?.name ?? 'Primaria'}
-                    </p>
-                    <div className="flex gap-1">
-                      {primaryStyle.selections.map((sel, i) => {
-                        const url = runeIconUrl(sel.perk, DDRAGON_VERSION)
-                        return url ? (
-                          <Image
-                            key={i} src={url} alt={`Runa ${sel.perk}`}
-                            width={i === 0 ? 32 : 24} height={i === 0 ? 32 : 24}
-                            className={`rounded-full border bg-metis-bg ${i === 0 ? 'border-metis-accent/50' : 'border-metis-border/40'}`}
-                            unoptimized
-                          />
-                        ) : (
-                          <div key={i} className={`rounded-full border border-metis-border/30 bg-metis-bg/50 flex items-center justify-center text-[8px] text-metis-text-dim ${i === 0 ? 'w-8 h-8' : 'w-6 h-6'}`}>
-                            {sel.perk}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Arvore secundaria */}
-                {secondaryStyle && (
-                  <div>
-                    <p className={`text-[10px] font-medium mb-1.5 ${RUNE_TREES[secondaryStyle.style]?.color ?? 'text-metis-text-dim'}`}>
-                      {RUNE_TREES[secondaryStyle.style]?.name ?? 'Secundaria'}
-                    </p>
-                    <div className="flex gap-1">
-                      {secondaryStyle.selections.map((sel, i) => {
-                        const url = runeIconUrl(sel.perk, DDRAGON_VERSION)
-                        return url ? (
-                          <Image
-                            key={i} src={url} alt={`Runa ${sel.perk}`}
-                            width={24} height={24}
-                            className="rounded-full border border-metis-border/40 bg-metis-bg"
-                            unoptimized
-                          />
-                        ) : (
-                          <div key={i} className="w-6 h-6 rounded-full border border-metis-border/30 bg-metis-bg/50 flex items-center justify-center text-[8px] text-metis-text-dim">
-                            {sel.perk}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
+            <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+              {items.length === 0
+                ? Array.from({ length: 6 }, (_, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: 4,
+                        background: 'var(--m-surface-2)',
+                        border: '1px solid var(--m-border-2)',
+                      }}
+                    />
+                  ))
+                : items.map((id, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: 4,
+                        background: 'var(--m-surface-2)',
+                        border: '1px solid var(--m-border-2)',
+                        backgroundImage: `url(https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/item/${id}.png)`,
+                        backgroundSize: 'cover',
+                      }}
+                    />
+                  ))}
+              {keystoneUrl && (
+                <div
+                  style={{
+                    width: 20,
+                    height: 20,
+                    marginLeft: 4,
+                    borderRadius: '50%',
+                    border: '1px solid var(--m-border-2)',
+                    background: `var(--m-bg) url(${keystoneUrl}) center/contain no-repeat`,
+                  }}
+                />
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+              {scoreStyle && (
+                <div
+                  title={`Metis Score ${Math.round(p.metis_score!)}`}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    background: scoreStyle.bg,
+                    border: `1px solid ${scoreStyle.bd}`,
+                    color: scoreStyle.fg,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}
+                >
+                  {Math.round(p.metis_score!)}
+                </div>
+              )}
             </div>
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ══════════ Team Analysis tab ══════════════════════════════════
+function MatchTeamAnalysis({
+  blue,
+  red,
+  blueWin,
+}: {
+  blue: Participant[]
+  red: Participant[]
+  blueWin: boolean
+}) {
+  const sum = (team: Participant[], field: keyof Participant) =>
+    team.reduce((acc, p) => acc + (Number(p[field]) || 0), 0)
+
+  const metrics = [
+    { key: 'kills',  label: 'Abates',           fmt: (v: number) => v.toString() },
+    { key: 'gold_earned', label: 'Ouro total',  fmt: (v: number) => `${(v / 1000).toFixed(1)}k` },
+    { key: 'total_damage_dealt_to_champions', label: 'Dano a campeões', fmt: (v: number) => `${(v / 1000).toFixed(1)}k` },
+    { key: 'vision_score', label: 'Score de visão', fmt: (v: number) => v.toString() },
+    { key: 'total_cs', label: 'Creep score',    fmt: (v: number) => v.toString() },
+  ] as const
+
+  const maxDmgOverall = Math.max(
+    ...[...blue, ...red].map((p) => p.total_damage_dealt_to_champions ?? 0),
+    1
+  )
+
+  return (
+    <div
+      style={{
+        maxWidth: 1260,
+        margin: '0 auto',
+        padding: '24px 28px 48px',
+        display: 'grid',
+        gridTemplateColumns: '1fr 320px',
+        gap: 20,
+      }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
+        <Card>
+          <SectionLabel
+            icon="pieChart"
+            right={
+              <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 2,
+                      background: 'var(--m-green)',
+                    }}
+                  />
+                  <span style={{ color: 'var(--m-text-dim)' }}>
+                    Azul · {blueWin ? 'Vitória' : 'Derrota'}
+                  </span>
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 2,
+                      background: 'var(--m-red)',
+                    }}
+                  />
+                  <span style={{ color: 'var(--m-text-dim)' }}>
+                    Vermelho · {!blueWin ? 'Vitória' : 'Derrota'}
+                  </span>
+                </span>
+              </div>
+            }
+          >
+            Comparação por métrica
+          </SectionLabel>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: 14,
+              marginTop: 4,
+            }}
+          >
+            {metrics.map((m) => {
+              const b = sum(blue, m.key as keyof Participant)
+              const r = sum(red, m.key as keyof Participant)
+              const total = b + r || 1
+              const blueWon = b > r
+              return (
+                <div
+                  key={m.key}
+                  style={{
+                    padding: '16px 12px 14px',
+                    background: 'var(--m-bg)',
+                    border: '1px solid var(--m-border)',
+                    borderRadius: 12,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: 'var(--m-muted)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
+                      fontWeight: 600,
+                      marginBottom: 10,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {m.label}
+                  </div>
+                  <SplitDonut blue={b} red={r} size={120} />
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      marginTop: 12,
+                      padding: '0 4px',
+                    }}
+                  >
+                    <div style={{ textAlign: 'left' }}>
+                      <div
+                        className="tabular font-display"
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 700,
+                          color: blueWon ? 'var(--m-green)' : 'var(--m-text)',
+                        }}
+                      >
+                        {m.fmt(b)}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--m-text-dim)' }}>
+                        {((b / total) * 100).toFixed(0)}%
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div
+                        className="tabular font-display"
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 700,
+                          color: !blueWon ? 'var(--m-red)' : 'var(--m-text)',
+                        }}
+                      >
+                        {m.fmt(r)}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--m-text-dim)' }}>
+                        {((r / total) * 100).toFixed(0)}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+
+        {/* Bar por jogador — dano */}
+        <Card>
+          <SectionLabel icon="barChart">Dano a campeões · por jogador</SectionLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 4 }}>
+            {[...blue, ...red]
+              .sort(
+                (a, b) =>
+                  (b.total_damage_dealt_to_champions ?? 0) -
+                  (a.total_damage_dealt_to_champions ?? 0)
+              )
+              .map((p) => {
+                const dmg = p.total_damage_dealt_to_champions ?? 0
+                const teamColor = p.team_id === 100 ? 'var(--m-green)' : 'var(--m-red)'
+                return (
+                  <div
+                    key={p.puuid}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '28px 150px 1fr 80px',
+                      gap: 10,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <ChampPortrait name={p.champion_name} size={26} />
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 500,
+                          color: 'var(--m-text)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {p.players
+                          ? `${p.players.game_name}#${p.players.tag_line}`
+                          : p.champion_name}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--m-text-dim)' }}>
+                        {p.champion_name}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        height: 18,
+                        borderRadius: 4,
+                        background: 'var(--m-bg)',
+                        border: '1px solid var(--m-border)',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${(dmg / maxDmgOverall) * 100}%`,
+                          background:
+                            p.team_id === 100
+                              ? 'linear-gradient(90deg, rgba(74,222,128,0.2), var(--m-green))'
+                              : 'linear-gradient(90deg, rgba(248,113,113,0.2), var(--m-red))',
+                        }}
+                      />
+                    </div>
+                    <div
+                      className="tabular"
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        textAlign: 'right',
+                        color: teamColor,
+                      }}
+                    >
+                      {dmg.toLocaleString('pt-BR')}
+                    </div>
+                  </div>
+                )
+              })}
+          </div>
+        </Card>
+      </div>
+
+      {/* Sidebar */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <Card>
+          <SectionLabel icon="target">Perfil dos times</SectionLabel>
+          <p style={{ fontSize: 11, color: 'var(--m-text-dim)', lineHeight: 1.55, marginTop: 6 }}>
+            Análise semântica dos perfis (AD/AP, Controle, Mobilidade, Pick) chega quando o endpoint
+            de classificação de composição for implementado. Por ora, a comparação por métricas ao
+            lado já dá uma leitura objetiva.
+          </p>
+        </Card>
+
+        <Card accent>
+          <SectionLabel icon="brain">Leitura da Metis</SectionLabel>
+          <p style={{ fontSize: 12, color: 'var(--m-text)', lineHeight: 1.55 }}>
+            Time{' '}
+            <b
+              style={{
+                color: blueWin ? 'var(--m-green)' : 'var(--m-red)',
+              }}
+            >
+              {blueWin ? 'azul' : 'vermelho'}
+            </b>{' '}
+            venceu. Para análise narrativa completa (timings, viradas, erros), peça pra Metis no
+            chat — com o match_id na URL ela já pega o contexto.
+          </p>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+// ── SplitDonut pra Team Analysis ──────────────────────────────
+function SplitDonut({ blue, red, size = 120 }: { blue: number; red: number; size?: number }) {
+  const total = blue + red || 1
+  const r = size / 2 - 8
+  const circ = 2 * Math.PI * r
+  const bluePct = blue / total
+  const winner = blue > red ? 'blue' : 'red'
+  return (
+    <div style={{ position: 'relative', width: size, height: size }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="var(--m-border)" strokeWidth="8" fill="none" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke="var(--m-green)"
+          strokeWidth="10"
+          fill="none"
+          strokeDasharray={`${circ * bluePct} ${circ}`}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke="var(--m-red)"
+          strokeWidth="10"
+          fill="none"
+          strokeDasharray={`${circ * (1 - bluePct)} ${circ}`}
+          strokeDashoffset={`${-circ * bluePct}`}
+        />
+      </svg>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: 'column',
+        }}
+      >
+        <div
+          className="tabular font-display"
+          style={{
+            fontSize: 16,
+            fontWeight: 700,
+            color: winner === 'blue' ? 'var(--m-green)' : 'var(--m-red)',
+          }}
+        >
+          {(bluePct * 100).toFixed(0)}:{((1 - bluePct) * 100).toFixed(0)}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ══════════ Builds tab ═════════════════════════════════════════
+function MatchBuilds({ participants }: { participants: Participant[] }) {
+  return (
+    <div style={{ maxWidth: 1260, margin: '0 auto', padding: '24px 28px 48px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 14,
+          flexWrap: 'wrap',
+        }}
+      >
+        <SectionLabel icon="sword">Itens · Runas · Summoners por jogador</SectionLabel>
+        <div style={{ flex: 1 }} />
+        <Pill active>Todos</Pill>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {participants.map((p) => (
+          <BuildRow key={p.puuid} p={p} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function BuildRow({ p }: { p: Participant }) {
+  const teamColor = p.team_id === 100 ? 'var(--m-green)' : 'var(--m-red)'
+  const items = p.items ?? []
+  const keystoneUrl = p.rune_keystone
+    ? runeIconUrl(p.rune_keystone, DDRAGON_VERSION)
+    : null
+  const spell1 = SUMMONER_SPELL[p.summoner1_id ?? 0]
+  const spell2 = SUMMONER_SPELL[p.summoner2_id ?? 0]
+
+  const runeStyles: RuneStyle[] = (() => {
+    const raw = p.runes_raw as { styles?: RuneStyle[] } | null
+    return raw?.styles ?? []
+  })()
+  const primaryStyle = runeStyles[0]
+  const secondaryStyle = runeStyles[1]
+
+  const itemIconSrc = (id: number) =>
+    id > 0 ? `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/item/${id}.png` : null
+
+  return (
+    <div
+      style={{
+        padding: '14px 18px',
+        background: 'var(--m-surface)',
+        border: `1px solid ${p.team_id === 100 ? 'rgba(74,222,128,0.25)' : 'rgba(248,113,113,0.25)'}`,
+        borderLeft: `3px solid ${teamColor}`,
+        borderRadius: 10,
+        display: 'grid',
+        gridTemplateColumns: 'auto 36px 200px 1fr 240px 60px',
+        gap: 14,
+        alignItems: 'center',
+      }}
+    >
+      <Image
+        src={roleIconPath(p.team_position)}
+        alt={p.team_position}
+        width={18}
+        height={18}
+        unoptimized
+        style={{ objectFit: 'contain', opacity: 0.8 }}
+      />
+      <ChampPortrait name={p.champion_name} size={36} />
+      <div style={{ minWidth: 0 }}>
+        <Link
+          href={`/players/${encodeURIComponent(p.puuid)}`}
+          className="m-hover-link"
+          style={{
+            fontSize: 13,
+            fontWeight: 500,
+            color: 'var(--m-text)',
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: 'block',
+          }}
+        >
+          {p.players
+            ? `${p.players.game_name}#${p.players.tag_line}`
+            : p.champion_name}
+        </Link>
+        <div style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 2 }}>
+          {p.champion_name} · {ROLES_PT[p.team_position as Role] ?? p.team_position}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+        {/* Items 0-5 */}
+        {Array.from({ length: 6 }, (_, i) => {
+          const id = items[i] ?? 0
+          const src = itemIconSrc(id)
+          return (
+            <div
+              key={i}
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 5,
+                background: src ? `var(--m-surface-2) url(${src}) center/cover` : 'var(--m-surface-2)',
+                border: '1px solid var(--m-border-2)',
+                flexShrink: 0,
+              }}
+            />
+          )
+        })}
+        {/* Trinket */}
+        {items[6] > 0 && (
+          <>
+            <div style={{ width: 1, height: 24, background: 'var(--m-border)', margin: '0 4px' }} />
+            <div
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: '50%',
+                background: `var(--m-surface-2) url(${itemIconSrc(items[6])}) center/cover`,
+                border: '1px solid var(--m-border-2)',
+                flexShrink: 0,
+              }}
+            />
+          </>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Keystone */}
+        {keystoneUrl && (
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: `var(--m-bg) url(${keystoneUrl}) center/contain no-repeat`,
+              border: '1.5px solid var(--m-border-2)',
+              flexShrink: 0,
+            }}
+          />
+        )}
+        {/* Primary + secondary labels */}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          {primaryStyle && (
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--m-text)' }}>
+              {RUNE_TREES[primaryStyle.style]?.name ?? 'Primária'}
+            </div>
+          )}
+          {secondaryStyle && (
+            <div
+              style={{
+                fontSize: 9,
+                color: 'var(--m-text-dim)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+              }}
+            >
+              / {RUNE_TREES[secondaryStyle.style]?.name ?? 'Secundária'}
+            </div>
+          )}
+        </div>
+        {/* Summoners */}
+        <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+          {spell1 && (
+            <Image
+              src={`https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/spell/${spell1}.png`}
+              alt=""
+              width={22}
+              height={22}
+              unoptimized
+              style={{ borderRadius: 4, border: '1px solid var(--m-border-2)' }}
+            />
+          )}
+          {spell2 && (
+            <Image
+              src={`https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/spell/${spell2}.png`}
+              alt=""
+              width={22}
+              height={22}
+              unoptimized
+              style={{ borderRadius: 4, border: '1px solid var(--m-border-2)' }}
+            />
+          )}
+        </div>
+      </div>
+      <div
+        className="tabular"
+        style={{ fontSize: 12, fontWeight: 600, textAlign: 'center', color: teamColor }}
+      >
+        {p.win ? 'V' : 'D'}
+      </div>
     </div>
   )
 }

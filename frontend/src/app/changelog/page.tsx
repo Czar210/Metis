@@ -1,334 +1,396 @@
 'use client'
 
 import Link from 'next/link'
-import { Sparkles } from 'lucide-react'
-import { Header } from '@/components/ui/Header'
+import { AppHeader, Icon } from '@/components/design'
+
+// ── Types ──────────────────────────────────────────────────────
+type TagKind = 'novo' | 'melhoria' | 'fix' | 'big'
 
 type Entry = {
-  version: string
-  date: string
-  tag: 'novo' | 'melhoria' | 'fix' | 'big'
+  tag: TagKind
   text: string
 }
 
 type Release = {
   version: string
   date: string
-  label: string
+  /** Título destacado da release (ex: "Big Update"). Omita se não tiver. */
+  label?: string
   current?: boolean
   entries: Entry[]
 }
 
+// ── Data ───────────────────────────────────────────────────────
 const RELEASES: Release[] = [
   {
-    version: 'Pre-0.9.0',
+    version: 'p-0.9.9',
     date: '04/2026',
-    label: 'Atual',
+    label: 'Redesign: Planos + Cupons',
     current: true,
     entries: [
-      { version: '', date: '', tag: 'big',      text: 'Pre-release da 0.9.0 com foco em qualidade do Chat Metis.' },
-      { version: '', date: '', tag: 'novo',      text: 'Guardrail de topico — a Metis agora responde APENAS sobre League of Legends e rejeita perguntas fora do jogo.' },
-      { version: '', date: '', tag: 'novo',      text: 'Personalidade definida: calma, analitica, nunca toxica. Transforma derrotas em aprendizado.' },
-      { version: '', date: '', tag: 'novo',      text: 'Limite diario de tokens por plano — Doador (5k), Premium (30k), Pro (100k). Reset a meia-noite (horario de Londres).' },
-      { version: '', date: '', tag: 'novo',      text: 'Barra de uso de tokens no chat — veja quanto do seu limite diario foi utilizado em tempo real.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Chat atualizado para Gemini 2.5 Flash — modelo mais capaz e com respostas mais precisas.' },
+      { tag: 'big',      text: 'Redesign completo da página de Planos com os 4 tier cards, toggle mensal/anual e novo footer de trust.' },
+      { tag: 'novo',      text: 'Feature de Cupons — tabela dedicada no banco com validade e efeito, endpoint público e seção "Cupons disponíveis" na pricing.' },
+      { tag: 'novo',      text: 'Primeiro cupom ao vivo: MESTRE2604 dá Premium com 10k tokens/dia até o fim de abril.' },
+      { tag: 'melhoria', text: 'Comparativo, FAQ e card Times & Empresas agora usam o design system novo.' },
     ],
   },
   {
-    version: 'Alpha v0.8.3',
+    version: 'p-0.9.8.1',
     date: '04/2026',
-    label: '',
-    current: false,
+    label: 'Backend: Catálogo de Itens enriquecido',
     entries: [
-      { version: '', date: '', tag: 'melhoria', text: 'Chat com IA atualizado para Gemini 2.5 Flash — respostas mais inteligentes e contextuais.' },
+      { tag: 'novo',      text: 'Tabela `items` no Supabase — nome, gold, tags, categoria, tendência em colunas dedicadas.' },
+      { tag: 'novo',      text: 'Endpoint de itens retorna custo em ouro, tags e espaço para categoria curada.' },
+      { tag: 'melhoria', text: 'Página de Itens ganhou colunas Categoria + Custo + Tendência e chips de tags no nome.' },
+    ],
+  },
+  {
+    version: 'p-0.9.8',
+    date: '04/2026',
+    label: 'Redesign: Itens',
+    entries: [
+      { tag: 'big',      text: 'Página de Itens redesenhada com 2 spotlights (mais comprados / top winrate) e tabela densa.' },
+      { tag: 'melhoria', text: 'Filtros role, patch, busca e sort preservados e restilizados.' },
+    ],
+  },
+  {
+    version: 'p-0.9.7',
+    date: '04/2026',
+    label: 'Redesign: Tier List',
+    entries: [
+      { tag: 'big',      text: 'Tier List reimaginada como cards agrupados por tier (S+ → C) com portrait grande, WR colorido e grid KDA/Ban/Games.' },
+      { tag: 'melhoria', text: 'Filtros de elo, role, patch range e busca em card único.' },
+    ],
+  },
+  {
+    version: 'p-0.9.6',
+    date: '04/2026',
+    label: 'Redesign: Home + Design System',
+    entries: [
+      { tag: 'big',      text: 'Nova home: hero com glow gold/cyan, spotlight top-3 do meta, tier snippet top-8 com filtro de role.' },
+      { tag: 'novo',      text: 'Botão Entrar real no header + avatar quando logado.' },
+      { tag: 'novo',      text: 'Ícones oficiais da Riot nos badges de role.' },
+      { tag: 'melhoria', text: 'Modo claro removido — o novo design é dark-only com accent customizável.' },
+      { tag: 'melhoria', text: 'Hover de botões, cards e linhas de volta em todo o redesign.' },
+    ],
+  },
+  {
+    version: 'p-0.9.5',
+    date: '04/2026',
+    label: 'Redesign: Fundação',
+    entries: [
+      { tag: 'big',      text: 'Fundação do novo design system — 18 primitives, nova paleta com accent gold LoL, fontes Space Grotesk e JetBrains Mono.' },
+    ],
+  },
+  {
+    version: 'p-0.9.4',
+    date: '04/2026',
+    entries: [
+      { tag: 'novo',      text: 'Scraper de guias do Mobafire guardando HTML bruto no Cloudflare R2 — fundação pra análise semântica futura.' },
+      { tag: 'fix',       text: 'Bug no scraper que retornava vazio pra todos os campeões foi corrigido.' },
+    ],
+  },
+  {
+    version: 'p-0.9.3',
+    date: '04/2026',
+    entries: [
+      { tag: 'novo',      text: 'Painel admin ganhou botão "Atualizar Tier List" pra limpar cache de 24h.' },
+      { tag: 'melhoria', text: 'Tier list agora filtra impopulares por padrão — toggle pra ver todos.' },
+      { tag: 'melhoria', text: 'Banco ~28% mais leve — colunas redundantes removidas.' },
+    ],
+  },
+  {
+    version: 'p-0.9.2',
+    date: '04/2026',
+    entries: [
+      { tag: 'novo',      text: 'Pickrate e banrate reais na tier list, com bans processados do JSON da partida.' },
+    ],
+  },
+  {
+    version: 'p-0.9.0',
+    date: '04/2026',
+    label: 'Big Update · Chat Metis',
+    entries: [
+      { tag: 'big',      text: 'Pre-release da 0.9.0 com foco em qualidade do Chat Metis.' },
+      { tag: 'novo',      text: 'Guardrail de tópico — a Metis agora responde APENAS sobre League of Legends e rejeita perguntas fora do jogo.' },
+      { tag: 'novo',      text: 'Personalidade definida: calma, analítica, nunca tóxica. Transforma derrotas em aprendizado.' },
+      { tag: 'novo',      text: 'Limite diário de tokens por plano — Doador (5k), Premium (30k), Pro (100k).' },
+      { tag: 'novo',      text: 'Barra de uso de tokens no chat — veja quanto do seu limite foi utilizado em tempo real.' },
+      { tag: 'melhoria', text: 'Chat atualizado para Gemini 2.5 Flash — modelo mais capaz e com respostas mais precisas.' },
     ],
   },
   {
     version: 'Alpha v0.8.2',
     date: '04/2026',
     label: 'Security Update',
-    current: false,
     entries: [
-      { version: '', date: '', tag: 'big',      text: 'Atualização de segurança completa — todos os endpoints agora exigem autenticação interna.' },
-      { version: '', date: '', tag: 'melhoria', text: 'API Key interna (X-API-Key) protege toda a API — acesso sem credencial retorna 403.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Mensagens de erro sanitizadas — detalhes internos não vazam mais para o cliente.' },
-      { version: '', date: '', tag: 'melhoria', text: 'CORS restrito a métodos e headers específicos (GET, POST, Content-Type, Authorization).' },
-      { version: '', date: '', tag: 'melhoria', text: 'Chave do Gemini configurada de forma segura — nunca armazenada no objeto, jamais aparece em logs.' },
-      { version: '', date: '', tag: 'fix',      text: '.gitignore atualizado para bloquear .env*, *.key e *.pem — impossível commitar secrets por acidente.' },
+      { tag: 'big',      text: 'Atualização de segurança completa — todos os endpoints agora exigem autenticação interna.' },
+      { tag: 'melhoria', text: 'API Key interna (X-API-Key) protege toda a API — acesso sem credencial retorna 403.' },
+      { tag: 'melhoria', text: 'Mensagens de erro sanitizadas — detalhes internos não vazam mais para o cliente.' },
+      { tag: 'melhoria', text: 'CORS restrito a métodos e headers específicos.' },
+      { tag: 'melhoria', text: 'Chave do Gemini configurada de forma segura — nunca armazenada em logs.' },
+      { tag: 'fix',       text: '.gitignore bloqueia .env*, *.key e *.pem — impossível commitar secrets por acidente.' },
     ],
   },
   {
     version: 'Alpha v0.8.1',
     date: '04/2026',
-    label: '',
-    current: false,
     entries: [
-      { version: '', date: '', tag: 'melhoria', text: 'Recomendações de campeão agora usam 8 dimensões (modelo Neo-Artemis) — Agressividade, Mapa, Eficiência, Pressão, Sobrevivência, Utilidade, Early Game e Consistência.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Scores mais realistas — a fórmula combina similaridade de cosseno com distância euclidiana, acabando com os 100% fáceis.' },
-      { version: '', date: '', tag: 'novo',      text: 'Radar chart nos detalhes da recomendação — veja seu perfil vs o campeão em um gráfico de 8 eixos ao clicar.' },
-      { version: '', date: '', tag: 'novo',      text: 'Mapa completo de runas — todas as runas menores (Feitiçaria, Determinação, etc.) agora exibem ícone correto na tab de Build.' },
+      { tag: 'melhoria', text: 'Recomendações de campeão agora usam 8 dimensões (modelo Neo-Artemis).' },
+      { tag: 'melhoria', text: 'Scores mais realistas — fórmula combina cosseno com distância euclidiana.' },
+      { tag: 'novo',      text: 'Radar chart nos detalhes da recomendação — veja seu perfil vs o campeão.' },
+      { tag: 'novo',      text: 'Mapa completo de runas com ícones corretos na tab de Build.' },
     ],
   },
   {
     version: 'Alpha v0.8.0',
     date: '04/2026',
     label: 'Big Update',
-    current: false,
     entries: [
-      { version: '', date: '', tag: 'big',      text: 'Maior atualização desde o lançamento — nova interface, IA integrada, recomendações e monetização.' },
-      { version: '', date: '', tag: 'novo',      text: 'Busca inteligente com autocomplete — digite o nome e veja sugestões instantâneas de jogadores já cadastrados.' },
-      { version: '', date: '', tag: 'novo',      text: 'Página de Itens — ranking de todos os itens por winrate e popularidade, com filtros por role e patch.' },
-      { version: '', date: '', tag: 'novo',      text: 'Recomendações de campeão por lane — a Metis analisa seu perfil e sugere picks por posição (Diana JG ≠ Diana Mid).' },
-      { version: '', date: '', tag: 'novo',      text: 'Chat com IA Metis funcionando — conectado ao Gemini Flash Lite para respostas táticas reais.' },
-      { version: '', date: '', tag: 'novo',      text: 'Metis Score nas partidas — nota de performance por role com cores de elo (Iron a Challenger).' },
-      { version: '', date: '', tag: 'novo',      text: 'Análise de equipe na partida — gráficos comparando os times em kills, ouro, dano, visão e CS.' },
-      { version: '', date: '', tag: 'novo',      text: 'Tab de Build na partida — itens finais, feitiços e runas completas (primária + secundária) de cada jogador.' },
-      { version: '', date: '', tag: 'novo',      text: 'Jogou com / Nemesis — veja quem jogou ao seu lado ou contra você com mais frequência.' },
-      { version: '', date: '', tag: 'novo',      text: 'Histórico de nomes — se um jogador mudou de nick, o sistema detecta e mostra os nomes anteriores.' },
-      { version: '', date: '', tag: 'novo',      text: 'Página de Planos — Free, Doador, Premium e Pro com emblemas de elo (Silver a Challenger).' },
-      { version: '', date: '', tag: 'melhoria',  text: 'Tier List com badges de tier (S+ a D), dropdown de patch e emblemas de elo maiores nos filtros.' },
-      { version: '', date: '', tag: 'melhoria',  text: 'Perfil do jogador expandido — layout em 2 colunas, resumo da temporada, filtros por season/patch/role.' },
-      { version: '', date: '', tag: 'melhoria',  text: 'Matchups agora mostram winrate normalizado (vs Média) para identificar counters reais.' },
-      { version: '', date: '', tag: 'melhoria',  text: 'Header unificado em todas as páginas — logo Metis sempre volta ao menu, navegação consistente.' },
-      { version: '', date: '', tag: 'melhoria',  text: 'Scoreboard da partida ordenado por role (Top → JG → Mid → ADC → SUP).' },
-      { version: '', date: '', tag: 'melhoria',  text: 'Light mode refinado — melhor contraste e legibilidade.' },
-    ],
-  },
-  {
-    version: 'Alpha v0.7.1',
-    date: '04/2026',
-    label: '',
-    current: false,
-    entries: [
-      { version: '', date: '', tag: 'fix', text: 'Histórico de partidas agora sempre aparece do mais recente ao mais antigo.' },
-      { version: '', date: '', tag: 'fix', text: 'Data da partida mostra quando o jogo foi jogado, não quando foi importado para o banco.' },
-      { version: '', date: '', tag: 'fix', text: 'Botão "Ver partidas novas" não travava mais com erro 500 em determinadas condições.' },
+      { tag: 'big',      text: 'Maior atualização desde o lançamento — nova interface, IA integrada, recomendações e monetização.' },
+      { tag: 'novo',      text: 'Busca inteligente com autocomplete de jogadores.' },
+      { tag: 'novo',      text: 'Página de Itens — ranking por winrate e popularidade.' },
+      { tag: 'novo',      text: 'Recomendações por lane — Diana JG ≠ Diana Mid.' },
+      { tag: 'novo',      text: 'Chat com IA Metis funcionando — conectado ao Gemini Flash Lite.' },
+      { tag: 'novo',      text: 'Metis Score nas partidas — nota de performance por role.' },
+      { tag: 'novo',      text: 'Análise de equipe na partida — gráficos comparando times.' },
+      { tag: 'novo',      text: 'Tab de Build na partida — itens, feitiços e runas completos.' },
+      { tag: 'novo',      text: 'Jogou com / Nemesis — com quem você joga mais, e contra quem.' },
+      { tag: 'novo',      text: 'Histórico de nomes — detecta mudanças de nickname.' },
+      { tag: 'novo',      text: 'Página de Planos com emblemas de elo (Silver a Challenger).' },
+      { tag: 'melhoria', text: 'Tier List com badges de tier, filtro de patch e emblemas maiores.' },
+      { tag: 'melhoria', text: 'Perfil expandido — 2 colunas, resumo da season, filtros.' },
     ],
   },
   {
     version: 'Alpha v0.7.0',
     date: '04/2026',
-    label: '',
-    current: false,
     entries: [
-      { version: '', date: '', tag: 'novo',     text: 'Página de campeão em /champions/[nome] — overview, builds, matchups e sinergias com filtros de lane, servidor e patch.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Tier List: clicar no nome de um campeão abre a página do campeão diretamente.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Cards de partida: novo botão "Campeão" para acessar a página do campeão jogado.' },
-      { version: '', date: '', tag: 'fix',      text: 'Ícones de lane e emblemas de elo na Tier List estavam quebrados — corrigidos com assets do CommunityDragon.' },
-    ],
-  },
-  {
-    version: 'Alpha v0.6.6',
-    date: '04/2026',
-    label: '',
-    current: false,
-    entries: [
-      { version: '', date: '', tag: 'novo',     text: 'Painel de administração em /admin — estatísticas do sistema em tempo real.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Botão "Ver partidas novas" agora tem cooldown de 5 minutos com contador regressivo visível.' },
-      { version: '', date: '', tag: 'fix',      text: 'Cooldown persiste mesmo ao recarregar a página — sem burlar o limite ao dar F5.' },
+      { tag: 'novo',      text: 'Página de campeão em /champions/[nome] — overview, builds, matchups, sinergias.' },
+      { tag: 'melhoria', text: 'Tier List: clicar no campeão abre a página dele.' },
+      { tag: 'fix',       text: 'Ícones de lane e emblemas de elo na Tier List corrigidos.' },
     ],
   },
   {
     version: 'Alpha v0.6.5',
     date: '04/2026',
-    label: '',
-    current: false,
     entries: [
-      { version: '', date: '', tag: 'novo',     text: 'Timeline da partida — gráfico de CS/m, Ouro e XP ao longo do tempo para todos os jogadores.' },
-      { version: '', date: '', tag: 'novo',     text: 'Seu jogador aparece destacado na timeline com linha mais grossa e cores intensas.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Página de detalhes da partida ganhou seção colapsável "Timeline da Partida" abaixo do scoreboard.' },
-    ],
-  },
-  {
-    version: 'Alpha v0.6.4',
-    date: '04/2026',
-    label: '',
-    current: false,
-    entries: [
-      { version: '', date: '', tag: 'novo',     text: 'Cards de partida mostram itens, keystone, CS/m e nível final de cada campeão.' },
-      { version: '', date: '', tag: 'novo',     text: 'Resumo do jogador no topo do perfil — winrate, KDA médio, CS/m e campeão mais jogado.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Data relativa e patch de cada partida visíveis direto no histórico ("há 2 dias · Patch 16.7").' },
-      { version: '', date: '', tag: 'melhoria', text: 'CS/m colorido por performance — verde ≥8, amarelo ≥6, vermelho abaixo.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Temas de cor agora salvam automaticamente ao fazer login e sincronizam entre dispositivos.' },
-      { version: '', date: '', tag: 'novo',     text: 'Cinco temas de cor com modo claro e escuro separados — incluindo tema Dourado.' },
-    ],
-  },
-  {
-    version: 'Alpha v0.6.3',
-    date: '04/2026',
-    label: '',
-    current: false,
-    entries: [
-      { version: '', date: '', tag: 'novo',     text: 'Histórico de partidas carrega 15 partidas na abertura e mais 10 por clique em "Carregar mais".' },
-      { version: '', date: '', tag: 'novo',     text: 'Apenas partidas ranqueadas (SoloQ e Flex) aparecem no histórico — remakes e outras filas ficam separados.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Ícones de posição (Top, Jungle, Mid, ADC, Suporte) e emblemas de elo agora carregam localmente, sem depender de CDN externa.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Busca de jogadores separada em dois campos: Nome e #TAG, com exemplo visível.' },
-      { version: '', date: '', tag: 'fix',      text: 'Campeões novos (Yunara e outros) agora aparecem com foto corretamente.' },
-    ],
-  },
-  {
-    version: 'Alpha v0.6.2',
-    date: '04/2026',
-    label: '',
-    entries: [
-      { version: '', date: '', tag: 'novo',     text: 'Quatro temas de cor — Azul, Roxo, Verde e Vermelho. Preferência salva automaticamente.' },
-      { version: '', date: '', tag: 'novo',     text: 'Destaques do Meta na home — top 6 campeões do patch visíveis sem precisar de login.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Navegação entre todas as telas disponível em qualquer página, inclusive Tier List sem login.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Badge de versão Alpha visível no header.' },
+      { tag: 'novo',      text: 'Timeline da partida — CS/m, Ouro e XP ao longo do tempo.' },
+      { tag: 'novo',      text: 'Seu jogador destacado na timeline com linha mais grossa.' },
     ],
   },
   {
     version: 'Alpha v0.6.1',
     date: '04/2026',
-    label: '',
     entries: [
-      { version: '', date: '', tag: 'novo', text: 'Tier List de campeões com filtros por posição, região e patch.' },
-      { version: '', date: '', tag: 'novo', text: 'Histórico de partidas detalhado por jogador — KDA, ouro, dano e duração.' },
-      { version: '', date: '', tag: 'novo', text: 'Cadastro de conta com confirmação por e-mail.' },
-      { version: '', date: '', tag: 'novo', text: 'Página "O que é novo?" e "Conheça a Equipe".' },
-      { version: '', date: '', tag: 'fix',  text: 'Correções de estabilidade no servidor e no pipeline de dados.' },
-    ],
-  },
-  {
-    version: 'Alpha v0.5.0',
-    date: '04/2026',
-    label: '',
-    entries: [
-      { version: '', date: '', tag: 'novo',     text: 'Sistema de supervisão — salve jogadores favoritos na sua conta.' },
-      { version: '', date: '', tag: 'novo',     text: 'Chat Metis disponível para contas premium.' },
-      { version: '', date: '', tag: 'novo',     text: 'Perfis públicos de jogadores — sem precisar de login.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Busca por Riot ID (Nome#TAG) além de PUUID.' },
+      { tag: 'novo', text: 'Tier List de campeões com filtros por posição, região e patch.' },
+      { tag: 'novo', text: 'Histórico detalhado por jogador.' },
+      { tag: 'novo', text: 'Cadastro com confirmação por e-mail.' },
+      { tag: 'novo', text: 'Páginas "O que é novo?" e "Conheça a Equipe".' },
     ],
   },
   {
     version: 'Alpha v0.4.0',
     date: '04/2026',
-    label: '',
     entries: [
-      { version: '', date: '', tag: 'novo', text: 'Lançamento do site Metis.' },
-      { version: '', date: '', tag: 'novo', text: 'Login com e-mail e senha.' },
-      { version: '', date: '', tag: 'novo', text: 'Busca de jogadores por PUUID ou Riot ID.' },
-    ],
-  },
-  {
-    version: 'Alpha v0.3.0',
-    date: '03/2026',
-    label: '',
-    entries: [
-      { version: '', date: '', tag: 'novo',     text: 'Estatísticas médias de campeões — winrate, KDA, ouro, DPM.' },
-      { version: '', date: '', tag: 'novo',     text: 'Sincronização de partidas via Riot API.' },
-      { version: '', date: '', tag: 'melhoria', text: 'Pipeline de dados automatizado rodando diariamente.' },
-    ],
-  },
-  {
-    version: 'Alpha v0.2.0',
-    date: '03/2026',
-    label: '',
-    entries: [
-      { version: '', date: '', tag: 'novo', text: 'Esqueleto do projeto — backend FastAPI, banco Supabase e repositório estruturados.' },
-      { version: '', date: '', tag: 'novo', text: 'Planejamento no Trello e definição das tecnologias da stack.' },
+      { tag: 'novo', text: 'Lançamento do site Metis.' },
+      { tag: 'novo', text: 'Login com e-mail e senha.' },
+      { tag: 'novo', text: 'Busca de jogadores por PUUID ou Riot ID.' },
     ],
   },
   {
     version: 'Alpha v0.1.0',
     date: '03/2026',
-    label: '',
     entries: [
-      { version: '', date: '', tag: 'novo', text: 'Criação do repositório e estrutura inicial de pastas.' },
+      { tag: 'novo', text: 'Criação do repositório e estrutura inicial.' },
     ],
   },
 ]
 
-const TAG_STYLES: Record<Entry['tag'], string> = {
-  novo: 'bg-metis-accent/15 text-metis-accent border border-metis-accent/30',
-  melhoria: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
-  fix: 'bg-red-500/10 text-red-400 border border-red-500/20',
-  big: 'bg-purple-500/15 text-purple-400 border border-purple-500/30',
-}
-
-const TAG_LABELS: Record<Entry['tag'], string> = {
-  novo: 'novo',
-  melhoria: 'melhoria',
-  fix: 'fix',
-  big: 'big update',
+const TAG_META: Record<TagKind, { label: string; bg: string; fg: string }> = {
+  big:      { label: 'BIG UPDATE', bg: 'rgba(139,127,255,0.15)',  fg: 'var(--m-violet)' },
+  novo:     { label: 'NOVO',        bg: 'rgba(74,222,128,0.15)',   fg: 'var(--m-green)'  },
+  melhoria: { label: 'MELHORIA',    bg: 'rgb(var(--m-accent-rgb) / 0.15)', fg: 'var(--m-accent)' },
+  fix:      { label: 'FIX',         bg: 'rgba(96,165,250,0.15)',   fg: 'var(--m-blue)'   },
 }
 
 export default function ChangelogPage() {
   return (
-    <div className="min-h-screen bg-metis-bg text-metis-text">
-      <Header />
+    <div className="metis-scope" style={{ minHeight: '100vh', background: 'var(--m-bg)' }}>
+      <AppHeader active="changelog" />
 
-      <main className="max-w-2xl mx-auto px-4 py-12">
-        {/* Hero */}
-        <div className="mb-12">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="w-4 h-4 text-metis-accent" />
-            <span className="text-xs font-medium text-metis-accent uppercase tracking-widest">Novidades</span>
-          </div>
-          <h1 className="text-3xl font-bold text-metis-text mb-2">O que é novo?</h1>
-          <p className="text-metis-text-dim text-sm">
-            Acompanhe as evoluções da Metis. Cada versão traz melhorias reais — sem promessas, só entregas.
-          </p>
+      <div style={{ maxWidth: 760, margin: '0 auto', padding: '40px 28px 48px' }}>
+        {/* Header */}
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 11,
+            color: 'var(--m-accent)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.12em',
+            fontWeight: 600,
+            marginBottom: 14,
+          }}
+        >
+          <Icon name="sparkles" size={12} /> Novidades
         </div>
+        <h1
+          className="font-display"
+          style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 8 }}
+        >
+          O que é novo?
+        </h1>
+        <p style={{ fontSize: 14, color: 'var(--m-text-dim)', marginBottom: 36 }}>
+          Acompanhe as evoluções da Metis. Cada versão traz melhorias reais — sem promessas, só entregas.
+        </p>
 
-        {/* Timeline */}
-        <div className="relative">
-          {/* Linha vertical */}
-          <div className="absolute left-3 top-2 bottom-0 w-px bg-metis-border" />
+        {/* Timeline vertical */}
+        <div style={{ position: 'relative', paddingLeft: 32 }}>
+          <div
+            style={{
+              position: 'absolute',
+              left: 9,
+              top: 12,
+              bottom: 12,
+              width: 2,
+              background: 'var(--m-border)',
+            }}
+          />
+          {RELEASES.map((rel) => (
+            <div key={rel.version} style={{ position: 'relative', marginBottom: 28 }}>
+              {/* Node */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: -28,
+                  top: 4,
+                  width: 20,
+                  height: 20,
+                  borderRadius: '50%',
+                  background: rel.current ? 'var(--m-accent)' : 'var(--m-surface)',
+                  border: `2px solid ${rel.current ? 'var(--m-accent)' : 'var(--m-border-2)'}`,
+                  boxShadow: rel.current ? '0 0 0 5px rgb(var(--m-accent-rgb) / 0.15)' : 'none',
+                }}
+              />
 
-          <div className="flex flex-col gap-10">
-            {RELEASES.map((release) => (
-              <div key={release.version} className="relative pl-10">
-                {/* Dot */}
-                <div className={`absolute left-0 top-1.5 w-6 h-6 rounded-full flex items-center justify-center border-2 ${
-                  release.current
-                    ? 'bg-metis-accent border-metis-accent'
-                    : 'bg-metis-surface border-metis-border'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full ${release.current ? 'bg-white' : 'bg-metis-text-dim'}`} />
-                </div>
-
-                {/* Header da versão */}
-                <div className="flex items-center gap-3 mb-4">
-                  <h2 className="text-lg font-bold text-metis-text">{release.version}</h2>
-                  {release.current && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-metis-accent/20 text-metis-accent border border-metis-accent/30 font-medium">
-                      atual
-                    </span>
-                  )}
-                  <span className="text-xs text-metis-text-dim ml-auto">{release.date}</span>
-                </div>
-
-                {/* Entries */}
-                <div className="bg-metis-surface border border-metis-border rounded-xl overflow-hidden">
-                  {release.entries.map((entry, i) => (
-                    <div
-                      key={i}
-                      className={`flex items-start gap-3 px-4 py-3 ${
-                        i < release.entries.length - 1 ? 'border-b border-metis-border/50' : ''
-                      }`}
-                    >
-                      <span className={`mt-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide flex-shrink-0 ${TAG_STYLES[entry.tag]}`}>
-                        {TAG_LABELS[entry.tag]}
-                      </span>
-                      <p className="text-sm text-metis-text leading-relaxed">{entry.text}</p>
-                    </div>
-                  ))}
-                </div>
+              {/* Version header */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+                <h2 className="font-display" style={{ fontSize: 22, fontWeight: 700 }}>
+                  {rel.version}
+                </h2>
+                {rel.current && (
+                  <span
+                    style={{
+                      padding: '2px 8px',
+                      background: 'rgb(var(--m-accent-rgb) / 0.15)',
+                      border: '1px solid rgb(var(--m-accent-rgb) / 0.3)',
+                      borderRadius: 4,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: 'var(--m-accent)',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    ATUAL
+                  </span>
+                )}
+                <div style={{ flex: 1 }} />
+                <span style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>{rel.date}</span>
               </div>
-            ))}
-          </div>
+
+              {/* Label destaque (se houver) */}
+              {rel.label && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 8,
+                    padding: '10px 12px',
+                    background: 'rgba(139,127,255,0.06)',
+                    border: '1px solid rgba(139,127,255,0.2)',
+                    borderRadius: 8,
+                    marginBottom: 10,
+                  }}
+                >
+                  <span
+                    style={{
+                      padding: '2px 7px',
+                      background: TAG_META.big.bg,
+                      color: TAG_META.big.fg,
+                      borderRadius: 4,
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: '0.06em',
+                      flexShrink: 0,
+                      marginTop: 1,
+                    }}
+                  >
+                    {TAG_META.big.label}
+                  </span>
+                  <span style={{ fontSize: 13, color: 'var(--m-text)', lineHeight: 1.5 }}>{rel.label}</span>
+                </div>
+              )}
+
+              {/* Entries box */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  padding: '14px 16px',
+                  background: 'var(--m-surface)',
+                  border: '1px solid var(--m-border)',
+                  borderRadius: 12,
+                }}
+              >
+                {rel.entries.map((entry, i) => {
+                  const m = TAG_META[entry.tag]
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                      <span
+                        style={{
+                          padding: '2px 7px',
+                          background: m.bg,
+                          color: m.fg,
+                          borderRadius: 4,
+                          fontSize: 9,
+                          fontWeight: 700,
+                          letterSpacing: '0.06em',
+                          flexShrink: 0,
+                          marginTop: 1,
+                          minWidth: 68,
+                          textAlign: 'center',
+                        }}
+                      >
+                        {m.label}
+                      </span>
+                      <span style={{ fontSize: 12, color: 'var(--m-text-dim)', lineHeight: 1.55 }}>
+                        {entry.text}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
 
-        <div className="mt-16 text-center">
-          <p className="text-xs text-metis-text-dim">
-            Metis está em Alpha — bugs fazem parte. Encontrou algo?{' '}
-            <Link href="/chat" className="text-metis-accent hover:underline">
-              Fale com a gente.
+        {/* Footer */}
+        <div style={{ marginTop: 32, textAlign: 'center' }}>
+          <p style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>
+            Metis está em pre-release — bugs fazem parte. Encontrou algo?{' '}
+            <Link
+              href="/chat"
+              className="m-hover-link"
+              style={{ color: 'var(--m-accent)', textDecoration: 'none' }}
+            >
+              Fale com a Metis.
             </Link>
           </p>
         </div>
-      </main>
+      </div>
     </div>
   )
 }

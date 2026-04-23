@@ -1,6 +1,6 @@
 # Metis — Plano Atual
 
-*Ultima sync: 2026-04-14 | Versao atual: p-0.9.0*
+*Ultima sync: 2026-04-22 | Versao atual: p-0.9.15 — REDESIGN COMPLETO 🎉*
 
 ---
 
@@ -14,6 +14,43 @@
 | v0.8.2 | ✅ Concluido | Security: API key middleware, CORS restrito, erros sanitizados, Gemini seguro |
 | v0.8.3 | ✅ Concluido | Gemini 2.5 Flash |
 | p-0.9.0 | ✅ Concluido | Guardrail LoL, token limits por tier, barra de uso, SDK google-genai |
+| p-0.9.1 → p-0.9.4 | ✅ Concluido | Bans/pickrate/banrate, ETL local, filtro impopulares, Bronze HTML guides, bugfixes |
+| p-0.9.5 | ✅ Concluido | Redesign: Fundação (tokens `--m-*`, fontes Space Grotesk/JetBrains Mono, `components/design/` com 18 primitives) |
+| p-0.9.6 | ✅ Concluido | Redesign: Home + ajustes do design system (auth real no header, modo claro removido, hover utilities, ícones oficiais de role, `--m-accent` seguindo switcher, counts reais do Supabase) |
+| p-0.9.7 | ✅ Concluido | Redesign: Tier List (`app/champions/page.tsx` — agrupamento por tier com cards responsivos, filtros preservados) |
+| p-0.9.8 | ✅ Concluido | Redesign: Itens (`app/items/page.tsx` — 2 spotlights top-picks/top-WR + tabela densa, filtros role/patch/busca/sort preservados) |
+| p-0.9.8.1 | ✅ Concluido | Backend: Enriquecer catálogo de itens (tabela `items` no Supabase, script `sync_items.py`, endpoint retorna gold_cost/tags/category/trend) |
+| p-0.9.9 | ✅ Concluido | Redesign: Planos + Cupons (4 tier cards, tabela `coupons`, endpoint público, comparativo + FAQ + empresas reestilizados) |
+| p-0.9.10 | ✅ Concluido | Redesign: Changelog (`app/changelog/page.tsx` — timeline vertical com spine + nodes, tags coloridas, histórico atualizado com p-0.9.5→p-0.9.9) |
+| p-0.9.11 | ✅ Concluido | Redesign: Team (`app/team/page.tsx` — 3 cards com glow decorativo, tags em chips, stats footer) |
+| p-0.9.12 | ✅ Concluido | Redesign: Chat Metis (token bar, thread bubbles, quick prompts, gate premium) + easter egg de código de cupom oculto |
+| p-0.9.13 | ✅ Concluido | Redesign: Player Dashboard (banner, 4 KPIs, winrate cumulativo, tabela campeões, recomendações com DualRadar, match history, sidebar rica) |
+| p-0.9.14 | ✅ Concluido | Redesign: Champion Page (hero violet, 4 sub-tabs, detecção de role impopular) |
+| **p-0.9.15** | ✅ **Concluido** | **Redesign: Match Detail (3 tabs Overview/Análise de Equipe/Builds, TeamBlock com Metis Score, SplitDonut por métrica, timeline de frames reusada). FECHA O REDESIGN 🎉** |
+
+---
+
+## Roadmap Redesign (p-0.9.6 → p-0.9.15)
+
+Baseado no handoff do Claude Design (`metis-design.html` + 10 screens JSX). Uma tela por versao, cada uma consumindo `.metis-scope` + primitives da fundacao p-0.9.5.
+
+| Versao | Tela | Arquivo alvo |
+|--------|------|--------------|
+| ~~p-0.9.6~~ | ~~Home~~ ✅ concluída | ~~`app/page.tsx`~~ |
+| ~~p-0.9.7~~ | ~~Tier List~~ ✅ concluída | ~~`app/champions/page.tsx`~~ |
+| ~~p-0.9.8~~ | ~~Itens~~ ✅ concluída | ~~`app/items/page.tsx`~~ |
+| ~~p-0.9.9~~ | ~~Planos + Cupons~~ ✅ concluída | ~~`app/pricing/page.tsx`~~ |
+| ~~p-0.9.10~~ | ~~Changelog~~ ✅ concluída | ~~`app/changelog/page.tsx`~~ |
+| ~~p-0.9.11~~ | ~~Equipe~~ ✅ concluída | ~~`app/team/page.tsx`~~ |
+| ~~p-0.9.12~~ | ~~Chat Metis~~ ✅ concluída | ~~`app/chat/page.tsx`~~ |
+| ~~p-0.9.13~~ | ~~Player dashboard~~ ✅ concluída | ~~`app/players/[puuid]/page.tsx`~~ |
+| ~~p-0.9.14~~ | ~~Champion page~~ ✅ concluída | ~~`app/champions/[champion]/page.tsx`~~ |
+| ~~p-0.9.15~~ | ~~Match detail~~ ✅ concluída (timeline interativa com mapa fica pro Bloco 0) | ~~`app/matches/[match_id]/page.tsx`~~ |
+
+**Redesign Metis 1.0 — FECHADO.** Próximos passos em aberto:
+- `/admin` e `/auth` continuam no estilo antigo (fora do handoff do Claude Design). Decidir se migrar numa próxima versão.
+- Sistema antigo `--metis-*` no CSS pode ser removido quando admin/auth migrarem.
+- Roadmap analytics: Bloco 0 (parsing eventos timeline) destrava timeline interativa completa, builds filtradas, matchup profundo — seguir no M2.
 
 ---
 

@@ -1,171 +1,363 @@
 'use client'
 
-import Link from 'next/link'
-import { ExternalLink } from 'lucide-react'
-import { Header } from '@/components/ui/Header'
+import { useEffect, useState } from 'react'
+import { AppHeader, Stat, Icon } from '@/components/design'
 
+// ── Dinâmico: GitHub API + cálculo local ────────────────────────
+const REPO = 'Czar210/Metis'
+// Primeiro commit do repo: `git log --reverse` retornou "2026-02-24".
+const FIRST_COMMIT_DATE = new Date('2026-02-24T10:02:07-03:00')
+
+/** Parseia o header Link do GitHub pra extrair o total de páginas (= total de commits). */
+function totalCommitsFromLinkHeader(link: string | null): number | null {
+  if (!link) return null
+  const match = link.match(/<[^>]+[?&]page=(\d+)[^>]*>;\s*rel="last"/)
+  return match ? parseInt(match[1], 10) : null
+}
+
+/** Estima linhas de código a partir de bytes por linguagem.
+ *  Constantes empíricas (aprox chars/linha) por linguagem, com fallback 30. */
+function estimateLines(bytesByLang: Record<string, number>): number {
+  const charsPerLine: Record<string, number> = {
+    TypeScript: 35, TSX: 35, JavaScript: 32, Python: 28,
+    SQL: 45, CSS: 40, HTML: 50, Shell: 35, Dockerfile: 35,
+  }
+  let total = 0
+  for (const [lang, bytes] of Object.entries(bytesByLang)) {
+    total += bytes / (charsPerLine[lang] ?? 30)
+  }
+  return Math.round(total)
+}
+
+// ── Types ──────────────────────────────────────────────────────
 type Member = {
   name: string
   initials: string
+  color: string          // hex do accent do membro
   title: string
-  company: string
-  roleInMetis: string[]
-  quote: string
-  links: { label: string; href: string }[]
-  color: {
-    accent: string
-    border: string
-    bg: string
-    badge: string
-    text: string
-    dot: string
-  }
+  company?: string
+  tags: string[]
+  quote?: string
+  link: { label: string; href: string }
 }
 
+// ── Data ───────────────────────────────────────────────────────
 const TEAM: Member[] = [
   {
     name: 'César Sibila',
     initials: 'CS',
+    color: '#F5C842',
     title: 'Engenheiro de Dados',
     company: 'AI Engineer Jr @ Izii',
-    roleInMetis: ['Tech Lead', 'Data Architect', 'CI/CD & Infra'],
+    tags: ['Tech Lead', 'Data Architect', 'CI/CD & Infra'],
     quote: 'Construo software como se fosse pra eu mesmo usar, e pra falar a verdade esse geralmente é o caso.',
-    links: [
-      { label: 'Portfólio', href: 'https://cesarsibila.vercel.app/' },
-    ],
-    color: {
-      accent: '#D4A017',
-      border: 'border-amber-500/40',
-      bg: 'bg-amber-500/5',
-      badge: 'bg-amber-500/15 text-amber-400 border border-amber-500/25',
-      text: 'text-amber-400',
-      dot: 'bg-amber-400',
-    },
+    link: { label: 'Portfólio', href: 'https://cesarsibila.vercel.app/' },
   },
   {
     name: 'Enzo Takida',
     initials: 'ET',
+    color: '#F87171',
     title: 'Data Analytics',
-    company: '',
-    roleInMetis: ['Frontend & UX', 'Supabase Auth', 'Design System'],
-    quote: '',
-    links: [
-      { label: 'LinkedIn', href: 'https://www.linkedin.com/in/enzo-kikuji-takida/' },
-    ],
-    color: {
-      accent: '#DC2626',
-      border: 'border-red-500/40',
-      bg: 'bg-red-500/5',
-      badge: 'bg-red-500/15 text-red-400 border border-red-500/25',
-      text: 'text-red-400',
-      dot: 'bg-red-400',
-    },
+    tags: ['Frontend & UX', 'Supabase Auth', 'Design System'],
+    link: { label: 'LinkedIn', href: 'https://www.linkedin.com/in/enzo-kikuji-takida/' },
   },
   {
     name: 'André Messina',
     initials: 'AM',
+    color: '#4ADE80',
     title: 'Cientista de Dados Jr',
     company: 'Data Analytics @ Rappi',
-    roleInMetis: ['Backend & AI Engineer', 'Arquitetura de Dados', 'Prompt Engineering'],
-    quote: '',
-    links: [
-      { label: 'LinkedIn', href: 'https://www.linkedin.com/in/andre-messina-506179239/' },
-    ],
-    color: {
-      accent: '#16A34A',
-      border: 'border-green-500/40',
-      bg: 'bg-green-500/5',
-      badge: 'bg-green-500/15 text-green-400 border border-green-500/25',
-      text: 'text-green-400',
-      dot: 'bg-green-400',
-    },
+    tags: ['Backend & AI Engineer', 'Arquitetura de Dados', 'Prompt Engineering'],
+    link: { label: 'LinkedIn', href: 'https://www.linkedin.com/in/andre-messina-506179239/' },
   },
 ]
 
 export default function TeamPage() {
-  return (
-    <div className="min-h-screen bg-metis-bg text-metis-text">
-      <Header />
+  const [commitCount, setCommitCount] = useState<number | null>(null)
+  const [lineCount, setLineCount] = useState<number | null>(null)
 
-      <main className="max-w-5xl mx-auto px-4 py-12">
-        {/* Hero */}
-        <div className="mb-12 text-center">
-          <p className="text-xs font-medium text-metis-accent uppercase tracking-widest mb-3">// Equipe</p>
-          <h1 className="text-3xl font-bold text-metis-text mb-3">Quem faz a Metis</h1>
-          <p className="text-metis-text-dim text-sm max-w-md mx-auto">
+  // Dias construindo: diff entre hoje e o primeiro commit (cálculo local, não API).
+  const daysBuilding = Math.max(
+    1,
+    Math.floor((Date.now() - FIRST_COMMIT_DATE.getTime()) / 86_400_000)
+  )
+  // Red Bulls do André = 4 por dia.
+  const redBulls = daysBuilding * 4
+
+  useEffect(() => {
+    // GitHub API pública (60 req/h por IP, sem auth).
+    // Total de commits: abrimos a lista com per_page=1 e lemos o header Link → ?page=N&rel="last"
+    fetch(`https://api.github.com/repos/${REPO}/commits?per_page=1`)
+      .then((r) => {
+        const linkHeader = r.headers.get('link') ?? r.headers.get('Link')
+        const n = totalCommitsFromLinkHeader(linkHeader)
+        if (n !== null) setCommitCount(n)
+        else if (r.ok) {
+          // Se só tem 1 página, não vem Link header — contar via length.
+          r.json().then((d) => {
+            if (Array.isArray(d)) setCommitCount(d.length)
+          })
+        }
+      })
+      .catch(() => {})
+
+    // Bytes por linguagem → estimativa de linhas
+    fetch(`https://api.github.com/repos/${REPO}/languages`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: Record<string, number> | null) => {
+        if (d) setLineCount(estimateLines(d))
+      })
+      .catch(() => {})
+  }, [])
+
+  const formatLines = (n: number): string => {
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+    return String(n)
+  }
+
+  return (
+    <div className="metis-scope" style={{ minHeight: '100vh', background: 'var(--m-bg)' }}>
+      <AppHeader active="team" />
+
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '52px 28px 48px' }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 44 }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 11,
+              color: 'var(--m-accent)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.14em',
+              fontWeight: 700,
+              marginBottom: 14,
+            }}
+          >
+            // Equipe
+          </div>
+          <h1
+            className="font-display"
+            style={{ fontSize: 44, fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 12 }}
+          >
+            Quem faz a <span style={{ color: 'var(--m-accent)' }}>Metis</span>
+          </h1>
+          <p
+            style={{
+              fontSize: 15,
+              color: 'var(--m-text-dim)',
+              maxWidth: 540,
+              margin: '0 auto',
+              lineHeight: 1.55,
+            }}
+          >
             Três pessoas construindo algo que gostariam de ter tido quando estavam aprendendo o jogo.
           </p>
         </div>
 
         {/* Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {TEAM.map((member) => (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          {TEAM.map((m) => (
             <div
-              key={member.name}
-              className={`relative rounded-2xl border ${member.color.border} ${member.color.bg} p-6 flex flex-col gap-5 transition-all duration-300 hover:scale-[1.02]`}
+              key={m.name}
+              style={{
+                padding: 24,
+                background: 'var(--m-surface)',
+                border: `1px solid ${m.color}33`,
+                borderRadius: 16,
+                position: 'relative',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
             >
-              {/* Glow sutil no topo */}
+              {/* Glow decorativo */}
               <div
-                className="absolute inset-x-0 top-0 h-px rounded-t-2xl opacity-60"
-                style={{ background: `linear-gradient(to right, transparent, ${member.color.accent}, transparent)` }}
+                style={{
+                  position: 'absolute',
+                  top: -40,
+                  right: -40,
+                  width: 140,
+                  height: 140,
+                  borderRadius: '50%',
+                  background: `radial-gradient(circle, ${m.color}22, transparent 70%)`,
+                  filter: 'blur(30px)',
+                  pointerEvents: 'none',
+                }}
               />
 
-              {/* Avatar + Nome */}
-              <div className="flex items-center gap-3">
+              {/* Header do card */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  marginBottom: 14,
+                  position: 'relative',
+                }}
+              >
                 <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold text-metis-bg flex-shrink-0"
-                  style={{ backgroundColor: member.color.accent }}
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: '50%',
+                    background: m.color,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#0B0D12',
+                    fontSize: 16,
+                    fontWeight: 800,
+                    flexShrink: 0,
+                  }}
                 >
-                  {member.initials}
+                  {m.initials}
                 </div>
-                <div>
-                  <p className="font-semibold text-metis-text leading-tight">{member.name}</p>
-                  <p className={`text-xs font-medium mt-0.5 ${member.color.text}`}>{member.title}</p>
-                  {member.company && (
-                    <p className="text-xs text-metis-text-dim">{member.company}</p>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="font-display" style={{ fontSize: 17, fontWeight: 600 }}>
+                    {m.name}
+                  </div>
+                  <div style={{ fontSize: 11, color: m.color, fontWeight: 600, marginTop: 2 }}>
+                    {m.title}
+                  </div>
+                  {m.company && (
+                    <div style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 1 }}>
+                      {m.company}
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* Roles no Metis */}
-              <div className="flex flex-wrap gap-1.5">
-                {member.roleInMetis.map((role) => (
-                  <span key={role} className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${member.color.badge}`}>
-                    {role}
+              {/* Tags */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 6,
+                  marginBottom: 16,
+                  position: 'relative',
+                }}
+              >
+                {m.tags.map((t) => (
+                  <span
+                    key={t}
+                    style={{
+                      padding: '3px 10px',
+                      background: `${m.color}1a`,
+                      border: `1px solid ${m.color}40`,
+                      borderRadius: 999,
+                      fontSize: 10,
+                      color: m.color,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {t}
                   </span>
                 ))}
               </div>
 
-              {/* Quote */}
-              <div className="flex-1">
-                {member.quote ? (
-                  <blockquote className="text-sm text-metis-text-dim italic leading-relaxed border-l-2 pl-3" style={{ borderColor: member.color.accent }}>
-                    "{member.quote}"
-                  </blockquote>
-                ) : (
-                  <div className="h-12" />
-                )}
-              </div>
+              {/* Quote (opcional) */}
+              {m.quote ? (
+                <blockquote
+                  style={{
+                    margin: 0,
+                    padding: '10px 12px',
+                    background: 'var(--m-bg)',
+                    border: '1px solid var(--m-border)',
+                    borderLeft: `2px solid ${m.color}`,
+                    borderRadius: 8,
+                    fontSize: 12,
+                    color: 'var(--m-text-dim)',
+                    fontStyle: 'italic',
+                    lineHeight: 1.5,
+                    marginBottom: 14,
+                    position: 'relative',
+                  }}
+                >
+                  &quot;{m.quote}&quot;
+                </blockquote>
+              ) : (
+                <div style={{ flex: 1 }} />
+              )}
 
-              {/* Links */}
-              <div className="flex gap-2 pt-2 border-t border-metis-border/50">
-                {member.links.map((link) => (
-                  <a
-                    key={link.label}
-                    href={link.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors font-medium ${member.color.badge} hover:opacity-80`}
-                  >
-                    {link.label}
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                ))}
-              </div>
+              {/* Link */}
+              <a
+                href={m.link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="m-hover-outline"
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  background: 'transparent',
+                  border: `1px solid ${m.color}`,
+                  borderRadius: 8,
+                  color: m.color,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  textDecoration: 'none',
+                  position: 'relative',
+                }}
+              >
+                {m.link.label}
+                <Icon name="arrowRight" size={12} />
+              </a>
             </div>
           ))}
         </div>
-      </main>
+
+        {/* Stats footer */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 14,
+            marginTop: 36,
+            padding: 24,
+            background: 'var(--m-surface)',
+            border: '1px solid var(--m-border)',
+            borderRadius: 16,
+          }}
+        >
+          <Stat
+            size="lg"
+            label="Dias construindo"
+            value={daysBuilding.toLocaleString('pt-BR')}
+            sub="desde 24/02/2026"
+          />
+          <Stat
+            size="lg"
+            label="Commits"
+            value={commitCount !== null ? commitCount.toLocaleString('pt-BR') : '—'}
+            sub={commitCount !== null ? 'tudo versionado' : 'carregando...'}
+          />
+          <Stat
+            size="lg"
+            label="Linhas de código"
+            value={lineCount !== null ? formatLines(lineCount) : '—'}
+            sub={lineCount !== null ? 'estimado do GitHub /languages' : 'carregando...'}
+            accent="var(--m-cyan)"
+          />
+          <Stat
+            size="lg"
+            label="Red Bulls (André)"
+            value={redBulls.toLocaleString('pt-BR')}
+            sub="A Energia do guerreiro"
+            accent="var(--m-accent)"
+          />
+        </div>
+      </div>
     </div>
   )
 }

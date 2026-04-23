@@ -2,10 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
-import { Search } from 'lucide-react'
-import { Header } from '@/components/ui/Header'
-import { DDRAGON_VERSION } from '@/lib/ddragon'
+import { DDRAGON_VERSION, roleIconPath } from '@/lib/ddragon'
 import { apiFetch } from '@/lib/api'
+import {
+  AppHeader,
+  Card,
+  SectionLabel,
+  Pill,
+  Bar,
+  Icon,
+  type Role,
+} from '@/components/design'
 
 type ItemStat = {
   item_id: number
@@ -13,22 +20,33 @@ type ItemStat = {
   picks: number
   wins: number
   winrate: number
+  // Enriquecido a partir de p-0.9.8.1 (tabela `items` no Supabase).
+  gold_cost?: number
+  tags?: string[]
+  category?: string | null
+  trend?: 'up' | 'down' | 'flat' | null
 }
 
-const ROLES = [
-  { value: '', label: 'Todas as Roles' },
-  { value: 'TOP', label: 'Top' },
-  { value: 'JUNGLE', label: 'Jungle' },
-  { value: 'MIDDLE', label: 'Mid' },
-  { value: 'BOTTOM', label: 'ADC' },
-  { value: 'UTILITY', label: 'Suporte' },
+const ROLES: { v: '' | Role; label: string; iconRole: Role | null }[] = [
+  { v: '',        label: 'Todas',   iconRole: null },
+  { v: 'TOP',     label: 'Top',     iconRole: 'TOP' },
+  { v: 'JUNGLE',  label: 'Jungle',  iconRole: 'JUNGLE' },
+  { v: 'MIDDLE',  label: 'Mid',     iconRole: 'MIDDLE' },
+  { v: 'BOTTOM',  label: 'ADC',     iconRole: 'BOTTOM' },
+  { v: 'UTILITY', label: 'Suporte', iconRole: 'UTILITY' },
 ]
+
+const MIN_PICKS_FOR_WR_SPOTLIGHT = 10
+
+function itemIconUrl(id: number) {
+  return `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/item/${id}.png`
+}
 
 export default function ItemsPage() {
   const [data, setData] = useState<ItemStat[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [role, setRole] = useState('')
+  const [role, setRole] = useState<'' | Role>('')
   const [patches, setPatches] = useState<string[]>([])
   const [patch, setPatch] = useState('')
   const [search, setSearch] = useState('')
@@ -36,7 +54,7 @@ export default function ItemsPage() {
 
   useEffect(() => {
     apiFetch('/api/v1/stats/patches')
-      .then(r => r.ok ? r.json() : [])
+      .then((r) => (r.ok ? r.json() : []))
       .then(setPatches)
       .catch(() => {})
   }, [])
@@ -53,7 +71,7 @@ export default function ItemsPage() {
         if (!res.ok) throw new Error(`Erro ${res.status}`)
         setData(await res.json())
       } catch {
-        setError('Nao foi possivel carregar os itens.')
+        setError('Não foi possível carregar os itens. O backend pode estar offline.')
       } finally {
         setLoading(false)
       }
@@ -61,138 +79,529 @@ export default function ItemsPage() {
     load()
   }, [role, patch])
 
+  // Spotlight: top 3 por picks + top 3 por WR (com amostra mínima).
+  const top3Picks = [...data].sort((a, b) => b.picks - a.picks).slice(0, 3)
+  const top3WR = [...data]
+    .filter((x) => x.picks >= MIN_PICKS_FOR_WR_SPOTLIGHT)
+    .sort((a, b) => b.winrate - a.winrate)
+    .slice(0, 3)
+
+  // Lista filtrada por busca + sort.
+  const searchLower = search.trim().toLowerCase()
   const filtered = data
-    .filter(i => i.item_name.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => sortBy === 'picks' ? b.picks - a.picks : b.winrate - a.winrate)
+    .filter((i) => (searchLower ? i.item_name.toLowerCase().includes(searchLower) : true))
+    .sort((a, b) => (sortBy === 'picks' ? b.picks - a.picks : b.winrate - a.winrate))
+
+  const maxPicks = data.reduce((m, i) => Math.max(m, i.picks), 0) || 1
 
   return (
-    <div className="min-h-screen bg-metis-bg text-metis-text">
-      <Header />
+    <div className="metis-scope" style={{ minHeight: '100vh', background: 'var(--m-bg)' }}>
+      <AppHeader active="items" />
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-metis-text mb-1">Estatisticas de Itens</h1>
-          <p className="text-sm text-metis-text-dim">Winrate e popularidade de cada item no banco Metis.</p>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '28px 28px 48px' }}>
+        {/* Title */}
+        <div style={{ marginBottom: 20 }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--m-text-dim)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              fontWeight: 600,
+              marginBottom: 8,
+            }}
+          >
+            {patch ? `Patch ${patch}` : 'Todos os patches'} · Banco Metis
+          </div>
+          <h1
+            className="font-display"
+            style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 6 }}
+          >
+            Estatísticas de Itens
+          </h1>
+          <p style={{ fontSize: 14, color: 'var(--m-text-dim)' }}>
+            Winrate e popularidade de cada item ·{' '}
+            <span className="tabular" style={{ color: 'var(--m-text)', fontWeight: 600 }}>
+              {data.length.toLocaleString('pt-BR')}
+            </span>{' '}
+            itens no recorte atual
+          </p>
         </div>
+
+        {/* Spotlight duplo: top picks + top WR */}
+        {!loading && !error && data.length > 0 && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
+              gap: 16,
+              marginBottom: 24,
+            }}
+          >
+            <Card>
+              <SectionLabel
+                icon="flame"
+                right={
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: 'var(--m-muted)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    + populares
+                  </span>
+                }
+              >
+                Mais comprados
+              </SectionLabel>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {top3Picks.map((it, i) => (
+                  <div
+                    key={it.item_id}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 4px' }}
+                  >
+                    <div
+                      className="tabular font-display"
+                      style={{
+                        fontSize: 24,
+                        fontWeight: 700,
+                        color: 'var(--m-accent)',
+                        width: 28,
+                        textAlign: 'right',
+                      }}
+                    >
+                      {i + 1}
+                    </div>
+                    <Image
+                      src={itemIconUrl(it.item_id)}
+                      alt={it.item_name}
+                      width={44}
+                      height={44}
+                      unoptimized
+                      style={{
+                        borderRadius: 8,
+                        border: '1px solid var(--m-border-2)',
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{it.item_name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 2 }}>
+                        {it.gold_cost ? `${it.gold_cost.toLocaleString('pt-BR')}g` : `id ${it.item_id}`}
+                        {it.category && ` · ${it.category}`}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div className="tabular" style={{ fontSize: 13, fontWeight: 600 }}>
+                        {it.picks.toLocaleString('pt-BR')}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--m-muted)' }}>picks</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card>
+              <SectionLabel
+                icon="trending"
+                right={
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: 'var(--m-green)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    + eficientes
+                  </span>
+                }
+              >
+                Top winrate (min {MIN_PICKS_FOR_WR_SPOTLIGHT} picks)
+              </SectionLabel>
+              {top3WR.length === 0 ? (
+                <p style={{ fontSize: 12, color: 'var(--m-text-dim)', padding: '20px 4px' }}>
+                  Nenhum item com amostra mínima no recorte atual.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {top3WR.map((it, i) => (
+                    <div
+                      key={it.item_id}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 4px' }}
+                    >
+                      <div
+                        className="tabular font-display"
+                        style={{
+                          fontSize: 24,
+                          fontWeight: 700,
+                          color: 'var(--m-green)',
+                          width: 28,
+                          textAlign: 'right',
+                        }}
+                      >
+                        {i + 1}
+                      </div>
+                      <Image
+                        src={itemIconUrl(it.item_id)}
+                        alt={it.item_name}
+                        width={44}
+                        height={44}
+                        unoptimized
+                        style={{
+                          borderRadius: 8,
+                          border: '1px solid var(--m-border-2)',
+                          flexShrink: 0,
+                        }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{it.item_name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 2 }}>
+                          {it.gold_cost ? `${it.gold_cost.toLocaleString('pt-BR')}g · ` : ''}
+                          {it.picks} picks · {it.wins}W
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div
+                          className="tabular"
+                          style={{ fontSize: 15, fontWeight: 700, color: 'var(--m-green)' }}
+                        >
+                          {it.winrate.toFixed(1)}%
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--m-muted)' }}>winrate</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+        )}
 
         {/* Filtros */}
-        <div className="bg-metis-surface border border-metis-border rounded-xl p-4 mb-6 flex flex-wrap gap-3 items-center">
-          <div className="flex items-center gap-2 bg-metis-bg border border-metis-border rounded-lg px-3 py-2 flex-1 min-w-48">
-            <Search className="w-4 h-4 text-metis-text-dim flex-shrink-0" />
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar item..."
-              className="bg-transparent text-sm text-metis-text placeholder-metis-muted outline-none w-full"
-            />
-          </div>
-
-          <select
-            value={role}
-            onChange={e => setRole(e.target.value)}
-            className="bg-metis-bg border border-metis-border rounded-lg px-3 py-2 text-sm text-metis-text outline-none focus:border-metis-accent transition-colors"
-          >
-            {ROLES.map(r => (
-              <option key={r.value} value={r.value}>{r.label}</option>
-            ))}
-          </select>
-
-          <select
-            value={patch}
-            onChange={e => setPatch(e.target.value)}
-            className="bg-metis-bg border border-metis-border rounded-lg px-3 py-2 text-sm text-metis-text outline-none focus:border-metis-accent transition-colors"
-          >
-            <option value="">Todos os patches</option>
-            {patches.map(p => (
-              <option key={p} value={p}>Patch {p}</option>
-            ))}
-          </select>
-
-          <div className="flex gap-1">
-            <button
-              onClick={() => setSortBy('picks')}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                sortBy === 'picks' ? 'bg-metis-accent text-white' : 'bg-metis-bg border border-metis-border text-metis-text-dim'
-              }`}
+        <Card pad={16} style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                flex: '1 1 240px',
+                padding: '8px 12px',
+                background: 'var(--m-bg)',
+                border: '1px solid var(--m-border)',
+                borderRadius: 10,
+              }}
             >
-              Popular
-            </button>
-            <button
-              onClick={() => setSortBy('winrate')}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                sortBy === 'winrate' ? 'bg-metis-accent text-white' : 'bg-metis-bg border border-metis-border text-metis-text-dim'
-              }`}
+              <Icon name="search" size={14} style={{ color: 'var(--m-text-dim)' }} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar item..."
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--m-text)',
+                  fontSize: 13,
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {ROLES.map((r) => {
+                const active = role === r.v
+                return (
+                  <button
+                    key={r.label}
+                    type="button"
+                    onClick={() => setRole(r.v)}
+                    className="m-hover-surface"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '7px 12px',
+                      borderRadius: 8,
+                      background: active ? 'var(--m-accent)' : 'transparent',
+                      color: active ? '#1a1510' : 'var(--m-text-dim)',
+                      border: `1px solid ${active ? 'var(--m-accent)' : 'var(--m-border)'}`,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    {r.iconRole && (
+                      <Image
+                        src={roleIconPath(r.iconRole)}
+                        alt=""
+                        width={13}
+                        height={13}
+                        unoptimized
+                        style={{ objectFit: 'contain', filter: active ? 'brightness(0.2)' : 'none' }}
+                      />
+                    )}
+                    {r.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            <select
+              value={patch}
+              onChange={(e) => setPatch(e.target.value)}
+              style={{
+                padding: '7px 12px',
+                background: 'var(--m-bg)',
+                border: '1px solid var(--m-border)',
+                borderRadius: 8,
+                color: 'var(--m-text)',
+                fontSize: 12,
+                fontFamily: 'inherit',
+                outline: 'none',
+              }}
             >
-              Winrate
-            </button>
+              <option value="">Todos os patches</option>
+              {patches.map((p) => (
+                <option key={p} value={p}>
+                  Patch {p}
+                </option>
+              ))}
+            </select>
+
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center' }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  color: 'var(--m-muted)',
+                  marginRight: 4,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  fontWeight: 600,
+                }}
+              >
+                Ordenar
+              </span>
+              <Pill color="accent" active={sortBy === 'picks'} onClick={() => setSortBy('picks')}>
+                Popular
+              </Pill>
+              <Pill color="accent" active={sortBy === 'winrate'} onClick={() => setSortBy('winrate')}>
+                Winrate
+              </Pill>
+            </div>
           </div>
-        </div>
+        </Card>
 
         {/* Tabela */}
         {loading ? (
-          <div className="flex gap-1 py-16 justify-center">
-            <span className="w-2 h-2 bg-metis-accent rounded-full animate-bounce [animation-delay:0ms]" />
-            <span className="w-2 h-2 bg-metis-accent rounded-full animate-bounce [animation-delay:150ms]" />
-            <span className="w-2 h-2 bg-metis-accent rounded-full animate-bounce [animation-delay:300ms]" />
+          <div style={{ display: 'flex', gap: 6, padding: '80px 0', justifyContent: 'center' }}>
+            {[0, 150, 300].map((d) => (
+              <span
+                key={d}
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: 'var(--m-accent)',
+                  animation: 'm-bounce 1.4s infinite ease-in-out both',
+                  animationDelay: `${d}ms`,
+                }}
+              />
+            ))}
           </div>
         ) : error ? (
-          <div className="bg-metis-surface border border-metis-border rounded-xl p-8 text-center">
-            <p className="text-sm text-metis-text-dim">{error}</p>
-          </div>
+          <Card>
+            <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>{error}</p>
+          </Card>
+        ) : filtered.length === 0 ? (
+          <Card>
+            <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>
+              Nenhum item encontrado com os filtros atuais.
+            </p>
+          </Card>
         ) : (
-          <>
-            <p className="text-xs text-metis-text-dim mb-3">{filtered.length} itens encontrados</p>
-            <div className="bg-metis-surface border border-metis-border rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-metis-border">
-                      <th className="w-10 px-3 py-3 text-center text-xs font-medium text-metis-text-dim uppercase">#</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-metis-text-dim uppercase">Item</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-metis-text-dim uppercase">Picks</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-metis-text-dim uppercase">Winrate</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-metis-text-dim uppercase hidden sm:table-cell">Vitorias</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((item, i) => (
-                      <tr
-                        key={item.item_id}
-                        className={`border-b border-metis-border/50 hover:bg-metis-bg/40 transition-colors ${
-                          i % 2 ? 'bg-metis-bg/20' : ''
-                        }`}
-                      >
-                        <td className="px-3 py-3 text-center text-xs text-metis-text-dim">{i + 1}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <Image
-                              src={`https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/item/${item.item_id}.png`}
-                              alt={item.item_name}
-                              width={32}
-                              height={32}
-                              className="rounded border border-metis-border/50"
-                              unoptimized
-                            />
-                            <span className="font-medium text-metis-text">{item.item_name}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-metis-text-dim">{item.picks}</td>
-                        <td className={`px-4 py-3 font-semibold ${
-                          item.winrate > 55 ? 'text-green-400' : item.winrate < 45 ? 'text-red-400' : 'text-metis-text'
-                        }`}>
-                          {item.winrate}%
-                        </td>
-                        <td className="px-4 py-3 text-metis-text-dim hidden sm:table-cell">{item.wins}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          <Card pad={0}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '42px 1.6fr 100px 80px 140px 140px 100px',
+                gap: 12,
+                padding: '10px 20px',
+                fontSize: 10,
+                color: 'var(--m-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                fontWeight: 600,
+                borderBottom: '1px solid var(--m-border)',
+              }}
+            >
+              <span>#</span>
+              <span>Item</span>
+              <span>Categoria</span>
+              <span className="tabular">Custo</span>
+              <span className="tabular">Picks</span>
+              <span>Winrate</span>
+              <span>Tendência</span>
             </div>
-          </>
+            {filtered.map((it, i) => {
+              const tags = it.tags ?? []
+              return (
+                <div
+                  key={it.item_id}
+                  className="m-hover-row"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '42px 1.6fr 100px 80px 140px 140px 100px',
+                    gap: 12,
+                    padding: '12px 20px',
+                    alignItems: 'center',
+                    borderBottom: '1px solid rgba(34,40,56,0.4)',
+                  }}
+                >
+                  <span
+                    className="tabular font-display"
+                    style={{ fontSize: 16, fontWeight: 700, color: 'var(--m-text-dim)' }}
+                  >
+                    {i + 1}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    <Image
+                      src={itemIconUrl(it.item_id)}
+                      alt={it.item_name}
+                      width={36}
+                      height={36}
+                      unoptimized
+                      style={{
+                        borderRadius: 7,
+                        border: '1px solid var(--m-border-2)',
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{it.item_name}</div>
+                      {tags.length > 0 && (
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
+                          {tags.slice(0, 3).map((t) => (
+                            <span
+                              key={t}
+                              style={{
+                                fontSize: 9,
+                                padding: '1px 6px',
+                                background: 'var(--m-surface-2)',
+                                border: '1px solid var(--m-border-2)',
+                                borderRadius: 3,
+                                color: 'var(--m-text-dim)',
+                              }}
+                            >
+                              {t}
+                            </span>
+                          ))}
+                          {tags.length > 3 && (
+                            <span style={{ fontSize: 9, color: 'var(--m-muted)', padding: '1px 4px' }}>
+                              +{tags.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {it.category ? (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--m-text-dim)',
+                        background: 'var(--m-surface-2)',
+                        border: '1px solid var(--m-border-2)',
+                        borderRadius: 6,
+                        padding: '3px 8px',
+                        justifySelf: 'start',
+                      }}
+                    >
+                      {it.category}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11, color: 'var(--m-muted)' }}>—</span>
+                  )}
+                  <span
+                    className="tabular"
+                    style={{ fontSize: 12, fontWeight: 500, color: 'var(--m-accent)' }}
+                  >
+                    {it.gold_cost ? `${it.gold_cost.toLocaleString('pt-BR')}g` : '—'}
+                  </span>
+                  <div>
+                    <div className="tabular" style={{ fontSize: 13, fontWeight: 600 }}>
+                      {it.picks.toLocaleString('pt-BR')}
+                    </div>
+                    <Bar value={it.picks} max={maxPicks} color="var(--m-accent)" height={3} />
+                  </div>
+                  <div>
+                    <div
+                      className="tabular"
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 700,
+                        color:
+                          it.winrate > 52
+                            ? 'var(--m-green)'
+                            : it.winrate > 48
+                            ? 'var(--m-text)'
+                            : 'var(--m-red)',
+                      }}
+                    >
+                      {it.winrate.toFixed(1)}%
+                    </div>
+                    <Bar
+                      value={it.winrate - 40}
+                      max={25}
+                      color={
+                        it.winrate > 52
+                          ? 'var(--m-green)'
+                          : it.winrate > 48
+                          ? 'var(--m-accent)'
+                          : 'var(--m-red)'
+                      }
+                      height={3}
+                    />
+                  </div>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color:
+                        it.trend === 'up'
+                          ? 'var(--m-green)'
+                          : it.trend === 'down'
+                          ? 'var(--m-red)'
+                          : 'var(--m-muted)',
+                    }}
+                  >
+                    {it.trend === 'up' ? '▲ em alta'
+                      : it.trend === 'down' ? '▼ em queda'
+                      : it.trend === 'flat' ? '━ estável'
+                      : '—'}
+                  </span>
+                </div>
+              )
+            })}
+          </Card>
         )}
-      </main>
+      </div>
+
+      <style jsx>{`
+        @keyframes m-bounce {
+          0%, 80%, 100% { transform: scale(0); }
+          40% { transform: scale(1); }
+        }
+      `}</style>
     </div>
   )
 }

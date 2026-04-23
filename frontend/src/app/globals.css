@@ -2,32 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Modo escuro (padrão) ───────────────────────────────────── */
-:root,
-[data-mode="dark"] {
+/* ── Paleta base (dark-only) ─────────────────────────────────
+   Modo claro foi removido em p-0.9.6. Só o accent é customizável
+   via [data-color="..."] setado pelo ThemeSwitcher.
+   ──────────────────────────────────────────────────────────── */
+:root {
   --metis-bg:           13 15 20;
   --metis-surface:      20 24 34;
   --metis-border:       30 37 55;
   --metis-text:         226 232 240;
   --metis-text-dim:     100 116 139;
   --metis-muted:        71 85 105;
+
+  /* Accent padrão (azul) — sobrescrito por [data-color="..."] */
   --metis-accent:       59 130 246;
   --metis-accent-hover: 37 99 235;
+
+  /* Cor de tier S+ (gold) — usada em tier badges independente do switcher */
+  --metis-tier-splus:   212 175 55;
 }
 
-/* ── Modo claro ─────────────────────────────────────────────── */
-[data-mode="light"] {
-  --metis-bg:           245 247 250;
-  --metis-surface:      255 255 255;
-  --metis-border:       203 213 225;
-  --metis-text:         15 23 42;
-  --metis-text-dim:     71 85 105;
-  --metis-muted:        148 163 184;
-  --metis-accent:       37 99 235;
-  --metis-accent-hover: 29 78 216;
-}
-
-/* ── Cores de acento (escuro) ───────────────────────────────── */
+/* ── Cores de accent ───────────────────────────────────────── */
 [data-color="blue"] {
   --metis-accent:       59 130 246;
   --metis-accent-hover: 37 99 235;
@@ -47,36 +42,6 @@
 [data-color="gold"] {
   --metis-accent:       212 175 55;
   --metis-accent-hover: 180 148 35;
-}
-
-/* ── Overrides para modo claro (contraste maior) ────────────── */
-[data-mode="light"][data-color="blue"] {
-  --metis-accent:       37 99 235;
-  --metis-accent-hover: 29 78 216;
-}
-[data-mode="light"][data-color="purple"] {
-  --metis-accent:       124 58 237;
-  --metis-accent-hover: 109 40 217;
-}
-[data-mode="light"][data-color="green"] {
-  --metis-accent:       5 150 105;
-  --metis-accent-hover: 4 120 87;
-}
-[data-mode="light"][data-color="red"] {
-  --metis-accent:       220 38 38;
-  --metis-accent-hover: 185 28 28;
-}
-[data-mode="light"][data-color="gold"] {
-  --metis-accent:       161 127 23;
-  --metis-accent-hover: 133 104 16;
-}
-
-/* ── Cor de tier S+ (gold) ─── usada em tier badges ────────── */
-:root {
-  --metis-tier-splus: 212 175 55;
-}
-[data-mode="light"] {
-  --metis-tier-splus: 161 127 23;
 }
 
 html,
@@ -154,4 +119,115 @@ body {
 .chat-scroll::-webkit-scrollbar-thumb {
   background: rgb(var(--metis-border));
   border-radius: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Metis Redesign — Design System (p-0.9.5+)
+   Tokens novos (--m-*) em paralelo ao sistema antigo (--metis-*).
+   Ativados apenas dentro de .metis-scope para não afetar páginas legadas.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.metis-scope {
+  --m-bg:        #0B0D12;
+  --m-surface:   #141826;
+  --m-surface-2: #1B2030;
+  --m-border:    #222838;
+  --m-border-2:  #2B3246;
+  --m-text:      #E5E9F2;
+  --m-text-dim:  #8A93A6;
+  --m-muted:     #5A6378;
+
+  /* Accent segue o ThemeSwitcher (azul/roxo/verde/vermelho/dourado).
+     As vars antigas --metis-accent/--metis-accent-hover já respeitam
+     o atributo [data-color="..."] no <html>, setado pelo ThemeProvider.
+     Expõe também --m-accent-rgb pra quem precisa de rgba() dinâmico. */
+  --m-accent-rgb: var(--metis-accent);
+  --m-accent:     rgb(var(--metis-accent));
+  --m-accent-2:   rgb(var(--metis-accent-hover));
+
+  --m-cyan:      #5BE3D4;
+  --m-violet:    #8B7FFF;
+  --m-pink:      #FF6B9D;
+  --m-green:     #4ADE80;
+  --m-red:       #F87171;
+  --m-blue:      #60A5FA;
+  --m-orange:    #FB923C;
+
+  font-family: var(--font-inter), system-ui, sans-serif;
+  color: var(--m-text);
+  background: var(--m-bg);
+}
+
+.metis-scope *,
+.metis-scope *::before,
+.metis-scope *::after {
+  box-sizing: border-box;
+}
+
+.metis-scope h1,
+.metis-scope h2,
+.metis-scope h3,
+.metis-scope h4 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.metis-scope p  { margin: 0; }
+.metis-scope button { font-family: inherit; cursor: pointer; }
+
+.font-display { font-family: var(--font-space-grotesk), var(--font-inter), sans-serif; letter-spacing: -0.02em; }
+.font-mono    { font-family: var(--font-jetbrains-mono), 'JetBrains Mono', monospace; }
+.tabular      { font-variant-numeric: tabular-nums; }
+
+.metis-grid-bg {
+  background-image:
+    linear-gradient(to right,  rgba(245, 200, 66, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(245, 200, 66, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* ── Hover utilities pro redesign ─────────────────────────────
+   Inline style não suporta :hover — essas classes complementam.
+   Use junto com o style inline (não override — só :hover).
+   ──────────────────────────────────────────────────────────── */
+.metis-scope .m-hover-accent {
+  transition: background-color .15s, color .15s, border-color .15s, box-shadow .15s;
+}
+.metis-scope .m-hover-accent:hover {
+  background: var(--m-accent-2) !important;
+}
+.metis-scope .m-hover-link {
+  transition: color .15s;
+}
+.metis-scope .m-hover-link:hover {
+  color: var(--m-accent-2) !important;
+}
+.metis-scope .m-hover-row {
+  transition: background-color .15s, border-color .15s;
+}
+.metis-scope .m-hover-row:hover {
+  background: var(--m-surface-2) !important;
+}
+.metis-scope .m-hover-card {
+  transition: background-color .15s, border-color .15s, box-shadow .15s, transform .15s;
+}
+.metis-scope .m-hover-card:hover {
+  border-color: var(--m-accent) !important;
+  background: var(--m-surface-2) !important;
+}
+.metis-scope .m-hover-surface {
+  transition: background-color .15s, border-color .15s;
+}
+.metis-scope .m-hover-surface:hover {
+  background: var(--m-surface-2) !important;
+  border-color: var(--m-border-2) !important;
+}
+.metis-scope .m-hover-outline {
+  transition: background-color .15s, border-color .15s, color .15s;
+}
+.metis-scope .m-hover-outline:hover {
+  background: var(--m-surface-2) !important;
+  border-color: var(--m-accent) !important;
+  color: var(--m-accent) !important;
 }
