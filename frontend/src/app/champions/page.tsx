@@ -3,21 +3,32 @@
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useLocale, useTranslations } from 'next-intl'
 import { emblemPath, roleIconPath } from '@/lib/ddragon'
 import { apiFetch } from '@/lib/api'
 import {
   AppHeader,
   Card,
-  SectionLabel,
   Pill,
   Icon,
   ChampPortrait,
   Bar,
-  ROLES_PT,
   TIER_COLORS,
   type Tier,
   type Role,
 } from '@/components/design'
+import { formatNumber } from '@/lib/format'
+import type { Locale } from '@/i18n/config'
+
+type RoleKey = 'role_all' | 'role_top' | 'role_jungle' | 'role_mid' | 'role_adc' | 'role_sup'
+
+const ROLE_I18N_KEY: Record<Role, 'role_top' | 'role_jungle' | 'role_mid' | 'role_adc' | 'role_sup'> = {
+  TOP: 'role_top',
+  JUNGLE: 'role_jungle',
+  MIDDLE: 'role_mid',
+  BOTTOM: 'role_adc',
+  UTILITY: 'role_sup',
+}
 
 type ChampionStat = {
   champion: string
@@ -39,17 +50,18 @@ type ChampionStat = {
   role_share?: number
 }
 
-const ROLES: { v: '' | Role; label: string; iconRole: Role | null }[] = [
-  { v: '',        label: 'Todas',   iconRole: null },
-  { v: 'TOP',     label: 'Top',     iconRole: 'TOP' },
-  { v: 'JUNGLE',  label: 'Jungle',  iconRole: 'JUNGLE' },
-  { v: 'MIDDLE',  label: 'Mid',     iconRole: 'MIDDLE' },
-  { v: 'BOTTOM',  label: 'ADC',     iconRole: 'BOTTOM' },
-  { v: 'UTILITY', label: 'Suporte', iconRole: 'UTILITY' },
+const ROLES: { v: '' | Role; labelKey: RoleKey; iconRole: Role | null }[] = [
+  { v: '',        labelKey: 'role_all',    iconRole: null },
+  { v: 'TOP',     labelKey: 'role_top',    iconRole: 'TOP' },
+  { v: 'JUNGLE',  labelKey: 'role_jungle', iconRole: 'JUNGLE' },
+  { v: 'MIDDLE',  labelKey: 'role_mid',    iconRole: 'MIDDLE' },
+  { v: 'BOTTOM',  labelKey: 'role_adc',    iconRole: 'BOTTOM' },
+  { v: 'UTILITY', labelKey: 'role_sup',    iconRole: 'UTILITY' },
 ]
 
+// Servidores ficam com rótulos curtos/siglas — universais em PT/EN.
 const SERVERS = [
-  { value: '',      label: 'Todas as regiões' },
+  { value: '',      label: null },
   { value: 'BR1',   label: 'BR' },
   { value: 'NA1',   label: 'NA' },
   { value: 'EUW1',  label: 'EUW' },
@@ -62,7 +74,7 @@ const SERVERS = [
 ]
 
 const ELOS = [
-  { value: '',            label: 'Todos',       emblem: null },
+  { value: '',            label: null,          emblem: null },
   { value: 'IRON',        label: 'Iron',        emblem: 'Iron' },
   { value: 'BRONZE',      label: 'Bronze',      emblem: 'Bronze' },
   { value: 'SILVER',      label: 'Silver',      emblem: 'Silver' },
@@ -88,6 +100,8 @@ function derivedTier(c: ChampionStat): Tier {
 }
 
 export default function ChampionsPage() {
+  const t = useTranslations('champions')
+  const locale = useLocale() as Locale
   const [data, setData] = useState<ChampionStat[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -142,7 +156,7 @@ export default function ChampionsPage() {
         const json: ChampionStat[] = await res.json()
         setData(json)
       } catch {
-        setError('Não foi possível carregar a tier list. O backend pode estar offline.')
+        setError(t('error_load'))
       } finally {
         setLoading(false)
       }
@@ -164,18 +178,18 @@ export default function ChampionsPage() {
   for (const c of visible) {
     byTier[derivedTier(c)].push(c)
   }
-  for (const t of TIER_ORDER) {
-    byTier[t].sort((a, b) => b.winrate - a.winrate)
+  for (const tier of TIER_ORDER) {
+    byTier[tier].sort((a, b) => b.winrate - a.winrate)
   }
 
   const subtitleParts = [
     selectedPatches.length === 0
-      ? 'todos os patches'
+      ? t('patches_all')
       : selectedPatches.length === 1
-      ? `patch ${selectedPatches[0]}`
-      : `${selectedPatches[selectedPatches.length - 1]} → ${selectedPatches[0]}`,
-    elo ? elo.charAt(0) + elo.slice(1).toLowerCase() : 'todos os elos',
-    server ? SERVERS.find((s) => s.value === server)?.label : 'todas as regiões',
+      ? t('patches_one', { patch: selectedPatches[0] })
+      : t('patches_range', { from: selectedPatches[selectedPatches.length - 1], to: selectedPatches[0] }),
+    elo ? elo.charAt(0) + elo.slice(1).toLowerCase() : t('elos_all'),
+    server ? SERVERS.find((s) => s.value === server)?.label : t('regions_all'),
   ]
 
   return (
@@ -211,14 +225,14 @@ export default function ChampionsPage() {
               className="font-display"
               style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 6 }}
             >
-              Tier List
+              {t('title')}
             </h1>
             <p style={{ fontSize: 14, color: 'var(--m-text-dim)', maxWidth: 520 }}>
-              Ranking de campeões por role com winrate, pickrate e tendência. Dados de{' '}
+              {t('subtitle_part1')}{' '}
               <span className="tabular" style={{ color: 'var(--m-text)', fontWeight: 600 }}>
-                {data.length > 0 ? data.reduce((s, c) => s + c.total_matches, 0).toLocaleString('pt-BR') : '—'}
+                {data.length > 0 ? formatNumber(data.reduce((s, c) => s + c.total_matches, 0), locale) : '—'}
               </span>{' '}
-              partidas no recorte atual.
+              {t('subtitle_part2')}
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -228,7 +242,7 @@ export default function ChampionsPage() {
                 active={!showUnpopular}
                 onClick={() => setShowUnpopular((v) => !v)}
               >
-                {showUnpopular ? 'Ocultar impopulares' : 'Campeões populares'}
+                {showUnpopular ? t('hide_unpopular') : t('show_popular')}
               </Pill>
             )}
           </div>
@@ -254,7 +268,7 @@ export default function ChampionsPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar campeão..."
+                placeholder={t('search_placeholder')}
                 style={{
                   flex: 1,
                   background: 'transparent',
@@ -273,7 +287,7 @@ export default function ChampionsPage() {
                 const active = role === r.v
                 return (
                   <button
-                    key={r.label}
+                    key={r.labelKey}
                     type="button"
                     onClick={() => setRole(r.v)}
                     className="m-hover-surface"
@@ -302,7 +316,7 @@ export default function ChampionsPage() {
                         style={{ objectFit: 'contain', filter: active ? 'brightness(0.2)' : 'none' }}
                       />
                     )}
-                    {r.label}
+                    {t(r.labelKey)}
                   </button>
                 )
               })}
@@ -325,7 +339,7 @@ export default function ChampionsPage() {
             >
               {SERVERS.map((s) => (
                 <option key={s.value} value={s.value}>
-                  {s.label}
+                  {s.label ?? t('server_all')}
                 </option>
               ))}
             </select>
@@ -346,7 +360,7 @@ export default function ChampionsPage() {
                   outline: 'none',
                 }}
               >
-                <option value="">Patch inicial</option>
+                <option value="">{t('patch_from')}</option>
                 {patches.map((p) => (
                   <option key={p} value={p}>
                     {p}
@@ -368,7 +382,7 @@ export default function ChampionsPage() {
                   outline: 'none',
                 }}
               >
-                <option value="">Patch final</option>
+                <option value="">{t('patch_to')}</option>
                 {patches.map((p) => (
                   <option key={p} value={p}>
                     {p}
@@ -400,10 +414,11 @@ export default function ChampionsPage() {
                 fontWeight: 600,
               }}
             >
-              Elo
+              {t('elo_label')}
             </span>
             {ELOS.map((e) => {
               const active = elo === e.value
+              const label = e.label ?? t('elo_all')
               return (
                 <button
                   key={e.value}
@@ -437,7 +452,7 @@ export default function ChampionsPage() {
                     >
                       <Image
                         src={emblemPath(e.emblem)}
-                        alt={e.label}
+                        alt={label}
                         width={100}
                         height={100}
                         unoptimized
@@ -451,13 +466,13 @@ export default function ChampionsPage() {
                       />
                     </div>
                   )}
-                  {e.label}
+                  {label}
                 </button>
               )
             })}
             {elo && (
               <span style={{ fontSize: 10, color: 'var(--m-muted)', fontStyle: 'italic', marginLeft: 4 }}>
-                (filtro em breve)
+                {t('elo_filter_soon')}
               </span>
             )}
           </div>
@@ -487,7 +502,7 @@ export default function ChampionsPage() {
         ) : visible.length === 0 ? (
           <Card>
             <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>
-              Nenhum campeão encontrado com os filtros atuais.
+              {t('empty_filtered')}
               {!showUnpopular && unpopular.length > 0 && (
                 <>
                   {' '}
@@ -504,7 +519,7 @@ export default function ChampionsPage() {
                       fontFamily: 'inherit',
                     }}
                   >
-                    Mostrar {unpopular.length} campeões impopulares.
+                    {t('empty_show_unpopular', { n: unpopular.length })}
                   </button>
                 </>
               )}
@@ -512,13 +527,13 @@ export default function ChampionsPage() {
           </Card>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {TIER_ORDER.map((t) => {
-              const champs = byTier[t]
+            {TIER_ORDER.map((tier) => {
+              const champs = byTier[tier]
               if (champs.length === 0) return null
-              const c = TIER_COLORS[t]
+              const c = TIER_COLORS[tier]
               return (
                 <div
-                  key={t}
+                  key={tier}
                   style={{
                     display: 'grid',
                     gridTemplateColumns: '72px 1fr',
@@ -542,7 +557,7 @@ export default function ChampionsPage() {
                     }}
                     className="font-display"
                   >
-                    {t}
+                    {tier}
                   </div>
 
                   {/* Grid de cards */}
@@ -591,7 +606,9 @@ export default function ChampionsPage() {
                                   letterSpacing: '0.06em',
                                 }}
                               >
-                                {ROLES_PT[ch.role as Role] ?? ch.role}
+                                {ROLE_I18N_KEY[ch.role as Role]
+                                  ? t(ROLE_I18N_KEY[ch.role as Role])
+                                  : ch.role}
                               </span>
                             )}
                           </div>
@@ -614,7 +631,7 @@ export default function ChampionsPage() {
                             {ch.z_score !== undefined && (
                               <span
                                 className="tabular"
-                                title="Desvios padrão acima da média da role"
+                                title={t('z_score_tooltip')}
                                 style={{
                                   fontSize: 10,
                                   fontWeight: 600,
@@ -632,7 +649,7 @@ export default function ChampionsPage() {
                                 className="tabular"
                                 style={{ fontSize: 11, color: 'var(--m-text-dim)' }}
                               >
-                                {ch.pickrate.toFixed(1)}% pick
+                                {ch.pickrate.toFixed(1)}% {t('col_pick')}
                               </span>
                             )}
                           </div>
@@ -661,7 +678,7 @@ export default function ChampionsPage() {
                                   letterSpacing: '0.06em',
                                 }}
                               >
-                                KDA
+                                {t('col_kda')}
                               </div>
                               <div
                                 className="tabular"
@@ -680,7 +697,7 @@ export default function ChampionsPage() {
                                   letterSpacing: '0.06em',
                                 }}
                               >
-                                Ban
+                                {t('col_ban')}
                               </div>
                               <div
                                 className="tabular"
@@ -699,7 +716,7 @@ export default function ChampionsPage() {
                                   letterSpacing: '0.06em',
                                 }}
                               >
-                                Games
+                                {t('col_games')}
                               </div>
                               <div
                                 className="tabular"

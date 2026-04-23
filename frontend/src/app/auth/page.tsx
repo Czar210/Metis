@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase/client'
 import { Swords, MailCheck } from 'lucide-react'
 
@@ -10,6 +11,7 @@ type Mode = 'login' | 'signup'
 export default function AuthPage() {
   const router = useRouter()
   const supabase = createClient()
+  const t = useTranslations('auth')
 
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
@@ -51,11 +53,11 @@ export default function AuthPage() {
     setError(null)
 
     if (password !== confirmPassword) {
-      setError('As senhas não coincidem.')
+      setError(t('error_passwords_mismatch'))
       return
     }
     if (password.length < 6) {
-      setError('A senha deve ter ao menos 6 caracteres.')
+      setError(t('error_password_short'))
       return
     }
 
@@ -92,17 +94,16 @@ export default function AuthPage() {
           </div>
           <div className="bg-metis-surface border border-metis-border rounded-xl p-8">
             <MailCheck className="w-10 h-10 text-metis-accent mx-auto mb-4" />
-            <h2 className="text-lg font-semibold text-metis-text mb-2">Verifique seu email</h2>
+            <h2 className="text-lg font-semibold text-metis-text mb-2">{t('signedup_title')}</h2>
             <p className="text-sm text-metis-text-dim leading-relaxed">
-              Enviamos um link de confirmação para{' '}
-              <span className="text-metis-text font-medium">{email}</span>.
-              Clique no link para ativar sua conta.
+              {t('signedup_sub_part1')}{' '}
+              <span className="text-metis-text font-medium">{email}</span>{t('signedup_sub_part2')}
             </p>
             <button
               onClick={() => { setSignedUp(false); switchMode('login') }}
               className="mt-6 text-xs text-metis-accent hover:underline"
             >
-              Voltar para o login
+              {t('back_to_login')}
             </button>
           </div>
         </div>
@@ -119,7 +120,7 @@ export default function AuthPage() {
             <Swords className="w-7 h-7 text-metis-accent" />
             <span className="text-2xl font-bold text-metis-text tracking-tight">Metis</span>
           </div>
-          <p className="text-metis-text-dim text-sm">Sua estrategista no Rift</p>
+          <p className="text-metis-text-dim text-sm">{t('tagline')}</p>
         </div>
 
         {/* Card */}
@@ -134,7 +135,7 @@ export default function AuthPage() {
                   : 'text-metis-text-dim hover:text-metis-text'
               }`}
             >
-              Entrar
+              {t('mode_login')}
             </button>
             <button
               onClick={() => switchMode('signup')}
@@ -144,14 +145,14 @@ export default function AuthPage() {
                   : 'text-metis-text-dim hover:text-metis-text'
               }`}
             >
-              Criar conta
+              {t('mode_signup')}
             </button>
           </div>
 
           <form onSubmit={mode === 'login' ? handleLogin : handleSignup} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <label htmlFor="email" className="text-xs text-metis-text-dim font-medium uppercase tracking-wide">
-                Email
+                {t('email')}
               </label>
               <input
                 id="email"
@@ -159,14 +160,14 @@ export default function AuthPage() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
-                placeholder="summoner@metis.gg"
+                placeholder={t('email_placeholder')}
                 className="bg-metis-bg border border-metis-border rounded-lg px-3 py-2.5 text-sm text-metis-text placeholder-metis-muted outline-none focus:border-metis-accent transition-colors"
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <label htmlFor="password" className="text-xs text-metis-text-dim font-medium uppercase tracking-wide">
-                Senha
+                {t('password')}
               </label>
               <input
                 id="password"
@@ -182,7 +183,7 @@ export default function AuthPage() {
             {mode === 'signup' && (
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="confirmPassword" className="text-xs text-metis-text-dim font-medium uppercase tracking-wide">
-                  Confirmar senha
+                  {t('confirm_password')}
                 </label>
                 <input
                   id="confirmPassword"
@@ -208,8 +209,8 @@ export default function AuthPage() {
               className="mt-1 bg-metis-accent hover:bg-metis-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg py-2.5 text-sm transition-colors"
             >
               {loading
-                ? mode === 'login' ? 'Entrando...' : 'Criando conta...'
-                : mode === 'login' ? 'Entrar' : 'Criar conta'}
+                ? mode === 'login' ? t('loading_login') : t('loading_signup')
+                : mode === 'login' ? t('mode_login') : t('mode_signup')}
             </button>
           </form>
         </div>

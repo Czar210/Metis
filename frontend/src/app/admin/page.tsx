@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useLocale, useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase/client'
 import { apiFetch } from '@/lib/api'
 import {
@@ -12,6 +13,8 @@ import {
   Bar,
   Icon,
 } from '@/components/design'
+import { formatNumber } from '@/lib/format'
+import type { Locale } from '@/i18n/config'
 
 // ── Types ──────────────────────────────────────────────────────
 type AdminStats = {
@@ -25,24 +28,28 @@ type AdminStats = {
   synced_last_7d: number
 }
 
-const REASON_LABEL: Record<string, string> = {
-  remake:      'Remakes (< 5 min)',
-  short_game:  'Partida curta (5–15 min)',
-  wrong_queue: 'Fila errada (ARAM, etc.)',
-  invalid_json: 'JSON inválido',
-  afk_status:  'AFK detectado',
+const REASON_KEY: Record<string, string> = {
+  remake:       'reason_remake',
+  short_game:   'reason_short_game',
+  wrong_queue:  'reason_wrong_queue',
+  invalid_json: 'reason_invalid_json',
+  afk_status:   'reason_afk_status',
 }
 
 // ── Page ───────────────────────────────────────────────────────
 export default function AdminPage() {
   const router = useRouter()
   const supabase = createClient()
+  const t = useTranslations('admin')
+  const tCommon = useTranslations('common')
+  const locale = useLocale() as Locale
 
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMsg, setRefreshMsg] = useState<string | null>(null)
+  const [refreshMsgIsError, setRefreshMsgIsError] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -60,7 +67,7 @@ export default function AdminPage() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         setStats(await res.json())
       } catch (e) {
-        setError(`Falha ao carregar estatísticas: ${e instanceof Error ? e.message : 'erro desconhecido'}`)
+        setError(t('load_error', { message: e instanceof Error ? e.message : tCommon('error_unknown') }))
       } finally {
         setLoading(false)
       }
@@ -72,6 +79,7 @@ export default function AdminPage() {
   async function handleRefreshCache() {
     setRefreshing(true)
     setRefreshMsg(null)
+    setRefreshMsgIsError(false)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { setRefreshing(false); return }
@@ -80,9 +88,10 @@ export default function AdminPage() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
       const d = await res.json()
-      setRefreshMsg(`Cache atualizado — ${d.cleared ?? 0} entradas removidas`)
+      setRefreshMsg(t('cache_updated', { count: d.cleared ?? 0 }))
     } catch {
-      setRefreshMsg('Erro ao atualizar cache')
+      setRefreshMsg(t('cache_error'))
+      setRefreshMsgIsError(true)
     } finally {
       setRefreshing(false)
       setTimeout(() => setRefreshMsg(null), 5000)
@@ -146,7 +155,7 @@ export default function AdminPage() {
           >
             <Icon name="x" size={26} />
           </div>
-          <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>{error ?? 'Erro desconhecido.'}</p>
+          <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>{error ?? tCommon('error_unknown')}</p>
         </div>
       </div>
     )
@@ -187,16 +196,16 @@ export default function AdminPage() {
                 marginBottom: 8,
               }}
             >
-              <Icon name="settings" size={12} /> Painel Admin · acesso restrito
+              <Icon name="settings" size={12} /> {t('eyebrow')}
             </div>
             <h1
               className="font-display"
               style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.03em' }}
             >
-              Visão geral do sistema
+              {t('title')}
             </h1>
             <p style={{ fontSize: 13, color: 'var(--m-text-dim)', marginTop: 4 }}>
-              Dados ao vivo do Supabase · pipeline + ETL + cache
+              {t('subtitle')}
             </p>
           </div>
 
@@ -205,7 +214,7 @@ export default function AdminPage() {
               <span
                 style={{
                   fontSize: 11,
-                  color: refreshMsg.startsWith('Erro') ? 'var(--m-red)' : 'var(--m-green)',
+                  color: refreshMsgIsError ? 'var(--m-red)' : 'var(--m-green)',
                 }}
               >
                 {refreshMsg}
@@ -240,7 +249,7 @@ export default function AdminPage() {
               >
                 <Icon name="compass" size={13} />
               </span>
-              {refreshing ? 'Atualizando...' : 'Invalidar cache da tier list'}
+              {refreshing ? t('refreshing') : t('refresh_cache')}
             </button>
           </div>
         </div>
@@ -255,41 +264,41 @@ export default function AdminPage() {
           }}
         >
           <Card>
-            <SectionLabel icon="users">Jogadores</SectionLabel>
+            <SectionLabel icon="users">{t('kpi.players')}</SectionLabel>
             <Stat
               size="lg"
               label=""
-              value={stats.players_total.toLocaleString('pt-BR')}
-              sub="cadastrados no banco"
+              value={formatNumber(stats.players_total, locale)}
+              sub={t('kpi.players_sub')}
             />
           </Card>
           <Card>
-            <SectionLabel icon="check">Partidas limpas</SectionLabel>
+            <SectionLabel icon="check">{t('kpi.clean_matches')}</SectionLabel>
             <Stat
               size="lg"
               label=""
-              value={stats.matches_clean.toLocaleString('pt-BR')}
-              sub={`taxa de aprovação: ${cleanRate}%`}
+              value={formatNumber(stats.matches_clean, locale)}
+              sub={t('kpi.clean_matches_sub', { rate: cleanRate })}
               accent="var(--m-green)"
             />
           </Card>
           <Card>
-            <SectionLabel icon="x">Partidas descartadas</SectionLabel>
+            <SectionLabel icon="x">{t('kpi.dirty_matches')}</SectionLabel>
             <Stat
               size="lg"
               label=""
-              value={stats.matches_dirty_total.toLocaleString('pt-BR')}
-              sub="remakes, fila errada, curtas"
+              value={formatNumber(stats.matches_dirty_total, locale)}
+              sub={t('kpi.dirty_matches_sub')}
               accent="var(--m-red)"
             />
           </Card>
           <Card>
-            <SectionLabel icon="activity">Timelines salvas</SectionLabel>
+            <SectionLabel icon="activity">{t('kpi.timelines')}</SectionLabel>
             <Stat
               size="lg"
               label=""
-              value={stats.timelines_saved.toLocaleString('pt-BR')}
-              sub={`de ${stats.matches_clean.toLocaleString('pt-BR')} partidas limpas`}
+              value={formatNumber(stats.timelines_saved, locale)}
+              sub={t('kpi.timelines_sub', { total: formatNumber(stats.matches_clean, locale) })}
               accent="var(--m-violet)"
             />
           </Card>
@@ -305,46 +314,46 @@ export default function AdminPage() {
           }}
         >
           <Card>
-            <SectionLabel icon="trending">Sincronizações 24h</SectionLabel>
+            <SectionLabel icon="trending">{t('kpi.sync_24h')}</SectionLabel>
             <Stat
               size="lg"
               label=""
-              value={stats.synced_last_24h.toLocaleString('pt-BR')}
-              sub="jogadores atualizados hoje"
+              value={formatNumber(stats.synced_last_24h, locale)}
+              sub={t('kpi.sync_24h_sub')}
               accent="var(--m-accent)"
             />
           </Card>
           <Card>
-            <SectionLabel icon="trending">Sincronizações 7d</SectionLabel>
+            <SectionLabel icon="trending">{t('kpi.sync_7d')}</SectionLabel>
             <Stat
               size="lg"
               label=""
-              value={stats.synced_last_7d.toLocaleString('pt-BR')}
-              sub="semana"
+              value={formatNumber(stats.synced_last_7d, locale)}
+              sub={t('kpi.sync_7d_sub')}
               accent="var(--m-accent)"
             />
           </Card>
           <Card>
-            <SectionLabel icon="barChart">Participantes</SectionLabel>
+            <SectionLabel icon="barChart">{t('kpi.participants')}</SectionLabel>
             <Stat
               size="lg"
               label=""
-              value={stats.participants_total.toLocaleString('pt-BR')}
-              sub="linhas em match_participants"
+              value={formatNumber(stats.participants_total, locale)}
+              sub={t('kpi.participants_sub')}
             />
           </Card>
           <Card>
-            <SectionLabel icon="clock">Cooldown de sync</SectionLabel>
-            <Stat size="lg" label="" value="5 min" sub="por jogador/request" />
+            <SectionLabel icon="clock">{t('kpi.sync_cooldown')}</SectionLabel>
+            <Stat size="lg" label="" value={t('kpi.sync_cooldown_value')} sub={t('kpi.sync_cooldown_sub')} />
           </Card>
         </div>
 
         {/* Breakdown dirty matches */}
         <Card>
-          <SectionLabel icon="filter">Partidas descartadas · por motivo</SectionLabel>
+          <SectionLabel icon="filter">{t('dirty.title')}</SectionLabel>
           {Object.keys(stats.matches_dirty_by_reason).length === 0 ? (
             <p style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>
-              Nenhuma partida descartada ainda.
+              {t('dirty.empty')}
             </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
@@ -353,6 +362,7 @@ export default function AdminPage() {
                 .map(([reason, count]) => {
                   const total = stats.matches_dirty_total || 1
                   const pct = Math.round((count / total) * 100)
+                  const key = REASON_KEY[reason]
                   return (
                     <div key={reason}>
                       <div
@@ -364,13 +374,13 @@ export default function AdminPage() {
                         }}
                       >
                         <span style={{ fontSize: 12, color: 'var(--m-text)', fontWeight: 500 }}>
-                          {REASON_LABEL[reason] ?? reason}
+                          {key ? t(`dirty.${key}`) : reason}
                         </span>
                         <span
                           className="tabular"
                           style={{ fontSize: 11, color: 'var(--m-text-dim)' }}
                         >
-                          {count.toLocaleString('pt-BR')} · {pct}%
+                          {formatNumber(count, locale)} · {pct}%
                         </span>
                       </div>
                       <Bar value={pct} max={100} color="var(--m-red)" height={5} />
@@ -390,7 +400,9 @@ export default function AdminPage() {
             letterSpacing: '0.04em',
           }}
         >
-          Metis Admin · visível apenas pra contas com <code style={{ color: 'var(--m-accent)' }}>app_metadata.is_admin = true</code>
+          {t.rich('footer_note', {
+            flag: () => <code style={{ color: 'var(--m-accent)' }}>app_metadata.is_admin = true</code>,
+          })}
         </p>
       </div>
 

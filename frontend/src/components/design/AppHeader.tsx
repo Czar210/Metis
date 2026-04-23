@@ -9,26 +9,28 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase/client'
 import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
 import { Icon, type IconName } from './Icon'
 import { Logo } from './Logo'
+import { LangSwitcher } from './LangSwitcher'
 
 type NavId = 'home' | 'tierlist' | 'items' | 'plans' | 'team' | 'changelog'
 
 type NavItem = {
   id: NavId
-  label: string
+  labelKey: 'home' | 'tierlist' | 'items' | 'plans' | 'team'
   icon: IconName
   href: string
 }
 
 const NAV: NavItem[] = [
-  { id: 'home',     label: 'Home',      icon: 'home',   href: '/' },
-  { id: 'tierlist', label: 'Tier List', icon: 'list',   href: '/champions' },
-  { id: 'items',    label: 'Itens',     icon: 'sword',  href: '/items' },
-  { id: 'plans',    label: 'Planos',    icon: 'dollar', href: '/pricing' },
-  { id: 'team',     label: 'Equipe',    icon: 'users',  href: '/team' },
+  { id: 'home',     labelKey: 'home',     icon: 'home',   href: '/' },
+  { id: 'tierlist', labelKey: 'tierlist', icon: 'list',   href: '/champions' },
+  { id: 'items',    labelKey: 'items',    icon: 'sword',  href: '/items' },
+  { id: 'plans',    labelKey: 'plans',    icon: 'dollar', href: '/pricing' },
+  { id: 'team',     labelKey: 'team',     icon: 'users',  href: '/team' },
 ]
 
 type Props = {
@@ -37,6 +39,7 @@ type Props = {
 }
 
 export function AppHeader({ active = 'home', compact = false }: Props) {
+  const t = useTranslations('header')
   const [userEmail, setUserEmail] = useState<string | null | undefined>(undefined)
   const [isAdmin, setIsAdmin] = useState(false)
 
@@ -97,7 +100,7 @@ export function AppHeader({ active = 'home', compact = false }: Props) {
                 }}
               >
                 <Icon name={n.icon} size={14} />
-                {n.label}
+                {t(`nav.${n.labelKey}`)}
               </Link>
             )
           })}
@@ -126,8 +129,10 @@ export function AppHeader({ active = 'home', compact = false }: Props) {
           }}
         >
           <Icon name="messageCircle" size={14} />
-          Chat Metis
+          {t('chat_metis')}
         </Link>
+
+        <LangSwitcher />
 
         {/* Auth state: botão Entrar quando deslogado, avatar quando logado.
             `undefined` = ainda carregando → render nada pra evitar flash. */}
@@ -149,13 +154,13 @@ export function AppHeader({ active = 'home', compact = false }: Props) {
               textDecoration: 'none',
             }}
           >
-            Entrar
+            {t('sign_in')}
             <Icon name="arrowRight" size={12} />
           </Link>
         ) : initial ? (
           <Link
             href={isAdmin ? '/admin' : '/'}
-            title={isAdmin ? `${userEmail} · Admin` : (userEmail ?? 'Minha conta')}
+            title={isAdmin ? `${userEmail} · ${t('admin_badge')}` : (userEmail ?? t('my_account'))}
             className="m-hover-surface"
             style={{
               width: 32,

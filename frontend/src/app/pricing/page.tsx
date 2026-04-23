@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import { apiFetch } from '@/lib/api'
 import {
   AppHeader,
@@ -8,26 +9,27 @@ import {
   SectionLabel,
   Icon,
 } from '@/components/design'
+import type { Locale } from '@/i18n/config'
 
 // ── Types ───────────────────────────────────────────────────────
-type PlanAction = {
-  label: string
-  variant: 'muted' | 'filled'
-}
+type PlanId = 'free' | 'donor' | 'premium' | 'pro'
 
 type Plan = {
-  tier: string
-  rank: string
-  color: string       // cor do accent do tier (hex)
-  price: number       // valor mensal em BRL
-  priceLabel: string  // sufixo ('para sempre' ou '/mês' / '/ano')
-  action: PlanAction
+  id: PlanId
+  tier: string           // display constante (nome do plano)
+  rank: string           // LoL rank key (constante)
+  color: string
+  price: number
+  /** Se true, mostra "/mês" ou "/ano". Se false, mostra "forever/para sempre". */
+  isPaid: boolean
+  actionVariant: 'muted' | 'filled'
   popular?: boolean
-  features: { on: boolean; t: string }[]
+  featureCount: number
+  /** Primeiros N features são on: true, o resto é off. */
+  featuresOn: number
 }
 
 type Coupon = {
-  // `code` não vem do endpoint público — easter egg.
   title: string
   description: string | null
   effect: Record<string, unknown>
@@ -36,126 +38,44 @@ type Coupon = {
   uses_count: number
 }
 
-// ── Data ────────────────────────────────────────────────────────
 const PLANS: Plan[] = [
-  {
-    tier: 'Free',
-    rank: 'SILVER',
-    color: '#B4C0CF',
-    price: 0,
-    priceLabel: 'para sempre',
-    action: { label: 'Plano atual', variant: 'muted' },
-    features: [
-      { on: true,  t: 'Busca de jogadores ilimitada' },
-      { on: true,  t: 'Histórico de partidas (últimas 20)' },
-      { on: true,  t: 'Tier List com filtros' },
-      { on: true,  t: 'Estatísticas de itens' },
-      { on: true,  t: 'Página de campeão básica' },
-      { on: true,  t: 'Metis Score nas partidas' },
-      { on: true,  t: '1 jogador salvo em supervisão' },
-      { on: true,  t: '1 recomendação por lane' },
-      { on: false, t: 'Chat com IA Metis' },
-      { on: false, t: 'Análise tática por partida' },
-      { on: false, t: 'Filtros avançados de build' },
-      { on: false, t: 'Badge no perfil' },
-    ],
-  },
-  {
-    tier: 'Doador',
-    rank: 'EMERALD',
-    color: '#44D19E',
-    price: 4.9,
-    priceLabel: '/mês',
-    action: { label: 'Apoiar o projeto', variant: 'filled' },
-    features: [
-      { on: true,  t: 'Tudo do Free' },
-      { on: true,  t: '5 jogadores salvos em supervisão' },
-      { on: true,  t: '2 recomendações por lane' },
-      { on: true,  t: 'Badge de Doador no perfil' },
-      { on: true,  t: 'Apoio direto ao desenvolvimento' },
-      { on: false, t: 'Chat com IA Metis' },
-      { on: false, t: 'Análise tática por partida' },
-      { on: false, t: 'Timeline interativa' },
-      { on: false, t: 'Filtros avançados de build' },
-      { on: false, t: 'Coaching IA' },
-    ],
-  },
-  {
-    tier: 'Premium',
-    rank: 'MASTER',
-    color: '#C581E6',
-    price: 24.9,
-    priceLabel: '/mês',
-    action: { label: 'Subir de Elo', variant: 'filled' },
-    popular: true,
-    features: [
-      { on: true, t: 'Tudo do Doador' },
-      { on: true, t: 'Chat com IA Metis ilimitado' },
-      { on: true, t: 'Recomendações completas (todas as roles)' },
-      { on: true, t: 'Análise tática detalhada por partida' },
-      { on: true, t: 'Timeline interativa com mapa' },
-      { on: true, t: 'Filtros avançados de build por slot' },
-      { on: true, t: 'Badge Master no perfil' },
-      { on: true, t: 'Jogadores salvos ilimitados' },
-      { on: true, t: 'Histórico completo (sem limite)' },
-      { on: true, t: 'Prioridade no suporte' },
-    ],
-  },
-  {
-    tier: 'Pro',
-    rank: 'CHALLENGER',
-    color: '#66D7F0',
-    price: 44.9,
-    priceLabel: '/mês',
-    action: { label: 'Virar Challenger', variant: 'filled' },
-    features: [
-      { on: true, t: 'Tudo do Premium' },
-      { on: true, t: 'Coaching IA personalizado por sessão' },
-      { on: true, t: 'API de dados pessoais (exportar stats)' },
-      { on: true, t: 'Dashboard de evolução temporal' },
-      { on: true, t: 'Comparação com jogadores do seu elo' },
-      { on: true, t: 'Alertas de meta (campeões OP no seu elo)' },
-      { on: true, t: 'Badge Challenger exclusiva no perfil' },
-      { on: true, t: 'Acesso antecipado a features novas' },
-      { on: true, t: 'Suporte direto com a equipe' },
-      { on: true, t: 'Análise de replays com IA' },
-    ],
-  },
+  { id: 'free',    tier: 'Free',    rank: 'SILVER',     color: '#B4C0CF', price: 0,    isPaid: false, actionVariant: 'muted',  featureCount: 12, featuresOn: 8 },
+  { id: 'donor',   tier: 'Doador',  rank: 'EMERALD',    color: '#44D19E', price: 4.9,  isPaid: true,  actionVariant: 'filled', featureCount: 10, featuresOn: 5 },
+  { id: 'premium', tier: 'Premium', rank: 'MASTER',     color: '#C581E6', price: 24.9, isPaid: true,  actionVariant: 'filled', popular: true, featureCount: 10, featuresOn: 10 },
+  { id: 'pro',     tier: 'Pro',     rank: 'CHALLENGER', color: '#66D7F0', price: 44.9, isPaid: true,  actionVariant: 'filled', featureCount: 10, featuresOn: 10 },
 ]
 
-const COMPARISON = [
-  { name: 'Jogadores salvos',     free: '1',  donor: '5',  premium: '∞',         pro: '∞' },
-  { name: 'Histórico de partidas',free: '20', donor: '20', premium: '∞',         pro: '∞' },
-  { name: 'Recomendações por lane',free: '1', donor: '2',  premium: '∞ + razões', pro: '∞ + razões' },
-  { name: 'Chat com IA Metis',    free: '—',  donor: '—',  premium: '✓',         pro: '✓' },
-  { name: 'Análise tática',       free: '—',  donor: '—',  premium: '✓',         pro: '✓' },
-  { name: 'Timeline interativa',  free: '—',  donor: '—',  premium: '✓',         pro: '✓' },
-  { name: 'Coaching IA',          free: '—',  donor: '—',  premium: '—',         pro: '✓' },
-  { name: 'API de dados',         free: '—',  donor: '—',  premium: '—',         pro: '✓' },
-  { name: 'Dashboard evolução',   free: '—',  donor: '—',  premium: '—',         pro: '✓' },
-  { name: 'Badge no perfil',      free: '—',  donor: 'Doador', premium: 'Master', pro: 'Challenger' },
-]
-
-const FAQ = [
-  { q: 'Posso cancelar a qualquer momento?', a: 'Sim, sem multa e sem burocracia. Cancele direto no painel da sua conta.' },
-  { q: 'O que acontece se eu cancelar?',     a: 'Você volta pro plano Free. Seus dados não são apagados — só os benefícios premium param.' },
-  { q: 'Como funciona o Chat com IA?',       a: 'A Metis analisa seus dados de partida e responde perguntas táticas usando Gemini 2.5 Flash com RAG sobre dados reais do jogo.' },
-  { q: 'Aceita PIX?',                         a: 'Sim. Aceitamos PIX, cartão de crédito e boleto.' },
-  { q: 'O Doador ajuda em quê?',              a: 'Ajuda a manter os servidores rodando e o desenvolvimento ativo. Você ganha benefícios extras como agradecimento.' },
-]
-
-// ── Helpers ─────────────────────────────────────────────────────
-function formatCouponDate(iso: string): string {
-  try {
-    const d = new Date(iso)
-    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })
-  } catch {
-    return iso
-  }
+type CompRow = {
+  labelKey: 'row_saved' | 'row_history' | 'row_reco' | 'row_chat' | 'row_tactical' | 'row_timeline' | 'row_coaching' | 'row_api' | 'row_dashboard' | 'row_badge'
+  free: string
+  donor: string
+  premium: string | 'row_reco_premium' | 'badge_master'
+  pro: string | 'row_reco_pro' | 'badge_challenger'
+  /** Se true, o valor é uma chave i18n dentro de comparison. */
+  isKeyPremium?: boolean
+  isKeyPro?: boolean
+  isKeyDonor?: boolean
 }
+
+const COMPARISON: CompRow[] = [
+  { labelKey: 'row_saved',     free: '1',  donor: '5',  premium: '∞', pro: '∞' },
+  { labelKey: 'row_history',   free: '20', donor: '20', premium: '∞', pro: '∞' },
+  { labelKey: 'row_reco',      free: '1',  donor: '2',  premium: 'row_reco_premium', pro: 'row_reco_pro', isKeyPremium: true, isKeyPro: true },
+  { labelKey: 'row_chat',      free: '—',  donor: '—',  premium: '✓', pro: '✓' },
+  { labelKey: 'row_tactical',  free: '—',  donor: '—',  premium: '✓', pro: '✓' },
+  { labelKey: 'row_timeline',  free: '—',  donor: '—',  premium: '✓', pro: '✓' },
+  { labelKey: 'row_coaching',  free: '—',  donor: '—',  premium: '—', pro: '✓' },
+  { labelKey: 'row_api',       free: '—',  donor: '—',  premium: '—', pro: '✓' },
+  { labelKey: 'row_dashboard', free: '—',  donor: '—',  premium: '—', pro: '✓' },
+  { labelKey: 'row_badge',     free: '—',  donor: 'badge_donor', premium: 'badge_master', pro: 'badge_challenger', isKeyDonor: true, isKeyPremium: true, isKeyPro: true },
+]
+
+const FAQ_COUNT = 5
 
 // ── Page ────────────────────────────────────────────────────────
 export default function PricingPage() {
+  const t = useTranslations('pricing')
+  const locale = useLocale() as Locale
   const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [coupons, setCoupons] = useState<Coupon[]>([])
 
@@ -166,12 +86,20 @@ export default function PricingPage() {
       .catch(() => setCoupons([]))
   }, [])
 
+  function formatCouponDate(iso: string): string {
+    try {
+      const d = new Date(iso)
+      return d.toLocaleDateString(locale === 'pt' ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'long' })
+    } catch {
+      return iso
+    }
+  }
+
   return (
     <div className="metis-scope" style={{ minHeight: '100vh', background: 'var(--m-bg)' }}>
       <AppHeader active="plans" />
 
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '44px 28px 48px' }}>
-        {/* ══════════ Header ══════════ */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div
             style={{
@@ -190,19 +118,18 @@ export default function PricingPage() {
               marginBottom: 14,
             }}
           >
-            <Icon name="sparkles" size={12} /> Planos Metis
+            <Icon name="sparkles" size={12} /> {t('eyebrow')}
           </div>
           <h1
             className="font-display"
             style={{ fontSize: 44, fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 10 }}
           >
-            Suba de Elo no <span style={{ color: 'var(--m-accent)' }}>Metis</span>
+            {t('title_part1')} <span style={{ color: 'var(--m-accent)' }}>{t('title_highlight')}</span>
           </h1>
           <p style={{ fontSize: 15, color: 'var(--m-text-dim)', maxWidth: 540, margin: '0 auto' }}>
-            Comece no Prata e evolua até Challenger. Cada tier desbloqueia ferramentas mais poderosas.
+            {t('subtitle')}
           </p>
 
-          {/* Period toggle */}
           <div
             style={{
               display: 'inline-flex',
@@ -214,8 +141,8 @@ export default function PricingPage() {
             }}
           >
             {[
-              { v: 'monthly' as const, l: 'Mensal' },
-              { v: 'yearly' as const,  l: 'Anual', badge: '-20%' },
+              { v: 'monthly' as const, labelKey: 'period_monthly' as const, badge: null },
+              { v: 'yearly' as const,  labelKey: 'period_yearly' as const,  badge: t('period_discount') },
             ].map((p) => {
               const active = period === p.v
               return (
@@ -238,7 +165,7 @@ export default function PricingPage() {
                     fontFamily: 'inherit',
                   }}
                 >
-                  {p.l}
+                  {t(p.labelKey)}
                   {p.badge && (
                     <span
                       style={{
@@ -259,7 +186,6 @@ export default function PricingPage() {
           </div>
         </div>
 
-        {/* ══════════ 4 Tier cards ══════════ */}
         <div
           style={{
             display: 'grid',
@@ -270,7 +196,10 @@ export default function PricingPage() {
           {PLANS.map((p) => {
             const yearly = (p.price * 12 * 0.8).toFixed(2)
             const displayPrice = p.price === 0 ? '0,00' : (period === 'monthly' ? p.price.toFixed(2) : yearly)
-            const displayLabel = p.price === 0 ? p.priceLabel : (period === 'monthly' ? '/mês' : '/ano')
+            const displayLabel = !p.isPaid
+              ? t('price_free')
+              : (period === 'monthly' ? t('price_monthly') : t('price_yearly'))
+            const actionLabel = t(`plans.${p.id}.action`)
 
             return (
               <div
@@ -307,11 +236,10 @@ export default function PricingPage() {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    Mais popular
+                    {t('popular_badge')}
                   </div>
                 )}
 
-                {/* Rank orb */}
                 <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
                   <div
                     style={{
@@ -343,7 +271,6 @@ export default function PricingPage() {
                   </div>
                 </div>
 
-                {/* Name + rank */}
                 <div style={{ textAlign: 'center', marginBottom: 16 }}>
                   <h3 className="font-display" style={{ fontSize: 22, fontWeight: 700 }}>
                     {p.tier}
@@ -362,10 +289,9 @@ export default function PricingPage() {
                   </div>
                 </div>
 
-                {/* Price */}
                 <div style={{ textAlign: 'center', marginBottom: 18 }}>
                   <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 2 }}>
-                    <span style={{ fontSize: 14, color: 'var(--m-text-dim)', fontWeight: 500 }}>R$</span>
+                    <span style={{ fontSize: 14, color: 'var(--m-text-dim)', fontWeight: 500 }}>{t('currency')}</span>
                     <span
                       className="tabular font-display"
                       style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.02em' }}
@@ -378,20 +304,19 @@ export default function PricingPage() {
                   </div>
                 </div>
 
-                {/* CTA */}
                 <button
-                  className={p.action.variant === 'filled' ? 'm-hover-accent' : 'm-hover-surface'}
+                  className={p.actionVariant === 'filled' ? 'm-hover-accent' : 'm-hover-surface'}
                   style={{
                     width: '100%',
                     padding: '11px 14px',
                     borderRadius: 10,
                     background:
-                      p.action.variant === 'muted'
+                      p.actionVariant === 'muted'
                         ? 'var(--m-surface-2)'
                         : `linear-gradient(135deg, ${p.color}, ${p.color}cc)`,
-                    color: p.action.variant === 'muted' ? 'var(--m-text-dim)' : '#0B0D12',
+                    color: p.actionVariant === 'muted' ? 'var(--m-text-dim)' : '#0B0D12',
                     border:
-                      p.action.variant === 'muted'
+                      p.actionVariant === 'muted'
                         ? '1px solid var(--m-border-2)'
                         : 'none',
                     fontSize: 13,
@@ -401,59 +326,61 @@ export default function PricingPage() {
                     fontFamily: 'inherit',
                   }}
                 >
-                  {p.action.label}
+                  {actionLabel}
                 </button>
 
-                {/* Features */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {p.features.map((f, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: 8,
-                        opacity: f.on ? 1 : 0.4,
-                      }}
-                    >
+                  {Array.from({ length: p.featureCount }, (_, i) => {
+                    const on = i < p.featuresOn
+                    const text = t(`plans.${p.id}.feature_${i}` as 'plans.free.feature_0')
+                    return (
                       <div
+                        key={i}
                         style={{
-                          flexShrink: 0,
-                          width: 14,
-                          height: 14,
-                          marginTop: 2,
                           display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
+                          alignItems: 'flex-start',
+                          gap: 8,
+                          opacity: on ? 1 : 0.4,
                         }}
                       >
-                        {f.on ? (
-                          <Icon name="check" size={12} style={{ color: p.color }} strokeWidth={2.5} />
-                        ) : (
-                          <Icon name="x" size={12} style={{ color: 'var(--m-muted)' }} strokeWidth={2} />
-                        )}
+                        <div
+                          style={{
+                            flexShrink: 0,
+                            width: 14,
+                            height: 14,
+                            marginTop: 2,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {on ? (
+                            <Icon name="check" size={12} style={{ color: p.color }} strokeWidth={2.5} />
+                          ) : (
+                            <Icon name="x" size={12} style={{ color: 'var(--m-muted)' }} strokeWidth={2} />
+                          )}
+                        </div>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: on ? 'var(--m-text)' : 'var(--m-muted)',
+                            lineHeight: 1.45,
+                          }}
+                        >
+                          {text}
+                        </span>
                       </div>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          color: f.on ? 'var(--m-text)' : 'var(--m-muted)',
-                          lineHeight: 1.45,
-                        }}
-                      >
-                        {f.t}
-                      </span>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )
           })}
         </div>
 
-        {/* ══════════ Cupons (se houver) ══════════ */}
         {coupons.length > 0 && (
           <Card style={{ marginTop: 32 }}>
-            <SectionLabel icon="sparkles">Cupons disponíveis</SectionLabel>
+            <SectionLabel icon="sparkles">{t('coupons_title')}</SectionLabel>
             <div
               style={{
                 display: 'grid',
@@ -526,7 +453,7 @@ export default function PricingPage() {
                         >
                           <code
                             className="font-mono"
-                            title="descubra o código pra resgatar"
+                            title={t('coupons_code_tooltip')}
                             style={{
                               display: 'inline-block',
                               padding: '1px 8px',
@@ -542,7 +469,7 @@ export default function PricingPage() {
                             ? ? ? ? ? ? ?
                           </code>
                           <span style={{ fontSize: 10, color: 'var(--m-accent)', fontStyle: 'italic' }}>
-                            descubra o código
+                            {t('coupons_discover')}
                           </span>
                         </div>
                       </div>
@@ -577,10 +504,10 @@ export default function PricingPage() {
                           size={11}
                           style={{ display: 'inline', marginRight: 4, verticalAlign: -1 }}
                         />
-                        válido até {formatCouponDate(c.valid_until)}
+                        {t('coupons_valid_until', { date: formatCouponDate(c.valid_until) })}
                       </span>
                       {remaining !== null && (
-                        <span style={{ marginLeft: 'auto' }}>{remaining} restantes</span>
+                        <span style={{ marginLeft: 'auto' }}>{t('coupons_remaining', { n: remaining })}</span>
                       )}
                     </div>
                   </div>
@@ -590,7 +517,6 @@ export default function PricingPage() {
           </Card>
         )}
 
-        {/* ══════════ Footer de trust ══════════ */}
         <div
           style={{
             display: 'grid',
@@ -599,11 +525,11 @@ export default function PricingPage() {
             marginTop: 32,
           }}
         >
-          {[
-            { ico: 'shield' as const, t: 'Cancele quando quiser', d: 'Sem taxas ocultas, sem contrato.' },
-            { ico: 'bolt' as const,   t: 'Ativação imediata',     d: 'Features liberadas em segundos após o pagamento.' },
-            { ico: 'brain' as const,  t: 'IA atualizada',          d: 'Gemini 2.5 Flash · treinada pra League.' },
-          ].map((x, i) => (
+          {([
+            { ico: 'shield' as const, titleKey: 'trust.cancel_title' as const,  descKey: 'trust.cancel_desc' as const },
+            { ico: 'bolt' as const,   titleKey: 'trust.instant_title' as const, descKey: 'trust.instant_desc' as const },
+            { ico: 'brain' as const,  titleKey: 'trust.ai_title' as const,      descKey: 'trust.ai_desc' as const },
+          ]).map((x, i) => (
             <div
               key={i}
               style={{
@@ -632,20 +558,19 @@ export default function PricingPage() {
                 <Icon name={x.ico} size={16} />
               </div>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{x.t}</div>
-                <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 3 }}>{x.d}</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{t(x.titleKey)}</div>
+                <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 3 }}>{t(x.descKey)}</div>
               </div>
             </div>
           ))}
         </div>
 
-        {/* ══════════ Comparativo tabular ══════════ */}
         <div style={{ marginTop: 48, maxWidth: 900, marginLeft: 'auto', marginRight: 'auto' }}>
           <h2
             className="font-display"
             style={{ fontSize: 24, fontWeight: 700, textAlign: 'center', marginBottom: 20 }}
           >
-            Comparativo de benefícios
+            {t('comparison.title')}
           </h2>
           <Card pad={0}>
             <div style={{ overflowX: 'auto' }}>
@@ -663,22 +588,22 @@ export default function PricingPage() {
                         fontWeight: 600,
                       }}
                     >
-                      Benefício
+                      {t('comparison.benefit_col')}
                     </th>
-                    {(['Free', 'Doador', 'Premium', 'Pro'] as const).map((n, i) => (
+                    {PLANS.map((p) => (
                       <th
-                        key={n}
+                        key={p.id}
                         style={{
                           padding: '12px 12px',
                           textAlign: 'center',
                           fontSize: 10,
-                          color: PLANS[i].color,
+                          color: p.color,
                           textTransform: 'uppercase',
                           letterSpacing: '0.06em',
                           fontWeight: 700,
                         }}
                       >
-                        {n}
+                        {p.tier}
                       </th>
                     ))}
                   </tr>
@@ -693,19 +618,19 @@ export default function PricingPage() {
                       }}
                     >
                       <td style={{ padding: '10px 16px', fontSize: 12, color: 'var(--m-text)' }}>
-                        {row.name}
+                        {t(`comparison.${row.labelKey}`)}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12, color: PLANS[0].color }}>
                         {row.free}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12, color: PLANS[1].color }}>
-                        {row.donor}
+                        {row.isKeyDonor ? t(`comparison.${row.donor}` as 'comparison.badge_donor') : row.donor}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12, color: PLANS[2].color }}>
-                        {row.premium}
+                        {row.isKeyPremium ? t(`comparison.${row.premium}` as 'comparison.badge_master') : row.premium}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12, color: PLANS[3].color }}>
-                        {row.pro}
+                        {row.isKeyPro ? t(`comparison.${row.pro}` as 'comparison.badge_challenger') : row.pro}
                       </td>
                     </tr>
                   ))}
@@ -715,16 +640,15 @@ export default function PricingPage() {
           </Card>
         </div>
 
-        {/* ══════════ FAQ ══════════ */}
         <div style={{ marginTop: 48, maxWidth: 720, marginLeft: 'auto', marginRight: 'auto' }}>
           <h2
             className="font-display"
             style={{ fontSize: 24, fontWeight: 700, textAlign: 'center', marginBottom: 20 }}
           >
-            Perguntas frequentes
+            {t('faq.title')}
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {FAQ.map((faq, i) => (
+            {Array.from({ length: FAQ_COUNT }, (_, i) => (
               <div
                 key={i}
                 style={{
@@ -734,14 +658,17 @@ export default function PricingPage() {
                   borderRadius: 12,
                 }}
               >
-                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{faq.q}</h3>
-                <p style={{ fontSize: 12, color: 'var(--m-text-dim)', lineHeight: 1.55 }}>{faq.a}</p>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+                  {t(`faq.q_${i}` as 'faq.q_0')}
+                </h3>
+                <p style={{ fontSize: 12, color: 'var(--m-text-dim)', lineHeight: 1.55 }}>
+                  {t(`faq.a_${i}` as 'faq.a_0')}
+                </p>
               </div>
             ))}
           </div>
         </div>
 
-        {/* ══════════ Times & Empresas ══════════ */}
         <div style={{ marginTop: 60, maxWidth: 960, marginLeft: 'auto', marginRight: 'auto' }}>
           <div
             style={{
@@ -771,7 +698,7 @@ export default function PricingPage() {
                 <Icon name="users" size={18} />
               </div>
               <h2 className="font-display" style={{ fontSize: 24, fontWeight: 700 }}>
-                Para Times e Empresas
+                {t('enterprise.title')}
               </h2>
             </div>
             <p
@@ -783,8 +710,9 @@ export default function PricingPage() {
                 lineHeight: 1.55,
               }}
             >
-              Seu time pode contratar nosso serviço. Entre em contato, peça modificações, e criaremos sua{' '}
-              <span style={{ color: 'var(--m-accent)', fontWeight: 600 }}>ferramenta própria</span> pra você poder analisar todos os seus jogadores em velocidade industrial.
+              {t('enterprise.desc_part1')}{' '}
+              <span style={{ color: 'var(--m-accent)', fontWeight: 600 }}>{t('enterprise.desc_highlight')}</span>{' '}
+              {t('enterprise.desc_part2')}
             </p>
 
             <div
@@ -796,11 +724,11 @@ export default function PricingPage() {
                 margin: '0 auto 24px',
               }}
             >
-              {[
-                { big: 'Analytics', sub: 'Dashboard personalizado pro seu time inteiro', color: 'var(--m-accent)' },
-                { big: 'Scouting',  sub: 'Encontre e analise talentos automaticamente',   color: 'var(--m-cyan)' },
-                { big: 'API',       sub: 'Integre dados do Metis nos seus sistemas',      color: 'var(--m-violet)' },
-              ].map((x, i) => (
+              {([
+                { bigKey: 'enterprise.card_analytics_big' as const, subKey: 'enterprise.card_analytics_sub' as const, color: 'var(--m-accent)' },
+                { bigKey: 'enterprise.card_scouting_big' as const,  subKey: 'enterprise.card_scouting_sub' as const,  color: 'var(--m-cyan)' },
+                { bigKey: 'enterprise.card_api_big' as const,       subKey: 'enterprise.card_api_sub' as const,       color: 'var(--m-violet)' },
+              ]).map((x, i) => (
                 <div
                   key={i}
                   style={{
@@ -811,10 +739,10 @@ export default function PricingPage() {
                   }}
                 >
                   <div className="font-display" style={{ fontSize: 18, fontWeight: 700, color: x.color }}>
-                    {x.big}
+                    {t(x.bigKey)}
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 4, lineHeight: 1.4 }}>
-                    {x.sub}
+                    {t(x.subKey)}
                   </div>
                 </div>
               ))}
@@ -837,17 +765,17 @@ export default function PricingPage() {
               }}
             >
               <Icon name="send" size={14} />
-              Fale com a gente
+              {t('enterprise.cta')}
             </a>
 
             <p style={{ fontSize: 10, color: 'var(--m-muted)', marginTop: 12 }}>
-              Planos empresariais com preços sob consulta. Contratos mensais ou anuais.
+              {t('enterprise.footnote')}
             </p>
           </div>
         </div>
 
         <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--m-muted)', marginTop: 36 }}>
-          Preços em reais brasileiros (BRL). Planos anuais cobrados em parcela única com 20% de desconto.
+          {t('bottom_note')}
         </p>
       </div>
     </div>

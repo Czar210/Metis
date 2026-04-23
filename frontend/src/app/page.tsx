@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useLocale, useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase/client'
 import { DDRAGON_VERSION } from '@/lib/ddragon'
 import { apiFetch } from '@/lib/api'
@@ -17,12 +18,21 @@ import {
   ChampPortrait,
   TierBadge,
   WinLossDots,
-  ROLES_PT,
   type Tier,
   type Role,
 } from '@/components/design'
 import Image from 'next/image'
 import { roleIconPath } from '@/lib/ddragon'
+import { formatNumber } from '@/lib/format'
+import type { Locale } from '@/i18n/config'
+
+const ROLE_I18N_KEY: Record<Role, 'role_top' | 'role_jungle' | 'role_mid' | 'role_adc' | 'role_sup'> = {
+  TOP: 'role_top',
+  JUNGLE: 'role_jungle',
+  MIDDLE: 'role_mid',
+  BOTTOM: 'role_adc',
+  UTILITY: 'role_sup',
+}
 
 // ── Types ───────────────────────────────────────────────────────
 type WatchedPlayer = {
@@ -78,6 +88,9 @@ function computeKDA(k: number, d: number, a: number): string {
 export default function HomePage() {
   const router = useRouter()
   const supabase = createClient()
+  const t = useTranslations('home')
+  const tCommon = useTranslations('common')
+  const locale = useLocale() as Locale
 
   const [searchInput, setSearchInput] = useState('')
   const [searchServer, setSearchServer] = useState('')
@@ -250,18 +263,18 @@ export default function HomePage() {
             }}
           >
             <Icon name="sparkles" size={12} />
-            {patchLabel ? `Patch ${patchLabel} · ao vivo` : 'Metis · em produção'}
+            {patchLabel ? t('hero.patch_live', { patch: patchLabel }) : t('hero.production_badge')}
           </div>
 
           <h1
             className="font-display"
             style={{ fontSize: 52, lineHeight: 1.05, fontWeight: 700, letterSpacing: '-0.03em', maxWidth: 760, marginBottom: 14 }}
           >
-            Seu coach particular, em cada <span style={{ color: 'var(--m-accent)' }}>partida</span>.
+            {t('hero.title_part1')} <span style={{ color: 'var(--m-accent)' }}>{t('hero.title_highlight')}</span>{t('hero.title_part2')}
           </h1>
           <p style={{ fontSize: 16, color: 'var(--m-text-dim)', maxWidth: 560, marginBottom: 28, lineHeight: 1.5 }}>
-            Metis analisa jogo a jogo com IA, extrai padrões do seu desempenho e mostra exatamente{' '}
-            <span style={{ color: 'var(--m-text)' }}>o que funciona</span> — e o que está te segurando.
+            {t('hero.subtitle_part1')}{' '}
+            <span style={{ color: 'var(--m-text)' }}>{t('hero.subtitle_highlight')}</span> {t('hero.subtitle_part2')}
           </p>
 
           {/* Search */}
@@ -285,7 +298,7 @@ export default function HomePage() {
                   onChange={(e) => setSearchInput(e.target.value)}
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => setTimeout(() => setInputFocused(false), 250)}
-                  placeholder="Nome#Tag  ex: Zaras#0210"
+                  placeholder={t('hero.search_placeholder')}
                   style={{
                     flex: 1,
                     background: 'transparent',
@@ -405,7 +418,7 @@ export default function HomePage() {
                 minWidth: 90,
               }}
             >
-              <option value="">Servidor</option>
+              <option value="">{t('hero.server_placeholder')}</option>
               <option value="BR1">BR</option>
               <option value="NA1">NA</option>
               <option value="EUW1">EUW</option>
@@ -434,13 +447,13 @@ export default function HomePage() {
                 cursor: 'pointer',
               }}
             >
-              Analisar
+              {t('hero.analyze')}
               <Icon name="arrowRight" size={14} />
             </button>
           </form>
 
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: 'var(--m-muted)', marginRight: 4 }}>Sugestões:</span>
+            <span style={{ fontSize: 11, color: 'var(--m-muted)', marginRight: 4 }}>{t('hero.suggestions_label')}</span>
             {['Zaras#0210', 'Brtt#BR1'].map((n) => (
               <button
                 key={n}
@@ -478,18 +491,18 @@ export default function HomePage() {
           >
             <Stat
               size="lg"
-              label="Partidas analisadas"
-              value={totalMatches !== null ? totalMatches.toLocaleString('pt-BR') : '—'}
-              sub="camada prata · Supabase"
+              label={t('stats.matches_analyzed')}
+              value={totalMatches !== null ? formatNumber(totalMatches, locale) : '—'}
+              sub={t('stats.matches_sub')}
             />
             <Stat
               size="lg"
-              label="Jogadores mapeados"
-              value={totalPlayers !== null ? totalPlayers.toLocaleString('pt-BR') : '—'}
-              sub="histórico ingerido"
+              label={t('stats.players_mapped')}
+              value={totalPlayers !== null ? formatNumber(totalPlayers, locale) : '—'}
+              sub={t('stats.players_sub')}
             />
-            <Stat size="lg" label="Chat IA" value="Gemini 2.5" sub="Flash · LoL-only" accent="var(--m-cyan)" />
-            <Stat size="lg" label="Status" value="ao vivo" sub="pipeline contínua" accent="var(--m-accent)" />
+            <Stat size="lg" label={t('stats.ai_chat')} value="Gemini 2.5" sub={t('stats.ai_sub')} accent="var(--m-cyan)" />
+            <Stat size="lg" label={t('stats.status')} value={t('stats.status_value')} sub={t('stats.status_sub')} accent="var(--m-accent)" />
           </div>
         </div>
       </section>
@@ -512,10 +525,10 @@ export default function HomePage() {
             <Card pad={0}>
               <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--m-border)' }}>
                 <SectionLabel icon="flame">
-                  Destaques do meta{patchLabel ? ` · patch ${patchLabel}` : ''}
+                  {patchLabel ? t('meta.spotlight_eyebrow_patch', { patch: patchLabel }) : t('meta.spotlight_eyebrow')}
                 </SectionLabel>
                 <h3 className="font-display" style={{ fontSize: 20, fontWeight: 600 }}>
-                  Quem está <span style={{ color: 'var(--m-accent)' }}>quebrando</span> a solo queue agora
+                  {t('meta.spotlight_title_part1')} <span style={{ color: 'var(--m-accent)' }}>{t('meta.spotlight_title_highlight')}</span> {t('meta.spotlight_title_part2')}
                 </h3>
               </div>
               <div
@@ -571,7 +584,9 @@ export default function HomePage() {
                                   letterSpacing: '0.06em',
                                 }}
                               >
-                                {ROLES_PT[c.role as keyof typeof ROLES_PT] ?? c.role}
+                                {ROLE_I18N_KEY[c.role as Role]
+                                  ? t(`tierlist.${ROLE_I18N_KEY[c.role as Role]}`)
+                                  : c.role}
                               </span>
                             )}
                           </div>
@@ -589,7 +604,7 @@ export default function HomePage() {
                             >
                               {c.winrate.toFixed(1)}%
                             </span>
-                            <span style={{ fontSize: 11, color: 'var(--m-muted)' }}>winrate</span>
+                            <span style={{ fontSize: 11, color: 'var(--m-muted)' }}>{t('meta.winrate')}</span>
                           </div>
                         </div>
                       </div>
@@ -613,7 +628,7 @@ export default function HomePage() {
                               fontWeight: 600,
                             }}
                           >
-                            KDA
+                            {t('meta.kda')}
                           </div>
                           <div className="tabular" style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>
                             {kda}
@@ -629,10 +644,10 @@ export default function HomePage() {
                               fontWeight: 600,
                             }}
                           >
-                            Partidas
+                            {t('meta.matches')}
                           </div>
                           <div className="tabular" style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>
-                            {c.total_matches.toLocaleString('pt-BR')}
+                            {formatNumber(c.total_matches, locale)}
                           </div>
                         </div>
                       </div>
@@ -655,7 +670,9 @@ export default function HomePage() {
                 }}
               >
                 <SectionLabel icon="trending">
-                  Tier list · top 8{roleFilter ? ` · ${ROLES_PT[roleFilter]}` : ''}
+                  {roleFilter
+                    ? t('tierlist.title_with_role', { role: t(`tierlist.${ROLE_I18N_KEY[roleFilter]}`) })
+                    : t('tierlist.title_base')}
                 </SectionLabel>
                 <Link
                   href="/champions"
@@ -669,7 +686,7 @@ export default function HomePage() {
                     gap: 3,
                   }}
                 >
-                  Ver completa <Icon name="chevronRight" size={12} />
+                  {t('tierlist.see_full')} <Icon name="chevronRight" size={12} />
                 </Link>
               </div>
 
@@ -683,17 +700,17 @@ export default function HomePage() {
                 }}
               >
                 {([
-                  { v: '', label: 'Todos', icon: null },
-                  { v: 'TOP', label: 'Top', icon: 'TOP' },
-                  { v: 'JUNGLE', label: 'Jungle', icon: 'JUNGLE' },
-                  { v: 'MIDDLE', label: 'Mid', icon: 'MIDDLE' },
-                  { v: 'BOTTOM', label: 'ADC', icon: 'BOTTOM' },
-                  { v: 'UTILITY', label: 'Sup', icon: 'UTILITY' },
+                  { v: '', labelKey: 'role_all', icon: null },
+                  { v: 'TOP', labelKey: 'role_top', icon: 'TOP' },
+                  { v: 'JUNGLE', labelKey: 'role_jungle', icon: 'JUNGLE' },
+                  { v: 'MIDDLE', labelKey: 'role_mid', icon: 'MIDDLE' },
+                  { v: 'BOTTOM', labelKey: 'role_adc', icon: 'BOTTOM' },
+                  { v: 'UTILITY', labelKey: 'role_sup', icon: 'UTILITY' },
                 ] as const).map((r) => {
                   const active = roleFilter === r.v
                   return (
                     <button
-                      key={r.label}
+                      key={r.labelKey}
                       type="button"
                       onClick={() => setRoleFilter(r.v as Role | '')}
                       className="m-hover-surface"
@@ -725,7 +742,7 @@ export default function HomePage() {
                           }}
                         />
                       )}
-                      {r.label}
+                      {t(`tierlist.${r.labelKey}`)}
                     </button>
                   )
                 })}
@@ -745,10 +762,10 @@ export default function HomePage() {
                   borderBottom: '1px solid var(--m-border)',
                 }}
               >
-                <span>Tier</span>
-                <span>Campeão</span>
-                <span>Winrate</span>
-                <span className="tabular">KDA</span>
+                <span>{t('tierlist.col_tier')}</span>
+                <span>{t('tierlist.col_champion')}</span>
+                <span>{t('tierlist.col_winrate')}</span>
+                <span className="tabular">{t('tierlist.col_kda')}</span>
               </div>
               {top8.length === 0 && (
                 <div
@@ -759,7 +776,9 @@ export default function HomePage() {
                     color: 'var(--m-muted)',
                   }}
                 >
-                  Nenhum campeão em {roleFilter ? ROLES_PT[roleFilter] : 'nenhuma role'} com amostra suficiente nesse patch.
+                  {roleFilter
+                    ? t('tierlist.empty_with_role', { role: t(`tierlist.${ROLE_I18N_KEY[roleFilter]}`) })
+                    : t('tierlist.empty_no_role')}
                 </div>
               )}
               {top8.map((c) => {
@@ -823,7 +842,7 @@ export default function HomePage() {
           {topChamps.length === 0 && (
             <Card>
               <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>
-                Tier list carregando — o backend pode estar acordando. Recarrega em alguns segundos.
+                {t('tierlist.loading_backend')}
               </p>
             </Card>
           )}
@@ -838,17 +857,17 @@ export default function HomePage() {
               right={
                 user && (
                   <Pill color="accent" icon="plus">
-                    Novo
+                    {t('watched.new_pill')}
                   </Pill>
                 )
               }
             >
-              Em supervisão
+              {t('watched.title')}
             </SectionLabel>
             {!user ? (
               <div>
                 <p style={{ fontSize: 12, color: 'var(--m-text-dim)', lineHeight: 1.5, marginBottom: 10 }}>
-                  Faça login pra supervisionar jogadores e ter a Metis acompanhando o progresso.
+                  {t('watched.cta_login')}
                 </p>
                 <Link
                   href="/auth"
@@ -867,14 +886,14 @@ export default function HomePage() {
                     textDecoration: 'none',
                   }}
                 >
-                  Entrar <Icon name="arrowRight" size={12} />
+                  {t('watched.sign_in')} <Icon name="arrowRight" size={12} />
                 </Link>
               </div>
             ) : loadingWatched ? (
-              <p style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>Carregando...</p>
+              <p style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>{tCommon('loading')}</p>
             ) : watched.length === 0 ? (
               <p style={{ fontSize: 12, color: 'var(--m-text-dim)', lineHeight: 1.5 }}>
-                Nenhum jogador em supervisão. Busque um invocador e marque com a estrela pra começar a acompanhar.
+                {t('watched.empty')}
               </p>
             ) : (
               <>
@@ -961,10 +980,10 @@ export default function HomePage() {
               </div>
               <div>
                 <div className="font-display" style={{ fontSize: 14, fontWeight: 600 }}>
-                  Pergunte à Metis
+                  {t('ask_metis.title')}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--m-text-dim)' }}>
-                  Gemini 2.5 Flash · contexto das suas partidas
+                  {t('ask_metis.subtitle')}
                 </div>
               </div>
             </div>
@@ -978,15 +997,14 @@ export default function HomePage() {
               }}
             >
               <p style={{ fontSize: 12, color: 'var(--m-text-dim)', lineHeight: 1.5 }}>
-                <span style={{ color: 'var(--m-accent)', fontWeight: 600 }}>Ex:</span> &quot;Por que meu winrate caiu com
-                Kayn nos últimos 10 jogos?&quot;
+                <span style={{ color: 'var(--m-accent)', fontWeight: 600 }}>{t('ask_metis.example_prefix')}</span> {t('ask_metis.example_question')}
               </p>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {[
-                'Me mostre meu matchup mais difícil',
-                'Qual role eu deveria forçar na ranqueada?',
-                'Revisa meu último jogo perdido',
+                t('ask_metis.q1'),
+                t('ask_metis.q2'),
+                t('ask_metis.q3'),
               ].map((q) => (
                 <Link
                   key={q}
@@ -1022,18 +1040,18 @@ export default function HomePage() {
                   href="/changelog"
                   style={{ fontSize: 11, color: 'var(--m-accent)', textDecoration: 'none' }}
                 >
-                  Ver tudo
+                  {t('changelog.see_all')}
                 </Link>
               }
             >
-              Novidades recentes
+              {t('changelog.title')}
             </SectionLabel>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[
-                { tag: 'NOVO', color: 'var(--m-green)', text: 'Redesign p-0.9.5+ em andamento' },
-                { tag: 'MELHORIA', color: 'var(--m-accent)', text: 'Filtro de campeões impopulares na tier list' },
-                { tag: 'NOVO', color: 'var(--m-violet)', text: 'Chat IA com Gemini 2.5 Flash + guardrail LoL' },
-                { tag: 'FIX', color: 'var(--m-blue)', text: 'Scraper Mobafire corrigido (bug /build/ → /builds/)' },
+                { tag: t('changelog.tag_new'), color: 'var(--m-green)', text: t('changelog.item_1') },
+                { tag: t('changelog.tag_improvement'), color: 'var(--m-accent)', text: t('changelog.item_2') },
+                { tag: t('changelog.tag_new'), color: 'var(--m-violet)', text: t('changelog.item_3') },
+                { tag: t('changelog.tag_fix'), color: 'var(--m-blue)', text: t('changelog.item_4') },
               ].map((x, i) => (
                 <div
                   key={i}

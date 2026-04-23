@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
+import { useLocale, useTranslations } from 'next-intl'
 import { championIconUrl, roleIconPath, DDRAGON_VERSION } from '@/lib/ddragon'
 import { apiFetch } from '@/lib/api'
 import {
@@ -17,6 +18,10 @@ import {
   ChampPortrait,
   type Role,
 } from '@/components/design'
+import { formatNumber } from '@/lib/format'
+import type { Locale } from '@/i18n/config'
+
+type RoleKey = 'role_all' | 'role_top' | 'role_jungle' | 'role_mid' | 'role_adc' | 'role_sup'
 
 // ── Types ──────────────────────────────────────────────────────────
 type Overview = {
@@ -59,17 +64,17 @@ type Synergy = {
 
 type Tab = 'overview' | 'builds' | 'matchups' | 'synergies'
 
-const ROLES: { v: '' | Role; label: string; iconRole: Role | null }[] = [
-  { v: '',        label: 'Todas',   iconRole: null },
-  { v: 'TOP',     label: 'Top',     iconRole: 'TOP' },
-  { v: 'JUNGLE',  label: 'Jungle',  iconRole: 'JUNGLE' },
-  { v: 'MIDDLE',  label: 'Mid',     iconRole: 'MIDDLE' },
-  { v: 'BOTTOM',  label: 'ADC',     iconRole: 'BOTTOM' },
-  { v: 'UTILITY', label: 'Suporte', iconRole: 'UTILITY' },
+const ROLES: { v: '' | Role; labelKey: RoleKey; iconRole: Role | null }[] = [
+  { v: '',        labelKey: 'role_all',    iconRole: null },
+  { v: 'TOP',     labelKey: 'role_top',    iconRole: 'TOP' },
+  { v: 'JUNGLE',  labelKey: 'role_jungle', iconRole: 'JUNGLE' },
+  { v: 'MIDDLE',  labelKey: 'role_mid',    iconRole: 'MIDDLE' },
+  { v: 'BOTTOM',  labelKey: 'role_adc',    iconRole: 'BOTTOM' },
+  { v: 'UTILITY', labelKey: 'role_sup',    iconRole: 'UTILITY' },
 ]
 
 const SERVERS = [
-  { value: '',      label: 'Todas as regiões' },
+  { value: '',      label: null },
   { value: 'BR1',   label: 'BR' },
   { value: 'NA1',   label: 'NA' },
   { value: 'EUW1',  label: 'EUW' },
@@ -81,6 +86,8 @@ const SERVERS = [
 export default function ChampionPage() {
   const params = useParams()
   const champion = decodeURIComponent(params.champion as string)
+  const t = useTranslations('champion')
+  const locale = useLocale() as Locale
 
   const [tab, setTab] = useState<Tab>('overview')
   const [role, setRole] = useState<'' | Role>('')
@@ -135,7 +142,7 @@ export default function ChampionPage() {
         setOverviewAll(ov)
       }
     } catch {
-      setError('Não foi possível carregar dados do campeão.')
+      setError(t('error_load'))
     } finally {
       setLoading(false)
     }
@@ -198,7 +205,7 @@ export default function ChampionPage() {
               marginBottom: 16,
             }}
           >
-            ← Tier List
+            {t('back_to_tierlist')}
           </Link>
           <div
             style={{
@@ -252,14 +259,14 @@ export default function ChampionPage() {
                       className="tabular"
                       style={{ color: 'var(--m-text)', fontWeight: 600 }}
                     >
-                      {overview.total_matches}
+                      {formatNumber(overview.total_matches, locale)}
                     </span>
-                    <span>partidas no banco Metis</span>
+                    <span>{t('matches_in_db')}</span>
                   </>
                 )}
                 {isUnpopularRole && (
                   <span style={{ color: 'var(--m-orange)', fontWeight: 600 }}>
-                    · Role impopular (&lt;5%)
+                    {t('unpopular_role_hint')}
                   </span>
                 )}
               </div>
@@ -282,7 +289,7 @@ export default function ChampionPage() {
               }}
             >
               <Icon name="brain" size={13} />
-              Perguntar à IA
+              {t('ask_ai')}
             </Link>
           </div>
         </div>
@@ -296,7 +303,7 @@ export default function ChampionPage() {
             const active = role === r.v
             return (
               <button
-                key={r.label}
+                key={r.labelKey}
                 type="button"
                 onClick={() => setRole(r.v)}
                 className="m-hover-surface"
@@ -325,7 +332,7 @@ export default function ChampionPage() {
                     style={{ objectFit: 'contain', filter: active ? 'brightness(0.2)' : 'none' }}
                   />
                 )}
-                {r.label}
+                {t(r.labelKey)}
               </button>
             )
           })}
@@ -346,7 +353,7 @@ export default function ChampionPage() {
           >
             {SERVERS.map((s) => (
               <option key={s.value} value={s.value}>
-                {s.label}
+                {s.label ?? t('server_all')}
               </option>
             ))}
           </select>
@@ -364,7 +371,7 @@ export default function ChampionPage() {
               outline: 'none',
             }}
           >
-            <option value="">Todos os patches</option>
+            <option value="">{t('all_patches')}</option>
             {patches.map((p) => (
               <option key={p} value={p}>
                 {p}
@@ -385,18 +392,18 @@ export default function ChampionPage() {
         >
           {(
             [
-              { id: 'overview',  l: 'Overview', ic: 'target'    },
-              { id: 'builds',    l: 'Builds',   ic: 'sword'     },
-              { id: 'matchups',  l: 'Matchups', ic: 'crosshair' },
-              { id: 'synergies', l: 'Sinergias',ic: 'users'     },
+              { id: 'overview',  labelKey: 'tab_overview'  as const, ic: 'target'    as const },
+              { id: 'builds',    labelKey: 'tab_builds'    as const, ic: 'sword'     as const },
+              { id: 'matchups',  labelKey: 'tab_matchups'  as const, ic: 'crosshair' as const },
+              { id: 'synergies', labelKey: 'tab_synergies' as const, ic: 'users'     as const },
             ] as const
-          ).map((t) => {
-            const active = tab === t.id
+          ).map((tabDef) => {
+            const active = tab === tabDef.id
             return (
               <button
-                key={t.id}
+                key={tabDef.id}
                 type="button"
-                onClick={() => setTab(t.id)}
+                onClick={() => setTab(tabDef.id)}
                 style={{
                   padding: '10px 16px',
                   background: 'transparent',
@@ -413,8 +420,8 @@ export default function ChampionPage() {
                   fontFamily: 'inherit',
                 }}
               >
-                <Icon name={t.ic} size={13} />
-                {t.l}
+                <Icon name={tabDef.ic} size={13} />
+                {t(tabDef.labelKey)}
               </button>
             )
           })}
@@ -470,10 +477,10 @@ export default function ChampionPage() {
                 }}
               >
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--m-orange)', marginBottom: 4 }}>
-                  Role impopular
+                  {t('unpopular_role_title')}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--m-text-dim)', lineHeight: 1.5 }}>
-                  {champion} tem menos de 5% das partidas nessa role. Os dados podem não ser representativos.
+                  {t('unpopular_role_desc', { name: champion })}
                 </div>
               </div>
             )}
@@ -482,6 +489,7 @@ export default function ChampionPage() {
             {tab === 'builds'    && <BuildsTab    builds={builds} />}
             {tab === 'matchups'  && <MatchupsTab  matchups={matchups} />}
             {tab === 'synergies' && <SynergiesTab synergies={synergies} />}
+            {/* ↑ i18n: cada Tab chama useTranslations internamente */}
           </div>
         )}
       </div>
@@ -498,11 +506,13 @@ export default function ChampionPage() {
 
 // ── Overview tab ──────────────────────────────────────────────────
 function OverviewTab({ overview }: { overview: Overview | null }) {
+  const t = useTranslations('champion.overview')
+  const locale = useLocale() as Locale
   if (!overview || overview.stats === null) {
     return (
       <Card>
         <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>
-          Sem dados suficientes com os filtros selecionados.
+          {t('empty')}
         </p>
       </Card>
     )
@@ -516,7 +526,7 @@ function OverviewTab({ overview }: { overview: Overview | null }) {
         {/* KPIs */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
           <Card>
-            <SectionLabel icon="target">Winrate</SectionLabel>
+            <SectionLabel icon="target">{t('winrate')}</SectionLabel>
             <div
               className="tabular font-display"
               style={{
@@ -541,12 +551,12 @@ function OverviewTab({ overview }: { overview: Overview | null }) {
               />
             </div>
             <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 6 }}>
-              média role: 50.0%
+              {t('role_avg')}
             </div>
           </Card>
 
           <Card>
-            <SectionLabel icon="sword">KDA</SectionLabel>
+            <SectionLabel icon="sword">{t('kda')}</SectionLabel>
             <div className="tabular font-display" style={{ fontSize: 34, fontWeight: 700 }}>
               {kda}
             </div>
@@ -555,11 +565,11 @@ function OverviewTab({ overview }: { overview: Overview | null }) {
               <span style={{ color: 'var(--m-red)' }}>{s.avg_deaths.toFixed(1)}</span> /{' '}
               <span style={{ color: 'var(--m-cyan)' }}>{s.avg_assists.toFixed(1)}</span>
             </div>
-            <div style={{ fontSize: 10, color: 'var(--m-muted)', marginTop: 8 }}>média por partida</div>
+            <div style={{ fontSize: 10, color: 'var(--m-muted)', marginTop: 8 }}>{t('kda_sub')}</div>
           </Card>
 
           <Card>
-            <SectionLabel icon="crosshair">CS / min</SectionLabel>
+            <SectionLabel icon="crosshair">{t('cs_per_min')}</SectionLabel>
             <div className="tabular font-display" style={{ fontSize: 34, fontWeight: 700 }}>
               {s.avg_cs_per_minute.toFixed(1)}
             </div>
@@ -568,27 +578,26 @@ function OverviewTab({ overview }: { overview: Overview | null }) {
             </div>
             <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 6 }}>
               {s.avg_cs_per_minute >= 8
-                ? 'ótimo farm'
+                ? t('cs_great')
                 : s.avg_cs_per_minute >= 6
-                ? 'média da role'
-                : 'abaixo — focar em last hits'}
+                ? t('cs_avg')
+                : t('cs_low')}
             </div>
           </Card>
 
           <Card>
-            <SectionLabel icon="zap">DPM</SectionLabel>
+            <SectionLabel icon="zap">{t('dpm')}</SectionLabel>
             <div className="tabular font-display" style={{ fontSize: 34, fontWeight: 700 }}>
               {Math.round(s.avg_damage_per_minute)}
             </div>
             <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 6 }}>
-              ouro médio: {(s.avg_gold / 1000).toFixed(1)}k · KP {Math.round(s.avg_kill_participation * 100)}%
+              {t('dpm_sub', { gold: (s.avg_gold / 1000).toFixed(1), kp: Math.round(s.avg_kill_participation * 100) })}
             </div>
           </Card>
         </div>
 
-        {/* Curva de poder — placeholder */}
         <Card>
-          <SectionLabel icon="trending">Curva de poder por tempo de jogo</SectionLabel>
+          <SectionLabel icon="trending">{t('power_curve')}</SectionLabel>
           <div
             style={{
               padding: '28px 14px',
@@ -600,9 +609,9 @@ function OverviewTab({ overview }: { overview: Overview | null }) {
           >
             <Icon name="clock" size={20} style={{ opacity: 0.5, marginBottom: 6 }} />
             <div>
-              Em breve — precisa de eventos de timeline parsed (Bloco 0 do roadmap de analytics).
+              {t('power_curve_empty_line1')}
               <br />
-              Enquanto isso, a aba Builds e Matchups já estão funcionais.
+              {t('power_curve_empty_line2')}
             </div>
           </div>
         </Card>
@@ -611,12 +620,12 @@ function OverviewTab({ overview }: { overview: Overview | null }) {
       {/* Sidebar */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <Card accent>
-          <SectionLabel icon="brain">Insight da Metis</SectionLabel>
+          <SectionLabel icon="brain">{t('metis_insight')}</SectionLabel>
           <p style={{ fontSize: 12, color: 'var(--m-text)', lineHeight: 1.55 }}>
             <span style={{ color: 'var(--m-accent)', fontWeight: 600 }}>
               {overview.champion}
             </span>{' '}
-            tem{' '}
+            {t('insight_template_part1')}{' '}
             <span
               style={{
                 color: s.winrate > 52 ? 'var(--m-green)' : s.winrate < 48 ? 'var(--m-red)' : 'var(--m-text)',
@@ -625,7 +634,7 @@ function OverviewTab({ overview }: { overview: Overview | null }) {
             >
               {s.winrate.toFixed(1)}% WR
             </span>{' '}
-            em {overview.total_matches} partidas no banco. Pergunte à Metis sobre counter-picks, timings e builds.
+            {t('insight_template_part2', { total: formatNumber(overview.total_matches, locale) })}
           </p>
           <Link
             href="/chat"
@@ -647,17 +656,17 @@ function OverviewTab({ overview }: { overview: Overview | null }) {
               textDecoration: 'none',
             }}
           >
-            Explorar no chat →
+            {t('explore_chat')}
           </Link>
         </Card>
 
         <Card>
-          <SectionLabel icon="activity">Estatísticas adicionais</SectionLabel>
+          <SectionLabel icon="activity">{t('additional_stats')}</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-            <Stat size="sm" label="Kill partic." value={`${Math.round(s.avg_kill_participation * 100)}%`} />
-            <Stat size="sm" label="Ouro médio" value={`${(s.avg_gold / 1000).toFixed(1)}k`} />
-            <Stat size="sm" label="Avg Kills" value={s.avg_kills.toFixed(1)} accent="var(--m-green)" />
-            <Stat size="sm" label="Avg Deaths" value={s.avg_deaths.toFixed(1)} accent="var(--m-red)" />
+            <Stat size="sm" label={t('kill_part')} value={`${Math.round(s.avg_kill_participation * 100)}%`} />
+            <Stat size="sm" label={t('avg_gold')} value={`${(s.avg_gold / 1000).toFixed(1)}k`} />
+            <Stat size="sm" label={t('avg_kills')} value={s.avg_kills.toFixed(1)} accent="var(--m-green)" />
+            <Stat size="sm" label={t('avg_deaths')} value={s.avg_deaths.toFixed(1)} accent="var(--m-red)" />
           </div>
         </Card>
       </div>
@@ -667,11 +676,13 @@ function OverviewTab({ overview }: { overview: Overview | null }) {
 
 // ── Builds tab ────────────────────────────────────────────────────
 function BuildsTab({ builds }: { builds: BuildItem[] }) {
+  const t = useTranslations('champion.builds')
+  const locale = useLocale() as Locale
   if (builds.length === 0) {
     return (
       <Card>
         <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>
-          Sem dados de builds com os filtros selecionados.
+          {t('empty')}
         </p>
       </Card>
     )
@@ -685,7 +696,7 @@ function BuildsTab({ builds }: { builds: BuildItem[] }) {
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>
       <Card pad={0}>
         <div style={{ padding: '16px 20px 12px' }}>
-          <SectionLabel icon="sword">Itens mais usados</SectionLabel>
+          <SectionLabel icon="sword">{t('most_used')}</SectionLabel>
         </div>
         <div
           style={{
@@ -702,10 +713,10 @@ function BuildsTab({ builds }: { builds: BuildItem[] }) {
             borderBottom: '1px solid var(--m-border)',
           }}
         >
-          <span>Item</span>
-          <span className="tabular">Picks</span>
-          <span>Winrate</span>
-          <span>Patch</span>
+          <span>{t('col_item')}</span>
+          <span className="tabular">{t('col_picks')}</span>
+          <span>{t('col_winrate')}</span>
+          <span>{t('col_patch')}</span>
         </div>
         {builds.map((b) => (
           <div
@@ -739,7 +750,7 @@ function BuildsTab({ builds }: { builds: BuildItem[] }) {
             </div>
             <div>
               <div className="tabular" style={{ fontSize: 13, fontWeight: 600 }}>
-                {b.pick_count}
+                {formatNumber(b.pick_count, locale)}
               </div>
               <Bar value={b.pick_count} max={maxPicks} color="var(--m-accent)" height={3} />
             </div>
@@ -779,7 +790,7 @@ function BuildsTab({ builds }: { builds: BuildItem[] }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <Card>
-          <SectionLabel icon="sparkles">Build mais comum</SectionLabel>
+          <SectionLabel icon="sparkles">{t('most_common_build')}</SectionLabel>
           <div
             style={{
               fontSize: 11,
@@ -790,7 +801,7 @@ function BuildsTab({ builds }: { builds: BuildItem[] }) {
               fontWeight: 600,
             }}
           >
-            Top 6 itens por picks
+            {t('most_common_sub')}
           </div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {top6.map((b, i) => (
@@ -801,7 +812,7 @@ function BuildsTab({ builds }: { builds: BuildItem[] }) {
                   width={40}
                   height={40}
                   unoptimized
-                  title={`${b.item_name} · ${b.winrate_pct.toFixed(1)}% WR`}
+                  title={t('item_tooltip', { name: b.item_name, wr: b.winrate_pct.toFixed(1) })}
                   style={{
                     borderRadius: 6,
                     border: '1px solid var(--m-border-2)',
@@ -821,7 +832,7 @@ function BuildsTab({ builds }: { builds: BuildItem[] }) {
         </Card>
 
         <Card>
-          <SectionLabel icon="zap">Runas</SectionLabel>
+          <SectionLabel icon="zap">{t('runes')}</SectionLabel>
           <div
             style={{
               padding: '16px 8px',
@@ -831,7 +842,7 @@ function BuildsTab({ builds }: { builds: BuildItem[] }) {
               lineHeight: 1.6,
             }}
           >
-            Em breve — agregação de runas por campeão (Bloco 4 do roadmap).
+            {t('runes_empty')}
           </div>
         </Card>
       </div>
@@ -841,11 +852,12 @@ function BuildsTab({ builds }: { builds: BuildItem[] }) {
 
 // ── Matchups tab ──────────────────────────────────────────────────
 function MatchupsTab({ matchups }: { matchups: Matchup[] }) {
+  const t = useTranslations('champion.matchups')
   if (matchups.length === 0) {
     return (
       <Card>
         <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>
-          Sem dados de matchups. Tente filtrar por lane pra resultados mais precisos.
+          {t('empty')}
         </p>
       </Card>
     )
@@ -861,9 +873,9 @@ function MatchupsTab({ matchups }: { matchups: Matchup[] }) {
           justifyContent: 'space-between',
         }}
       >
-        <SectionLabel icon="crosshair">Matchups · oponente na lane</SectionLabel>
+        <SectionLabel icon="crosshair">{t('title')}</SectionLabel>
         <div style={{ display: 'flex', gap: 4 }}>
-          <Pill active>Todos</Pill>
+          <Pill active>{t('all_filter')}</Pill>
         </div>
       </div>
       <div
@@ -881,18 +893,18 @@ function MatchupsTab({ matchups }: { matchups: Matchup[] }) {
           borderBottom: '1px solid var(--m-border)',
         }}
       >
-        <span>Oponente</span>
-        <span className="tabular">Partidas</span>
-        <span>Winrate</span>
-        <span>vs média</span>
-        <span>Dificuldade</span>
+        <span>{t('col_opponent')}</span>
+        <span className="tabular">{t('col_matches')}</span>
+        <span>{t('col_winrate')}</span>
+        <span>{t('col_vs_avg')}</span>
+        <span>{t('col_difficulty')}</span>
       </div>
       {matchups.map((m) => {
         const vs = m.winrate_diff ?? 0
         const diffColor =
           vs > 2 ? 'var(--m-green)' : vs < -2 ? 'var(--m-red)' : 'var(--m-text-dim)'
         const difficultyLabel =
-          vs > 5 ? 'Fácil' : vs < -10 ? 'Muito difícil' : vs < -2 ? 'Difícil' : 'Neutro'
+          vs > 5 ? t('diff_easy') : vs < -10 ? t('diff_very_hard') : vs < -2 ? t('diff_hard') : t('diff_neutral')
         return (
           <Link
             key={m.opponent}
@@ -986,11 +998,12 @@ function MatchupsTab({ matchups }: { matchups: Matchup[] }) {
 
 // ── Synergies tab ─────────────────────────────────────────────────
 function SynergiesTab({ synergies }: { synergies: Synergy[] }) {
+  const t = useTranslations('champion.synergies')
   if (synergies.length === 0) {
     return (
       <Card>
         <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>
-          Sem dados de sinergias com os filtros selecionados.
+          {t('empty')}
         </p>
       </Card>
     )
@@ -1002,7 +1015,7 @@ function SynergiesTab({ synergies }: { synergies: Synergy[] }) {
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>
       <Card pad={0}>
         <div style={{ padding: '16px 20px 12px' }}>
-          <SectionLabel icon="users">Sinergias · aliado no mesmo time</SectionLabel>
+          <SectionLabel icon="users">{t('title')}</SectionLabel>
         </div>
         <div
           style={{
@@ -1019,10 +1032,10 @@ function SynergiesTab({ synergies }: { synergies: Synergy[] }) {
             borderBottom: '1px solid var(--m-border)',
           }}
         >
-          <span>Aliado</span>
-          <span className="tabular">Partidas</span>
-          <span>Winrate</span>
-          <span>Sinergia</span>
+          <span>{t('col_ally')}</span>
+          <span className="tabular">{t('col_matches')}</span>
+          <span>{t('col_winrate')}</span>
+          <span>{t('col_synergy')}</span>
         </div>
         {synergies.map((s) => (
           <Link
@@ -1085,7 +1098,7 @@ function SynergiesTab({ synergies }: { synergies: Synergy[] }) {
                   textAlign: 'right',
                 }}
               >
-                {s.winrate > 60 ? 'Excelente' : s.winrate > 45 ? 'Ok' : 'Evitar'}
+                {s.winrate > 60 ? t('s_excellent') : s.winrate > 45 ? t('s_ok') : t('s_avoid')}
               </span>
             </div>
           </Link>
@@ -1095,7 +1108,7 @@ function SynergiesTab({ synergies }: { synergies: Synergy[] }) {
       {/* Duo sugerido */}
       {best && (
         <Card accent>
-          <SectionLabel icon="sparkles">Duo sugerido</SectionLabel>
+          <SectionLabel icon="sparkles">{t('suggested_duo')}</SectionLabel>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0' }}>
             <ChampPortrait name={synergies[0]?.ally ?? 'Ahri'} size={48} />
             <Icon name="plus" size={16} style={{ color: 'var(--m-accent)' }} />
@@ -1108,7 +1121,7 @@ function SynergiesTab({ synergies }: { synergies: Synergy[] }) {
             {best.winrate.toFixed(1)}% WR
           </div>
           <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 4 }}>
-            {best.games} partidas juntos no banco — maior winrate entre as sinergias deste campeão.
+            {t('duo_sub', { games: best.games })}
           </div>
           <Link
             href="/chat"
@@ -1130,7 +1143,7 @@ function SynergiesTab({ synergies }: { synergies: Synergy[] }) {
               textDecoration: 'none',
             }}
           >
-            Perguntar à IA sobre este duo
+            {t('ask_duo')}
           </Link>
         </Card>
       )}

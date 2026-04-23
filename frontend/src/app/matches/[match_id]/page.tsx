@@ -4,10 +4,13 @@ import { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useLocale, useTranslations } from 'next-intl'
 import { championIconUrl, roleIconPath, DDRAGON_VERSION } from '@/lib/ddragon'
 import { runeIconUrl, RUNE_TREES } from '@/lib/runes'
 import { TimelineChart } from '@/components/matches/TimelineChart'
 import { apiFetch } from '@/lib/api'
+import { formatNumber } from '@/lib/format'
+import type { Locale } from '@/i18n/config'
 import {
   AppHeader,
   Card,
@@ -17,7 +20,6 @@ import {
   Icon,
   Donut,
   ChampPortrait,
-  ROLES_PT,
   type Role,
 } from '@/components/design'
 
@@ -91,7 +93,13 @@ function formatDuration(s: number): string {
   return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
-const QUEUE_LABEL: Record<number, string> = { 420: 'Ranked Solo/Duo', 440: 'Ranked Flex' }
+const ROLE_I18N_KEY: Record<Role, 'role_top' | 'role_jungle' | 'role_mid' | 'role_adc' | 'role_sup'> = {
+  TOP: 'role_top',
+  JUNGLE: 'role_jungle',
+  MIDDLE: 'role_mid',
+  BOTTOM: 'role_adc',
+  UTILITY: 'role_sup',
+}
 
 const ROLE_ORDER: Record<string, number> = {
   TOP: 0, JUNGLE: 1, MIDDLE: 2, BOTTOM: 3, UTILITY: 4, UNKNOWN: 5,
@@ -129,6 +137,7 @@ function metisScoreStyle(s: number) {
 
 // ══════════════ PAGE ═══════════════════════════════════════════
 export default function MatchPage() {
+  const t = useTranslations('match')
   const { match_id } = useParams() as { match_id: string }
   const searchParams = useSearchParams()
   const highlightPuuid = searchParams.get('as') ?? searchParams.get('puuid')
@@ -148,22 +157,22 @@ export default function MatchPage() {
       try {
         const res = await apiFetch(`/api/v1/match/${match_id}`)
         if (res.status === 404) {
-          setError('Partida não encontrada.')
+          setError(t('error_not_found'))
           return
         }
         if (!res.ok) {
-          setError('Erro ao carregar partida.')
+          setError(t('error_loading'))
           return
         }
         setMatch(await res.json())
       } catch {
-        setError('Não foi possível conectar ao servidor.')
+        setError(t('error_server'))
       } finally {
         setLoading(false)
       }
     }
     load()
-  }, [match_id])
+  }, [match_id, t])
 
   async function handleToggleTimeline() {
     if (showTimeline) {
@@ -177,13 +186,13 @@ export default function MatchPage() {
     try {
       const res = await apiFetch(`/api/v1/match/${match_id}/timeline`)
       if (!res.ok) {
-        setTimelineError('Não foi possível carregar a timeline.')
+        setTimelineError(t('timeline_load_error'))
         return
       }
       const data = await res.json()
       setTimelineFrames(data.frames ?? [])
     } catch {
-      setTimelineError('Erro ao conectar ao servidor.')
+      setTimelineError(t('timeline_server_error'))
     } finally {
       setTimelineLoading(false)
     }
@@ -233,14 +242,14 @@ export default function MatchPage() {
           }}
         >
           <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>
-            {error ?? 'Partida não encontrada.'}
+            {error ?? t('error_not_found')}
           </p>
           <Link
             href="/"
             className="m-hover-link"
             style={{ fontSize: 12, color: 'var(--m-accent)', textDecoration: 'none' }}
           >
-            Voltar ao início
+            {t('back_home')}
           </Link>
         </div>
       </div>
@@ -249,9 +258,13 @@ export default function MatchPage() {
 
   const { meta, blue_team, red_team, max_damage, has_timeline } = match
   const blueWin = blue_team[0]?.win ?? true
-  const queueLabel = QUEUE_LABEL[meta.queue_id] ?? 'Ranqueada'
+  const QUEUE_LABEL: Record<number, string> = {
+    420: t('queue_solo_duo'),
+    440: t('queue_flex'),
+  }
+  const queueLabel = QUEUE_LABEL[meta.queue_id] ?? t('queue_ranked')
   const winColor = blueWin ? 'var(--m-green)' : 'var(--m-red)'
-  const winLabel = blueWin ? 'azul' : 'vermelho'
+  const winTeamLabel = blueWin ? t('team_blue_lower') : t('team_red_lower')
   const allParticipants = [...blue_team, ...red_team]
   const highlighted = highlightPuuid
     ? allParticipants.find((p) => p.puuid === highlightPuuid)
@@ -295,7 +308,7 @@ export default function MatchPage() {
                 <Icon name="chevronRight" size={10} />
               </>
             )}
-            <span>Partida</span>
+            <span>{t('breadcrumb_match')}</span>
             <Icon name="chevronRight" size={10} />
             <span className="font-mono" style={{ color: 'var(--m-accent)' }}>
               {match_id}
@@ -325,7 +338,7 @@ export default function MatchPage() {
             </div>
             <div style={{ minWidth: 0 }}>
               <h1 className="font-display" style={{ fontSize: 24, fontWeight: 700 }}>
-                Vitória <span style={{ color: winColor }}>{winLabel}</span> · em {formatDuration(meta.game_duration)}
+                {t('victory_prefix')} <span style={{ color: winColor }}>{winTeamLabel}</span> {t('victory_in')} {formatDuration(meta.game_duration)}
               </h1>
               <div
                 style={{
@@ -339,7 +352,7 @@ export default function MatchPage() {
               >
                 <span>{queueLabel}</span>
                 <span>·</span>
-                <span>Patch {meta.game_version}</span>
+                <span>{t('patch_label', { version: meta.game_version })}</span>
               </div>
             </div>
             <div style={{ flex: 1 }} />
@@ -362,7 +375,7 @@ export default function MatchPage() {
                 }}
               >
                 <Icon name="brain" size={14} />
-                Analisar com IA
+                {t('analyze_with_ai')}
               </Link>
             )}
           </div>
@@ -392,7 +405,7 @@ export default function MatchPage() {
                     textTransform: 'uppercase',
                   }}
                 >
-                  Bans Azul
+                  {t('bans_blue')}
                 </span>
                 <div style={{ display: 'flex', gap: 4 }}>
                   {meta.bans.filter((b) => b.team_id === 100).map((b, i) => (
@@ -431,7 +444,7 @@ export default function MatchPage() {
                     textTransform: 'uppercase',
                   }}
                 >
-                  Bans Vermelho
+                  {t('bans_red')}
                 </span>
                 <div style={{ display: 'flex', gap: 4 }}>
                   {meta.bans.filter((b) => b.team_id === 200).map((b, i) => (
@@ -476,17 +489,17 @@ export default function MatchPage() {
         <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           {(
             [
-              { id: 'overview', l: 'Overview',          ic: 'list' },
-              { id: 'teams',    l: 'Análise de Equipe', ic: 'pieChart' },
-              { id: 'builds',   l: 'Builds & Runas',    ic: 'sword' },
+              { id: 'overview', l: t('tab_overview'),      ic: 'list' },
+              { id: 'teams',    l: t('tab_teams'),         ic: 'pieChart' },
+              { id: 'builds',   l: t('tab_builds'),        ic: 'sword' },
             ] as const
-          ).map((t) => {
-            const active = tab === t.id
+          ).map((tabItem) => {
+            const active = tab === tabItem.id
             return (
               <button
-                key={t.id}
+                key={tabItem.id}
                 type="button"
-                onClick={() => setTab(t.id)}
+                onClick={() => setTab(tabItem.id)}
                 style={{
                   padding: '12px 18px',
                   background: 'transparent',
@@ -503,8 +516,8 @@ export default function MatchPage() {
                   fontFamily: 'inherit',
                 }}
               >
-                <Icon name={t.ic} size={13} />
-                {t.l}
+                <Icon name={tabItem.ic} size={13} />
+                {tabItem.l}
               </button>
             )
           })}
@@ -539,7 +552,7 @@ export default function MatchPage() {
           color: 'var(--m-muted)',
         }}
       >
-        ID: <span className="font-mono">{match_id}</span>
+        {t('id_label')} <span className="font-mono">{match_id}</span>
       </div>
     </div>
   )
@@ -565,6 +578,7 @@ function MatchOverview({
   timelineError: string | null
   onToggleTimeline: () => void
 }) {
+  const t = useTranslations('match')
   const { blue_team, red_team, max_damage } = match
   const blueWin = blue_team[0]?.win ?? true
   const duration = match.meta.game_duration
@@ -593,12 +607,12 @@ function MatchOverview({
           {/* Times */}
           <Card pad={0}>
             <div style={{ padding: '16px 20px 12px' }}>
-              <SectionLabel icon="shield">Times</SectionLabel>
+              <SectionLabel icon="shield">{t('teams_section')}</SectionLabel>
             </div>
             <TeamBlock
               team={blue_team}
               color="var(--m-green)"
-              label={`Azul · ${blueWin ? 'Vitória' : 'Derrota'}`}
+              label={`${t('team_blue')} · ${blueWin ? t('victory') : t('defeat')}`}
               goldTotal={blueGold}
               kills={blueKills}
               maxDamage={max_damage}
@@ -609,7 +623,7 @@ function MatchOverview({
             <TeamBlock
               team={red_team}
               color="var(--m-red)"
-              label={`Vermelho · ${!blueWin ? 'Vitória' : 'Derrota'}`}
+              label={`${t('team_red')} · ${!blueWin ? t('victory') : t('defeat')}`}
               goldTotal={redGold}
               kills={redKills}
               maxDamage={max_damage}
@@ -648,7 +662,7 @@ function MatchOverview({
                       color: 'var(--m-text-dim)',
                     }}
                   >
-                    Timeline da partida
+                    {t('timeline_title')}
                   </span>
                   <span
                     style={{
@@ -663,7 +677,7 @@ function MatchOverview({
                       textTransform: 'uppercase',
                     }}
                   >
-                    Frames por minuto
+                    {t('timeline_badge')}
                   </span>
                 </div>
                 <Icon
@@ -683,7 +697,7 @@ function MatchOverview({
                         color: 'var(--m-text-dim)',
                       }}
                     >
-                      Carregando timeline...
+                      {t('timeline_loading')}
                     </div>
                   )}
                   {timelineError && (
@@ -714,8 +728,7 @@ function MatchOverview({
                       lineHeight: 1.5,
                     }}
                   >
-                    Timeline interativa com mapa e eventos posicionais em breve — depende do parsing
-                    de eventos do Riot timeline (Bloco 0 do roadmap de analytics profundo).
+                    {t('timeline_footer')}
                   </div>
                 </div>
               )}
@@ -743,15 +756,15 @@ function MatchOverview({
               </div>
               <div>
                 <div className="font-display" style={{ fontSize: 13, fontWeight: 600 }}>
-                  Análise da Metis
+                  {t('metis_analysis_title')}
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--m-text-dim)' }}>
-                  IA tática · em breve
+                  {t('metis_analysis_subtitle')}
                 </div>
               </div>
             </div>
             <p style={{ fontSize: 12, color: 'var(--m-text-dim)', lineHeight: 1.55, marginBottom: 10 }}>
-              A análise narrativa automática chega quando o Bloco 0 do roadmap entregar o parsing de eventos da timeline. Enquanto isso, pergunte diretamente à Metis sobre esta partida.
+              {t('metis_analysis_body')}
             </p>
             {highlightPuuid && (
               <Link
@@ -774,28 +787,28 @@ function MatchOverview({
                 }}
               >
                 <Icon name="messageCircle" size={13} />
-                Perguntar à Metis
+                {t('ask_metis')}
               </Link>
             )}
           </Card>
 
           <Card>
-            <SectionLabel icon="activity">Resumo rápido</SectionLabel>
+            <SectionLabel icon="activity">{t('quick_summary')}</SectionLabel>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginTop: 6 }}>
               {[
-                { l: 'Duração', v: formatDuration(duration), c: 'var(--m-text)' },
+                { l: t('summary_duration'), v: formatDuration(duration), c: 'var(--m-text)' },
                 {
-                  l: 'Kills',
+                  l: t('summary_kills'),
                   v: `${blueKills}-${redKills}`,
                   c: blueWin ? 'var(--m-green)' : 'var(--m-red)',
                 },
                 {
-                  l: 'Ouro total',
+                  l: t('summary_total_gold'),
                   v: `${((blueGold + redGold) / 1000).toFixed(1)}k`,
                   c: 'var(--m-accent)',
                 },
                 {
-                  l: 'Dif. ouro',
+                  l: t('summary_gold_diff'),
                   v: `${blueGold > redGold ? '+' : ''}${((blueGold - redGold) / 1000).toFixed(1)}k`,
                   c: blueGold > redGold ? 'var(--m-green)' : 'var(--m-red)',
                 },
@@ -862,6 +875,8 @@ function TeamBlock({
   highlightPuuid: string | null
   duration: number
 }) {
+  const t = useTranslations('match')
+  const locale = useLocale() as Locale
   const sorted = sortByRole(team)
   const bgGradient = color === 'var(--m-green)'
     ? 'linear-gradient(90deg, rgba(74,222,128,0.06), transparent)'
@@ -904,13 +919,13 @@ function TeamBlock({
             <span className="tabular" style={{ color: 'var(--m-text)', fontWeight: 600 }}>
               {(goldTotal / 1000).toFixed(1)}k
             </span>{' '}
-            ouro
+            {t('gold')}
           </span>
           <span>
             <span className="tabular" style={{ color: 'var(--m-text)', fontWeight: 600 }}>
               {kills}
             </span>{' '}
-            kills
+            {t('kills')}
           </span>
         </div>
       </div>
@@ -926,6 +941,8 @@ function TeamBlock({
           : null
         const scoreStyle = p.metis_score != null ? metisScoreStyle(p.metis_score) : null
         const items = (p.items ?? []).filter((id) => id > 0).slice(0, 6)
+        const roleKey = ROLE_I18N_KEY[p.team_position as Role]
+        const roleLabel = roleKey ? t(roleKey) : p.team_position
 
         return (
           <div
@@ -1001,12 +1018,12 @@ function TeamBlock({
                       letterSpacing: '0.04em',
                     }}
                   >
-                    VOCÊ
+                    {t('you_badge')}
                   </span>
                 )}
               </div>
               <div style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 1 }}>
-                {p.champion_name} · {ROLES_PT[p.team_position as Role] ?? p.team_position}
+                {p.champion_name} · {roleLabel}
               </div>
             </div>
             <div className="tabular" style={{ fontSize: 13, fontWeight: 600 }}>
@@ -1021,14 +1038,14 @@ function TeamBlock({
             </div>
             <div>
               <div className="tabular" style={{ fontSize: 11, fontWeight: 500 }}>
-                {damage.toLocaleString('pt-BR')} dano
+                {formatNumber(damage, locale)} {t('damage')}
               </div>
               <Bar value={damage} max={maxDamage} color={color} height={3} />
               <div
                 className="tabular"
                 style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 2 }}
               >
-                {p.total_cs ?? 0} cs · {cspm.toFixed(1)}/m
+                {p.total_cs ?? 0} {t('cs')} · {cspm.toFixed(1)}/m
               </div>
             </div>
             <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1075,7 +1092,7 @@ function TeamBlock({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
               {scoreStyle && (
                 <div
-                  title={`Metis Score ${Math.round(p.metis_score!)}`}
+                  title={t('metis_score_title', { score: Math.round(p.metis_score!) })}
                   style={{
                     width: 36,
                     height: 36,
@@ -1111,15 +1128,17 @@ function MatchTeamAnalysis({
   red: Participant[]
   blueWin: boolean
 }) {
+  const t = useTranslations('match')
+  const locale = useLocale() as Locale
   const sum = (team: Participant[], field: keyof Participant) =>
     team.reduce((acc, p) => acc + (Number(p[field]) || 0), 0)
 
   const metrics = [
-    { key: 'kills',  label: 'Abates',           fmt: (v: number) => v.toString() },
-    { key: 'gold_earned', label: 'Ouro total',  fmt: (v: number) => `${(v / 1000).toFixed(1)}k` },
-    { key: 'total_damage_dealt_to_champions', label: 'Dano a campeões', fmt: (v: number) => `${(v / 1000).toFixed(1)}k` },
-    { key: 'vision_score', label: 'Score de visão', fmt: (v: number) => v.toString() },
-    { key: 'total_cs', label: 'Creep score',    fmt: (v: number) => v.toString() },
+    { key: 'kills',  label: t('metric_kills'),         fmt: (v: number) => v.toString() },
+    { key: 'gold_earned', label: t('metric_total_gold'), fmt: (v: number) => `${(v / 1000).toFixed(1)}k` },
+    { key: 'total_damage_dealt_to_champions', label: t('metric_champion_damage'), fmt: (v: number) => `${(v / 1000).toFixed(1)}k` },
+    { key: 'vision_score', label: t('metric_vision_score'), fmt: (v: number) => v.toString() },
+    { key: 'total_cs', label: t('metric_creep_score'), fmt: (v: number) => v.toString() },
   ] as const
 
   const maxDmgOverall = Math.max(
@@ -1154,7 +1173,7 @@ function MatchTeamAnalysis({
                     }}
                   />
                   <span style={{ color: 'var(--m-text-dim)' }}>
-                    Azul · {blueWin ? 'Vitória' : 'Derrota'}
+                    {t('team_blue')} · {blueWin ? t('victory') : t('defeat')}
                   </span>
                 </span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -1167,13 +1186,13 @@ function MatchTeamAnalysis({
                     }}
                   />
                   <span style={{ color: 'var(--m-text-dim)' }}>
-                    Vermelho · {!blueWin ? 'Vitória' : 'Derrota'}
+                    {t('team_red')} · {!blueWin ? t('victory') : t('defeat')}
                   </span>
                 </span>
               </div>
             }
           >
-            Comparação por métrica
+            {t('comparison_by_metric')}
           </SectionLabel>
           <div
             style={{
@@ -1263,7 +1282,7 @@ function MatchTeamAnalysis({
 
         {/* Bar por jogador — dano */}
         <Card>
-          <SectionLabel icon="barChart">Dano a campeões · por jogador</SectionLabel>
+          <SectionLabel icon="barChart">{t('damage_per_player')}</SectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 4 }}>
             {[...blue, ...red]
               .sort(
@@ -1333,7 +1352,7 @@ function MatchTeamAnalysis({
                         color: teamColor,
                       }}
                     >
-                      {dmg.toLocaleString('pt-BR')}
+                      {formatNumber(dmg, locale)}
                     </div>
                   </div>
                 )
@@ -1345,27 +1364,24 @@ function MatchTeamAnalysis({
       {/* Sidebar */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <Card>
-          <SectionLabel icon="target">Perfil dos times</SectionLabel>
+          <SectionLabel icon="target">{t('team_profiles')}</SectionLabel>
           <p style={{ fontSize: 11, color: 'var(--m-text-dim)', lineHeight: 1.55, marginTop: 6 }}>
-            Análise semântica dos perfis (AD/AP, Controle, Mobilidade, Pick) chega quando o endpoint
-            de classificação de composição for implementado. Por ora, a comparação por métricas ao
-            lado já dá uma leitura objetiva.
+            {t('team_profiles_body')}
           </p>
         </Card>
 
         <Card accent>
-          <SectionLabel icon="brain">Leitura da Metis</SectionLabel>
+          <SectionLabel icon="brain">{t('metis_reading')}</SectionLabel>
           <p style={{ fontSize: 12, color: 'var(--m-text)', lineHeight: 1.55 }}>
-            Time{' '}
+            {t('metis_reading_prefix')}{' '}
             <b
               style={{
                 color: blueWin ? 'var(--m-green)' : 'var(--m-red)',
               }}
             >
-              {blueWin ? 'azul' : 'vermelho'}
+              {blueWin ? t('team_blue_lower') : t('team_red_lower')}
             </b>{' '}
-            venceu. Para análise narrativa completa (timings, viradas, erros), peça pra Metis no
-            chat — com o match_id na URL ela já pega o contexto.
+            {t('metis_reading_suffix')}
           </p>
         </Card>
       </div>
@@ -1431,6 +1447,7 @@ function SplitDonut({ blue, red, size = 120 }: { blue: number; red: number; size
 
 // ══════════ Builds tab ═════════════════════════════════════════
 function MatchBuilds({ participants }: { participants: Participant[] }) {
+  const t = useTranslations('match')
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: '24px 28px 48px' }}>
       <div
@@ -1442,9 +1459,9 @@ function MatchBuilds({ participants }: { participants: Participant[] }) {
           flexWrap: 'wrap',
         }}
       >
-        <SectionLabel icon="sword">Itens · Runas · Summoners por jogador</SectionLabel>
+        <SectionLabel icon="sword">{t('builds_section')}</SectionLabel>
         <div style={{ flex: 1 }} />
-        <Pill active>Todos</Pill>
+        <Pill active>{t('filter_all')}</Pill>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {participants.map((p) => (
@@ -1456,6 +1473,7 @@ function MatchBuilds({ participants }: { participants: Participant[] }) {
 }
 
 function BuildRow({ p }: { p: Participant }) {
+  const t = useTranslations('match')
   const teamColor = p.team_id === 100 ? 'var(--m-green)' : 'var(--m-red)'
   const items = p.items ?? []
   const keystoneUrl = p.rune_keystone
@@ -1473,6 +1491,9 @@ function BuildRow({ p }: { p: Participant }) {
 
   const itemIconSrc = (id: number) =>
     id > 0 ? `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/item/${id}.png` : null
+
+  const roleKey = ROLE_I18N_KEY[p.team_position as Role]
+  const roleLabel = roleKey ? t(roleKey) : p.team_position
 
   return (
     <div
@@ -1517,7 +1538,7 @@ function BuildRow({ p }: { p: Participant }) {
             : p.champion_name}
         </Link>
         <div style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 2 }}>
-          {p.champion_name} · {ROLES_PT[p.team_position as Role] ?? p.team_position}
+          {p.champion_name} · {roleLabel}
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
@@ -1574,7 +1595,7 @@ function BuildRow({ p }: { p: Participant }) {
         <div style={{ minWidth: 0, flex: 1 }}>
           {primaryStyle && (
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--m-text)' }}>
-              {RUNE_TREES[primaryStyle.style]?.name ?? 'Primária'}
+              {RUNE_TREES[primaryStyle.style]?.name ?? t('rune_primary')}
             </div>
           )}
           {secondaryStyle && (
@@ -1586,7 +1607,7 @@ function BuildRow({ p }: { p: Participant }) {
                 letterSpacing: '0.06em',
               }}
             >
-              / {RUNE_TREES[secondaryStyle.style]?.name ?? 'Secundária'}
+              / {RUNE_TREES[secondaryStyle.style]?.name ?? t('rune_secondary')}
             </div>
           )}
         </div>
@@ -1618,7 +1639,7 @@ function BuildRow({ p }: { p: Participant }) {
         className="tabular"
         style={{ fontSize: 12, fontWeight: 600, textAlign: 'center', color: teamColor }}
       >
-        {p.win ? 'V' : 'D'}
+        {p.win ? t('result_win_short') : t('result_loss_short')}
       </div>
     </div>
   )

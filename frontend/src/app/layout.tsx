@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter, Space_Grotesk, JetBrains_Mono } from 'next/font/google'
+import { NextIntlClientProvider } from 'next-intl'
+import { getLocale, getMessages, getTranslations } from 'next-intl/server'
 import './globals.css'
 import { ThemeProvider } from '@/components/ui/ThemeProvider'
 
@@ -23,9 +25,12 @@ const jetBrainsMono = JetBrains_Mono({
   display: 'swap',
 })
 
-export const metadata: Metadata = {
-  title: 'Metis — Estrategista de LoL',
-  description: 'Sua aliada tática no League of Legends. Análise real, sem achismos.',
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('common')
+  return {
+    title: t('metis_title'),
+    description: t('metis_tagline'),
+  }
 }
 
 // Script inline: aplica cor de accent ANTES da hidratação pra evitar flash.
@@ -39,10 +44,13 @@ const THEME_SCRIPT = `
 })();
 `
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale()
+  const messages = await getMessages()
+
   return (
     <html
-      lang="pt-BR"
+      lang={locale}
       suppressHydrationWarning
       className={`${inter.variable} ${spaceGrotesk.variable} ${jetBrainsMono.variable}`}
     >
@@ -50,9 +58,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className={inter.className}>
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <ThemeProvider>
+            {children}
+          </ThemeProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   )

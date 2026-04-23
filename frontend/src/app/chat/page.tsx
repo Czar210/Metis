@@ -3,9 +3,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useLocale, useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase/client'
 import { apiFetch } from '@/lib/api'
 import { AppHeader, Bar, Icon } from '@/components/design'
+import { formatNumber } from '@/lib/format'
+import type { Locale } from '@/i18n/config'
 
 // ── Types ──────────────────────────────────────────────────────
 type Message = {
@@ -20,24 +23,21 @@ type Usage = {
   resets_at: string
 }
 
-const WELCOME: Message = {
-  role: 'metis',
-  content:
-    'Olá, invocador. Sou a Metis — sua estrategista no Rift. Pode me perguntar sobre campeões, builds, matchups ou estratégia. Como posso te ajudar hoje?',
-}
-
-const QUICK_PROMPTS = [
-  'Review minha última derrota',
-  'Quem contra Kayn?',
-  'Como farmar melhor?',
-  'Builds pra ADC',
-]
-
 // ── Page ───────────────────────────────────────────────────────
 export default function ChatPage() {
   const router = useRouter()
   const supabase = createClient()
+  const t = useTranslations('chat')
+  const locale = useLocale() as Locale
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  const WELCOME: Message = { role: 'metis', content: t('welcome') }
+  const QUICK_PROMPTS = [
+    t('quick_prompt_1'),
+    t('quick_prompt_2'),
+    t('quick_prompt_3'),
+    t('quick_prompt_4'),
+  ]
 
   const [messages, setMessages] = useState<Message[]>([WELCOME])
   const [input, setInput] = useState('')
@@ -96,7 +96,7 @@ export default function ChatPage() {
         const err = await res.json()
         setMessages((prev) => [
           ...prev,
-          { role: 'metis', content: `Limite diário atingido. ${err.detail}` },
+          { role: 'metis', content: `${t('rate_limit_prefix')} ${err.detail}` },
         ])
         return
       }
@@ -109,7 +109,7 @@ export default function ChatPage() {
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: 'metis', content: 'Não consegui me conectar ao servidor. Tente novamente.' },
+        { role: 'metis', content: t('connection_error') },
       ])
     } finally {
       setLoading(false)
@@ -194,11 +194,10 @@ export default function ChatPage() {
               <Icon name="brain" size={32} />
             </div>
             <h2 className="font-display" style={{ fontSize: 26, fontWeight: 700, marginBottom: 8 }}>
-              Chat com a Metis
+              {t('gate_title')}
             </h2>
             <p style={{ fontSize: 13, color: 'var(--m-text-dim)', lineHeight: 1.55, marginBottom: 22 }}>
-              O chat tático requer plano <strong style={{ color: 'var(--m-accent)' }}>Doador</strong> ou superior.
-              Ela analisa seus dados e responde perguntas táticas com contexto real das suas partidas.
+              {t('gate_description_part1')} <strong style={{ color: 'var(--m-accent)' }}>{t('gate_description_plan')}</strong> {t('gate_description_part2')}
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
               <Link
@@ -217,7 +216,7 @@ export default function ChatPage() {
                   textDecoration: 'none',
                 }}
               >
-                Ver planos
+                {t('gate_cta_plans')}
                 <Icon name="arrowRight" size={13} />
               </Link>
               <Link
@@ -236,7 +235,7 @@ export default function ChatPage() {
                   textDecoration: 'none',
                 }}
               >
-                Voltar
+                {t('gate_cta_back')}
               </Link>
             </div>
           </div>
@@ -279,25 +278,25 @@ export default function ChatPage() {
           <>
             <span style={{ fontSize: 11, color: 'var(--m-text-dim)' }}>
               <span className="tabular" style={{ color: 'var(--m-text)', fontWeight: 600 }}>
-                {usage.tokens_used.toLocaleString('pt-BR')}
+                {formatNumber(usage.tokens_used, locale)}
               </span>{' '}
-              / {usage.token_limit.toLocaleString('pt-BR')} tokens hoje
+              / {formatNumber(usage.token_limit, locale)} {t('usage_today')}
             </span>
             <div style={{ flex: 1, maxWidth: 220 }}>
               <Bar value={Math.min(usagePct, 100)} max={100} color={barColor} height={4} />
             </div>
             <span style={{ fontSize: 10, color: 'var(--m-muted)' }}>
-              Reset {usage.resets_at} · {userTier}
+              {t('usage_reset', { at: usage.resets_at, tier: userTier })}
             </span>
           </>
         ) : (
           <span style={{ fontSize: 11, color: 'var(--m-text-dim)' }}>
-            carregando uso...
+            {t('usage_loading')}
           </span>
         )}
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: 'var(--m-text-dim)' }}>
-          Invocador: <span style={{ color: 'var(--m-text)' }}>{userName ?? '—'}</span>
+          {t('summoner')} <span style={{ color: 'var(--m-text)' }}>{userName ?? '—'}</span>
         </span>
       </div>
 
@@ -400,7 +399,7 @@ export default function ChatPage() {
               onKeyDown={handleKeyDown}
               disabled={loading || usagePct >= 100}
               rows={1}
-              placeholder="Pergunte para a Metis... (Enter para enviar)"
+              placeholder={t('input_placeholder')}
               style={{
                 flex: 1,
                 background: 'transparent',
@@ -478,7 +477,7 @@ export default function ChatPage() {
               marginTop: 10,
             }}
           >
-            A Metis só fala de League of Legends. Pode cometer erros — valide conselhos importantes.
+            {t('disclaimer')}
           </div>
         </div>
       </footer>

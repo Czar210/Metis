@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
+import { useLocale, useTranslations } from 'next-intl'
 import { DDRAGON_VERSION, roleIconPath } from '@/lib/ddragon'
 import { apiFetch } from '@/lib/api'
 import {
@@ -13,6 +14,10 @@ import {
   Icon,
   type Role,
 } from '@/components/design'
+import { formatNumber } from '@/lib/format'
+import type { Locale } from '@/i18n/config'
+
+type RoleLabelKey = 'role_all' | 'role_top' | 'role_jungle' | 'role_mid' | 'role_adc' | 'role_sup'
 
 type ItemStat = {
   item_id: number
@@ -27,13 +32,13 @@ type ItemStat = {
   trend?: 'up' | 'down' | 'flat' | null
 }
 
-const ROLES: { v: '' | Role; label: string; iconRole: Role | null }[] = [
-  { v: '',        label: 'Todas',   iconRole: null },
-  { v: 'TOP',     label: 'Top',     iconRole: 'TOP' },
-  { v: 'JUNGLE',  label: 'Jungle',  iconRole: 'JUNGLE' },
-  { v: 'MIDDLE',  label: 'Mid',     iconRole: 'MIDDLE' },
-  { v: 'BOTTOM',  label: 'ADC',     iconRole: 'BOTTOM' },
-  { v: 'UTILITY', label: 'Suporte', iconRole: 'UTILITY' },
+const ROLES: { v: '' | Role; labelKey: RoleLabelKey; iconRole: Role | null }[] = [
+  { v: '',        labelKey: 'role_all',    iconRole: null },
+  { v: 'TOP',     labelKey: 'role_top',    iconRole: 'TOP' },
+  { v: 'JUNGLE',  labelKey: 'role_jungle', iconRole: 'JUNGLE' },
+  { v: 'MIDDLE',  labelKey: 'role_mid',    iconRole: 'MIDDLE' },
+  { v: 'BOTTOM',  labelKey: 'role_adc',    iconRole: 'BOTTOM' },
+  { v: 'UTILITY', labelKey: 'role_sup',    iconRole: 'UTILITY' },
 ]
 
 const MIN_PICKS_FOR_WR_SPOTLIGHT = 10
@@ -43,6 +48,8 @@ function itemIconUrl(id: number) {
 }
 
 export default function ItemsPage() {
+  const t = useTranslations('items')
+  const locale = useLocale() as Locale
   const [data, setData] = useState<ItemStat[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -71,12 +78,13 @@ export default function ItemsPage() {
         if (!res.ok) throw new Error(`Erro ${res.status}`)
         setData(await res.json())
       } catch {
-        setError('Não foi possível carregar os itens. O backend pode estar offline.')
+        setError(t('error_load'))
       } finally {
         setLoading(false)
       }
     }
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, patch])
 
   // Spotlight: top 3 por picks + top 3 por WR (com amostra mínima).
@@ -111,20 +119,20 @@ export default function ItemsPage() {
               marginBottom: 8,
             }}
           >
-            {patch ? `Patch ${patch}` : 'Todos os patches'} · Banco Metis
+            {patch ? t('eyebrow_patch', { patch }) : t('eyebrow_all_patches')}
           </div>
           <h1
             className="font-display"
             style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 6 }}
           >
-            Estatísticas de Itens
+            {t('title')}
           </h1>
           <p style={{ fontSize: 14, color: 'var(--m-text-dim)' }}>
-            Winrate e popularidade de cada item ·{' '}
+            {t('subtitle_part1')}{' '}
             <span className="tabular" style={{ color: 'var(--m-text)', fontWeight: 600 }}>
-              {data.length.toLocaleString('pt-BR')}
+              {formatNumber(data.length, locale)}
             </span>{' '}
-            itens no recorte atual
+            {t('subtitle_part2')}
           </p>
         </div>
 
@@ -150,11 +158,11 @@ export default function ItemsPage() {
                       letterSpacing: '0.06em',
                     }}
                   >
-                    + populares
+                    {t('spotlight_popular')}
                   </span>
                 }
               >
-                Mais comprados
+                {t('spotlight_popular_title')}
               </SectionLabel>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {top3Picks.map((it, i) => (
@@ -189,15 +197,15 @@ export default function ItemsPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{it.item_name}</div>
                       <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 2 }}>
-                        {it.gold_cost ? `${it.gold_cost.toLocaleString('pt-BR')}g` : `id ${it.item_id}`}
+                        {it.gold_cost ? `${formatNumber(it.gold_cost, locale)}g` : `id ${it.item_id}`}
                         {it.category && ` · ${it.category}`}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div className="tabular" style={{ fontSize: 13, fontWeight: 600 }}>
-                        {it.picks.toLocaleString('pt-BR')}
+                        {formatNumber(it.picks, locale)}
                       </div>
-                      <div style={{ fontSize: 10, color: 'var(--m-muted)' }}>picks</div>
+                      <div style={{ fontSize: 10, color: 'var(--m-muted)' }}>{t('picks_label')}</div>
                     </div>
                   </div>
                 ))}
@@ -216,15 +224,15 @@ export default function ItemsPage() {
                       letterSpacing: '0.06em',
                     }}
                   >
-                    + eficientes
+                    {t('spotlight_efficient')}
                   </span>
                 }
               >
-                Top winrate (min {MIN_PICKS_FOR_WR_SPOTLIGHT} picks)
+                {t('spotlight_wr_title', { min: MIN_PICKS_FOR_WR_SPOTLIGHT })}
               </SectionLabel>
               {top3WR.length === 0 ? (
                 <p style={{ fontSize: 12, color: 'var(--m-text-dim)', padding: '20px 4px' }}>
-                  Nenhum item com amostra mínima no recorte atual.
+                  {t('spotlight_wr_empty')}
                 </p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -260,8 +268,8 @@ export default function ItemsPage() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600 }}>{it.item_name}</div>
                         <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 2 }}>
-                          {it.gold_cost ? `${it.gold_cost.toLocaleString('pt-BR')}g · ` : ''}
-                          {it.picks} picks · {it.wins}W
+                          {it.gold_cost ? `${formatNumber(it.gold_cost, locale)}g · ` : ''}
+                          {it.picks} {t('picks_label')} · {it.wins}{t('wins_suffix')}
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
@@ -271,7 +279,7 @@ export default function ItemsPage() {
                         >
                           {it.winrate.toFixed(1)}%
                         </div>
-                        <div style={{ fontSize: 10, color: 'var(--m-muted)' }}>winrate</div>
+                        <div style={{ fontSize: 10, color: 'var(--m-muted)' }}>{t('winrate_label')}</div>
                       </div>
                     </div>
                   ))}
@@ -300,7 +308,7 @@ export default function ItemsPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar item..."
+                placeholder={t('search_placeholder')}
                 style={{
                   flex: 1,
                   background: 'transparent',
@@ -318,7 +326,7 @@ export default function ItemsPage() {
                 const active = role === r.v
                 return (
                   <button
-                    key={r.label}
+                    key={r.labelKey}
                     type="button"
                     onClick={() => setRole(r.v)}
                     className="m-hover-surface"
@@ -347,7 +355,7 @@ export default function ItemsPage() {
                         style={{ objectFit: 'contain', filter: active ? 'brightness(0.2)' : 'none' }}
                       />
                     )}
-                    {r.label}
+                    {t(r.labelKey)}
                   </button>
                 )
               })}
@@ -367,10 +375,10 @@ export default function ItemsPage() {
                 outline: 'none',
               }}
             >
-              <option value="">Todos os patches</option>
+              <option value="">{t('all_patches')}</option>
               {patches.map((p) => (
                 <option key={p} value={p}>
-                  Patch {p}
+                  {t('patch_option', { patch: p })}
                 </option>
               ))}
             </select>
@@ -386,13 +394,13 @@ export default function ItemsPage() {
                   fontWeight: 600,
                 }}
               >
-                Ordenar
+                {t('sort_label')}
               </span>
               <Pill color="accent" active={sortBy === 'picks'} onClick={() => setSortBy('picks')}>
-                Popular
+                {t('sort_popular')}
               </Pill>
               <Pill color="accent" active={sortBy === 'winrate'} onClick={() => setSortBy('winrate')}>
-                Winrate
+                {t('sort_winrate')}
               </Pill>
             </div>
           </div>
@@ -422,7 +430,7 @@ export default function ItemsPage() {
         ) : filtered.length === 0 ? (
           <Card>
             <p style={{ fontSize: 13, color: 'var(--m-text-dim)' }}>
-              Nenhum item encontrado com os filtros atuais.
+              {t('empty_filtered')}
             </p>
           </Card>
         ) : (
@@ -442,12 +450,12 @@ export default function ItemsPage() {
               }}
             >
               <span>#</span>
-              <span>Item</span>
-              <span>Categoria</span>
-              <span className="tabular">Custo</span>
-              <span className="tabular">Picks</span>
-              <span>Winrate</span>
-              <span>Tendência</span>
+              <span>{t('col_item')}</span>
+              <span>{t('col_category')}</span>
+              <span className="tabular">{t('col_cost')}</span>
+              <span className="tabular">{t('col_picks')}</span>
+              <span>{t('col_winrate')}</span>
+              <span>{t('col_trend')}</span>
             </div>
             {filtered.map((it, i) => {
               const tags = it.tags ?? []
@@ -532,11 +540,11 @@ export default function ItemsPage() {
                     className="tabular"
                     style={{ fontSize: 12, fontWeight: 500, color: 'var(--m-accent)' }}
                   >
-                    {it.gold_cost ? `${it.gold_cost.toLocaleString('pt-BR')}g` : '—'}
+                    {it.gold_cost ? `${formatNumber(it.gold_cost, locale)}g` : '—'}
                   </span>
                   <div>
                     <div className="tabular" style={{ fontSize: 13, fontWeight: 600 }}>
-                      {it.picks.toLocaleString('pt-BR')}
+                      {formatNumber(it.picks, locale)}
                     </div>
                     <Bar value={it.picks} max={maxPicks} color="var(--m-accent)" height={3} />
                   </div>
@@ -584,9 +592,9 @@ export default function ItemsPage() {
                           : 'var(--m-muted)',
                     }}
                   >
-                    {it.trend === 'up' ? '▲ em alta'
-                      : it.trend === 'down' ? '▼ em queda'
-                      : it.trend === 'flat' ? '━ estável'
+                    {it.trend === 'up' ? t('trend_up')
+                      : it.trend === 'down' ? t('trend_down')
+                      : it.trend === 'flat' ? t('trend_flat')
                       : '—'}
                   </span>
                 </div>

@@ -1,226 +1,166 @@
 'use client'
 
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { AppHeader, Icon } from '@/components/design'
 
 // ── Types ──────────────────────────────────────────────────────
 type TagKind = 'novo' | 'melhoria' | 'fix' | 'big'
 
-type Entry = {
-  tag: TagKind
-  text: string
-}
-
 type Release = {
+  /** Chave i18n em `changelog.releases.<id>`. */
+  id: string
   version: string
   date: string
-  /** Título destacado da release (ex: "Big Update"). Omita se não tiver. */
-  label?: string
+  hasLabel?: boolean
   current?: boolean
-  entries: Entry[]
+  entries: TagKind[]
 }
 
-// ── Data ───────────────────────────────────────────────────────
+// ── Data (entries em ordem, textos vêm via i18n) ───────────────
 const RELEASES: Release[] = [
   {
+    id: 'p_0_9_9',
     version: 'p-0.9.9',
     date: '04/2026',
-    label: 'Redesign: Planos + Cupons',
+    hasLabel: true,
     current: true,
-    entries: [
-      { tag: 'big',      text: 'Redesign completo da página de Planos com os 4 tier cards, toggle mensal/anual e novo footer de trust.' },
-      { tag: 'novo',      text: 'Feature de Cupons — tabela dedicada no banco com validade e efeito, endpoint público e seção "Cupons disponíveis" na pricing.' },
-      { tag: 'novo',      text: 'Primeiro cupom ao vivo: MESTRE2604 dá Premium com 10k tokens/dia até o fim de abril.' },
-      { tag: 'melhoria', text: 'Comparativo, FAQ e card Times & Empresas agora usam o design system novo.' },
-    ],
+    entries: ['big', 'novo', 'novo', 'melhoria'],
   },
   {
+    id: 'p_0_9_8_1',
     version: 'p-0.9.8.1',
     date: '04/2026',
-    label: 'Backend: Catálogo de Itens enriquecido',
-    entries: [
-      { tag: 'novo',      text: 'Tabela `items` no Supabase — nome, gold, tags, categoria, tendência em colunas dedicadas.' },
-      { tag: 'novo',      text: 'Endpoint de itens retorna custo em ouro, tags e espaço para categoria curada.' },
-      { tag: 'melhoria', text: 'Página de Itens ganhou colunas Categoria + Custo + Tendência e chips de tags no nome.' },
-    ],
+    hasLabel: true,
+    entries: ['novo', 'novo', 'melhoria'],
   },
   {
+    id: 'p_0_9_8',
     version: 'p-0.9.8',
     date: '04/2026',
-    label: 'Redesign: Itens',
-    entries: [
-      { tag: 'big',      text: 'Página de Itens redesenhada com 2 spotlights (mais comprados / top winrate) e tabela densa.' },
-      { tag: 'melhoria', text: 'Filtros role, patch, busca e sort preservados e restilizados.' },
-    ],
+    hasLabel: true,
+    entries: ['big', 'melhoria'],
   },
   {
+    id: 'p_0_9_7',
     version: 'p-0.9.7',
     date: '04/2026',
-    label: 'Redesign: Tier List',
-    entries: [
-      { tag: 'big',      text: 'Tier List reimaginada como cards agrupados por tier (S+ → C) com portrait grande, WR colorido e grid KDA/Ban/Games.' },
-      { tag: 'melhoria', text: 'Filtros de elo, role, patch range e busca em card único.' },
-    ],
+    hasLabel: true,
+    entries: ['big', 'melhoria'],
   },
   {
+    id: 'p_0_9_6',
     version: 'p-0.9.6',
     date: '04/2026',
-    label: 'Redesign: Home + Design System',
-    entries: [
-      { tag: 'big',      text: 'Nova home: hero com glow gold/cyan, spotlight top-3 do meta, tier snippet top-8 com filtro de role.' },
-      { tag: 'novo',      text: 'Botão Entrar real no header + avatar quando logado.' },
-      { tag: 'novo',      text: 'Ícones oficiais da Riot nos badges de role.' },
-      { tag: 'melhoria', text: 'Modo claro removido — o novo design é dark-only com accent customizável.' },
-      { tag: 'melhoria', text: 'Hover de botões, cards e linhas de volta em todo o redesign.' },
-    ],
+    hasLabel: true,
+    entries: ['big', 'novo', 'novo', 'melhoria', 'melhoria'],
   },
   {
+    id: 'p_0_9_5',
     version: 'p-0.9.5',
     date: '04/2026',
-    label: 'Redesign: Fundação',
-    entries: [
-      { tag: 'big',      text: 'Fundação do novo design system — 18 primitives, nova paleta com accent gold LoL, fontes Space Grotesk e JetBrains Mono.' },
-    ],
+    hasLabel: true,
+    entries: ['big'],
   },
   {
+    id: 'p_0_9_4',
     version: 'p-0.9.4',
     date: '04/2026',
-    entries: [
-      { tag: 'novo',      text: 'Scraper de guias do Mobafire guardando HTML bruto no Cloudflare R2 — fundação pra análise semântica futura.' },
-      { tag: 'fix',       text: 'Bug no scraper que retornava vazio pra todos os campeões foi corrigido.' },
-    ],
+    entries: ['novo', 'fix'],
   },
   {
+    id: 'p_0_9_3',
     version: 'p-0.9.3',
     date: '04/2026',
-    entries: [
-      { tag: 'novo',      text: 'Painel admin ganhou botão "Atualizar Tier List" pra limpar cache de 24h.' },
-      { tag: 'melhoria', text: 'Tier list agora filtra impopulares por padrão — toggle pra ver todos.' },
-      { tag: 'melhoria', text: 'Banco ~28% mais leve — colunas redundantes removidas.' },
-    ],
+    entries: ['novo', 'melhoria', 'melhoria'],
   },
   {
+    id: 'p_0_9_2',
     version: 'p-0.9.2',
     date: '04/2026',
-    entries: [
-      { tag: 'novo',      text: 'Pickrate e banrate reais na tier list, com bans processados do JSON da partida.' },
-    ],
+    entries: ['novo'],
   },
   {
+    id: 'p_0_9_0',
     version: 'p-0.9.0',
     date: '04/2026',
-    label: 'Big Update · Chat Metis',
-    entries: [
-      { tag: 'big',      text: 'Pre-release da 0.9.0 com foco em qualidade do Chat Metis.' },
-      { tag: 'novo',      text: 'Guardrail de tópico — a Metis agora responde APENAS sobre League of Legends e rejeita perguntas fora do jogo.' },
-      { tag: 'novo',      text: 'Personalidade definida: calma, analítica, nunca tóxica. Transforma derrotas em aprendizado.' },
-      { tag: 'novo',      text: 'Limite diário de tokens por plano — Doador (5k), Premium (30k), Pro (100k).' },
-      { tag: 'novo',      text: 'Barra de uso de tokens no chat — veja quanto do seu limite foi utilizado em tempo real.' },
-      { tag: 'melhoria', text: 'Chat atualizado para Gemini 2.5 Flash — modelo mais capaz e com respostas mais precisas.' },
-    ],
+    hasLabel: true,
+    entries: ['big', 'novo', 'novo', 'novo', 'novo', 'melhoria'],
   },
   {
+    id: 'alpha_v0_8_2',
     version: 'Alpha v0.8.2',
     date: '04/2026',
-    label: 'Security Update',
-    entries: [
-      { tag: 'big',      text: 'Atualização de segurança completa — todos os endpoints agora exigem autenticação interna.' },
-      { tag: 'melhoria', text: 'API Key interna (X-API-Key) protege toda a API — acesso sem credencial retorna 403.' },
-      { tag: 'melhoria', text: 'Mensagens de erro sanitizadas — detalhes internos não vazam mais para o cliente.' },
-      { tag: 'melhoria', text: 'CORS restrito a métodos e headers específicos.' },
-      { tag: 'melhoria', text: 'Chave do Gemini configurada de forma segura — nunca armazenada em logs.' },
-      { tag: 'fix',       text: '.gitignore bloqueia .env*, *.key e *.pem — impossível commitar secrets por acidente.' },
-    ],
+    hasLabel: true,
+    entries: ['big', 'melhoria', 'melhoria', 'melhoria', 'melhoria', 'fix'],
   },
   {
+    id: 'alpha_v0_8_1',
     version: 'Alpha v0.8.1',
     date: '04/2026',
-    entries: [
-      { tag: 'melhoria', text: 'Recomendações de campeão agora usam 8 dimensões (modelo Neo-Artemis).' },
-      { tag: 'melhoria', text: 'Scores mais realistas — fórmula combina cosseno com distância euclidiana.' },
-      { tag: 'novo',      text: 'Radar chart nos detalhes da recomendação — veja seu perfil vs o campeão.' },
-      { tag: 'novo',      text: 'Mapa completo de runas com ícones corretos na tab de Build.' },
-    ],
+    entries: ['melhoria', 'melhoria', 'novo', 'novo'],
   },
   {
+    id: 'alpha_v0_8_0',
     version: 'Alpha v0.8.0',
     date: '04/2026',
-    label: 'Big Update',
-    entries: [
-      { tag: 'big',      text: 'Maior atualização desde o lançamento — nova interface, IA integrada, recomendações e monetização.' },
-      { tag: 'novo',      text: 'Busca inteligente com autocomplete de jogadores.' },
-      { tag: 'novo',      text: 'Página de Itens — ranking por winrate e popularidade.' },
-      { tag: 'novo',      text: 'Recomendações por lane — Diana JG ≠ Diana Mid.' },
-      { tag: 'novo',      text: 'Chat com IA Metis funcionando — conectado ao Gemini Flash Lite.' },
-      { tag: 'novo',      text: 'Metis Score nas partidas — nota de performance por role.' },
-      { tag: 'novo',      text: 'Análise de equipe na partida — gráficos comparando times.' },
-      { tag: 'novo',      text: 'Tab de Build na partida — itens, feitiços e runas completos.' },
-      { tag: 'novo',      text: 'Jogou com / Nemesis — com quem você joga mais, e contra quem.' },
-      { tag: 'novo',      text: 'Histórico de nomes — detecta mudanças de nickname.' },
-      { tag: 'novo',      text: 'Página de Planos com emblemas de elo (Silver a Challenger).' },
-      { tag: 'melhoria', text: 'Tier List com badges de tier, filtro de patch e emblemas maiores.' },
-      { tag: 'melhoria', text: 'Perfil expandido — 2 colunas, resumo da season, filtros.' },
-    ],
+    hasLabel: true,
+    entries: ['big', 'novo', 'novo', 'novo', 'novo', 'novo', 'novo', 'novo', 'novo', 'novo', 'novo', 'melhoria', 'melhoria'],
   },
   {
+    id: 'alpha_v0_7_0',
     version: 'Alpha v0.7.0',
     date: '04/2026',
-    entries: [
-      { tag: 'novo',      text: 'Página de campeão em /champions/[nome] — overview, builds, matchups, sinergias.' },
-      { tag: 'melhoria', text: 'Tier List: clicar no campeão abre a página dele.' },
-      { tag: 'fix',       text: 'Ícones de lane e emblemas de elo na Tier List corrigidos.' },
-    ],
+    entries: ['novo', 'melhoria', 'fix'],
   },
   {
+    id: 'alpha_v0_6_5',
     version: 'Alpha v0.6.5',
     date: '04/2026',
-    entries: [
-      { tag: 'novo',      text: 'Timeline da partida — CS/m, Ouro e XP ao longo do tempo.' },
-      { tag: 'novo',      text: 'Seu jogador destacado na timeline com linha mais grossa.' },
-    ],
+    entries: ['novo', 'novo'],
   },
   {
+    id: 'alpha_v0_6_1',
     version: 'Alpha v0.6.1',
     date: '04/2026',
-    entries: [
-      { tag: 'novo', text: 'Tier List de campeões com filtros por posição, região e patch.' },
-      { tag: 'novo', text: 'Histórico detalhado por jogador.' },
-      { tag: 'novo', text: 'Cadastro com confirmação por e-mail.' },
-      { tag: 'novo', text: 'Páginas "O que é novo?" e "Conheça a Equipe".' },
-    ],
+    entries: ['novo', 'novo', 'novo', 'novo'],
   },
   {
+    id: 'alpha_v0_4_0',
     version: 'Alpha v0.4.0',
     date: '04/2026',
-    entries: [
-      { tag: 'novo', text: 'Lançamento do site Metis.' },
-      { tag: 'novo', text: 'Login com e-mail e senha.' },
-      { tag: 'novo', text: 'Busca de jogadores por PUUID ou Riot ID.' },
-    ],
+    entries: ['novo', 'novo', 'novo'],
   },
   {
+    id: 'alpha_v0_1_0',
     version: 'Alpha v0.1.0',
     date: '03/2026',
-    entries: [
-      { tag: 'novo', text: 'Criação do repositório e estrutura inicial.' },
-    ],
+    entries: ['novo'],
   },
 ]
 
-const TAG_META: Record<TagKind, { label: string; bg: string; fg: string }> = {
-  big:      { label: 'BIG UPDATE', bg: 'rgba(139,127,255,0.15)',  fg: 'var(--m-violet)' },
-  novo:     { label: 'NOVO',        bg: 'rgba(74,222,128,0.15)',   fg: 'var(--m-green)'  },
-  melhoria: { label: 'MELHORIA',    bg: 'rgb(var(--m-accent-rgb) / 0.15)', fg: 'var(--m-accent)' },
-  fix:      { label: 'FIX',         bg: 'rgba(96,165,250,0.15)',   fg: 'var(--m-blue)'   },
+const TAG_STYLE: Record<TagKind, { bg: string; fg: string; minWidth: number }> = {
+  big:      { bg: 'rgba(139,127,255,0.15)',           fg: 'var(--m-violet)', minWidth: 78 },
+  novo:     { bg: 'rgba(74,222,128,0.15)',            fg: 'var(--m-green)',  minWidth: 68 },
+  melhoria: { bg: 'rgb(var(--m-accent-rgb) / 0.15)',  fg: 'var(--m-accent)', minWidth: 78 },
+  fix:      { bg: 'rgba(96,165,250,0.15)',            fg: 'var(--m-blue)',   minWidth: 68 },
 }
 
 export default function ChangelogPage() {
+  const t = useTranslations('changelog')
+
+  const tagLabel: Record<TagKind, string> = {
+    big: t('tag_big'),
+    novo: t('tag_novo'),
+    melhoria: t('tag_melhoria'),
+    fix: t('tag_fix'),
+  }
+
   return (
     <div className="metis-scope" style={{ minHeight: '100vh', background: 'var(--m-bg)' }}>
       <AppHeader active="changelog" />
 
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '40px 28px 48px' }}>
-        {/* Header */}
         <div
           style={{
             display: 'inline-flex',
@@ -234,19 +174,18 @@ export default function ChangelogPage() {
             marginBottom: 14,
           }}
         >
-          <Icon name="sparkles" size={12} /> Novidades
+          <Icon name="sparkles" size={12} /> {t('eyebrow')}
         </div>
         <h1
           className="font-display"
           style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 8 }}
         >
-          O que é novo?
+          {t('title')}
         </h1>
         <p style={{ fontSize: 14, color: 'var(--m-text-dim)', marginBottom: 36 }}>
-          Acompanhe as evoluções da Metis. Cada versão traz melhorias reais — sem promessas, só entregas.
+          {t('subtitle')}
         </p>
 
-        {/* Timeline vertical */}
         <div style={{ position: 'relative', paddingLeft: 32 }}>
           <div
             style={{
@@ -259,8 +198,7 @@ export default function ChangelogPage() {
             }}
           />
           {RELEASES.map((rel) => (
-            <div key={rel.version} style={{ position: 'relative', marginBottom: 28 }}>
-              {/* Node */}
+            <div key={rel.id} style={{ position: 'relative', marginBottom: 28 }}>
               <div
                 style={{
                   position: 'absolute',
@@ -275,7 +213,6 @@ export default function ChangelogPage() {
                 }}
               />
 
-              {/* Version header */}
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
                 <h2 className="font-display" style={{ fontSize: 22, fontWeight: 700 }}>
                   {rel.version}
@@ -293,15 +230,14 @@ export default function ChangelogPage() {
                       letterSpacing: '0.06em',
                     }}
                   >
-                    ATUAL
+                    {t('label_current')}
                   </span>
                 )}
                 <div style={{ flex: 1 }} />
                 <span style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>{rel.date}</span>
               </div>
 
-              {/* Label destaque (se houver) */}
-              {rel.label && (
+              {rel.hasLabel && (
                 <div
                   style={{
                     display: 'flex',
@@ -317,8 +253,8 @@ export default function ChangelogPage() {
                   <span
                     style={{
                       padding: '2px 7px',
-                      background: TAG_META.big.bg,
-                      color: TAG_META.big.fg,
+                      background: TAG_STYLE.big.bg,
+                      color: TAG_STYLE.big.fg,
                       borderRadius: 4,
                       fontSize: 9,
                       fontWeight: 700,
@@ -327,13 +263,14 @@ export default function ChangelogPage() {
                       marginTop: 1,
                     }}
                   >
-                    {TAG_META.big.label}
+                    {tagLabel.big}
                   </span>
-                  <span style={{ fontSize: 13, color: 'var(--m-text)', lineHeight: 1.5 }}>{rel.label}</span>
+                  <span style={{ fontSize: 13, color: 'var(--m-text)', lineHeight: 1.5 }}>
+                    {t(`releases.${rel.id}.label` as 'releases.p_0_9_9.label')}
+                  </span>
                 </div>
               )}
 
-              {/* Entries box */}
               <div
                 style={{
                   display: 'flex',
@@ -345,29 +282,29 @@ export default function ChangelogPage() {
                   borderRadius: 12,
                 }}
               >
-                {rel.entries.map((entry, i) => {
-                  const m = TAG_META[entry.tag]
+                {rel.entries.map((tag, i) => {
+                  const s = TAG_STYLE[tag]
                   return (
                     <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                       <span
                         style={{
                           padding: '2px 7px',
-                          background: m.bg,
-                          color: m.fg,
+                          background: s.bg,
+                          color: s.fg,
                           borderRadius: 4,
                           fontSize: 9,
                           fontWeight: 700,
                           letterSpacing: '0.06em',
                           flexShrink: 0,
                           marginTop: 1,
-                          minWidth: 68,
+                          minWidth: s.minWidth,
                           textAlign: 'center',
                         }}
                       >
-                        {m.label}
+                        {tagLabel[tag]}
                       </span>
                       <span style={{ fontSize: 12, color: 'var(--m-text-dim)', lineHeight: 1.55 }}>
-                        {entry.text}
+                        {t(`releases.${rel.id}.entry_${i}` as 'releases.p_0_9_9.entry_0')}
                       </span>
                     </div>
                   )
@@ -377,16 +314,15 @@ export default function ChangelogPage() {
           ))}
         </div>
 
-        {/* Footer */}
         <div style={{ marginTop: 32, textAlign: 'center' }}>
           <p style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>
-            Metis está em pre-release — bugs fazem parte. Encontrou algo?{' '}
+            {t('footer_part1')}{' '}
             <Link
               href="/chat"
               className="m-hover-link"
               style={{ color: 'var(--m-accent)', textDecoration: 'none' }}
             >
-              Fale com a Metis.
+              {t('footer_link')}
             </Link>
           </p>
         </div>

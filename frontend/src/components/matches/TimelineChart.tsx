@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useTranslations } from 'next-intl'
 
 // ── Tipos ─────────────────────────────────────────────────────
 
@@ -19,10 +20,10 @@ type TLParticipant = {
 
 type Metric = 'cspm' | 'gold' | 'xp'
 
-const METRIC_LABELS: Record<Metric, string> = {
-  cspm: 'CS/m',
-  gold: 'Ouro',
-  xp:   'XP',
+const METRIC_KEY: Record<Metric, 'metric_cspm' | 'metric_gold' | 'metric_xp'> = {
+  cspm: 'metric_cspm',
+  gold: 'metric_gold',
+  xp:   'metric_xp',
 }
 
 // ── Paletas por time ──────────────────────────────────────────
@@ -52,6 +53,7 @@ export function TimelineChart({
   participants: TLParticipant[]
   highlightedPuuid: string | null
 }) {
+  const t = useTranslations('timeline')
   const [metric, setMetric] = useState<Metric>('gold')
 
   // Cor por PUUID
@@ -102,7 +104,7 @@ export function TimelineChart({
 
       {/* Tabs de métrica */}
       <div className="flex gap-1.5">
-        {(Object.keys(METRIC_LABELS) as Metric[]).map(m => (
+        {(Object.keys(METRIC_KEY) as Metric[]).map(m => (
           <button
             key={m}
             onClick={() => setMetric(m)}
@@ -112,7 +114,7 @@ export function TimelineChart({
                 : 'text-metis-text-dim hover:text-metis-text bg-metis-bg border border-metis-border'
             }`}
           >
-            {METRIC_LABELS[m]}
+            {t(METRIC_KEY[m])}
           </button>
         ))}
       </div>
@@ -122,7 +124,7 @@ export function TimelineChart({
         viewBox={`0 0 ${W} ${H}`}
         width="100%"
         className="overflow-visible"
-        aria-label={`Timeline de ${METRIC_LABELS[metric]}`}
+        aria-label={t('aria_label', { metric: t(METRIC_KEY[metric]) })}
       >
         {/* Grid horizontal */}
         {gridLines.map((g, i) => (

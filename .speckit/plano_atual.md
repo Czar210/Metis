@@ -1,6 +1,6 @@
 # Metis — Plano Atual
 
-*Ultima sync: 2026-04-22 | Versao atual: p-0.9.17*
+*Ultima sync: 2026-04-23 | Versao atual: p-0.9.19*
 
 ---
 
@@ -28,7 +28,9 @@
 | p-0.9.14 | ✅ Concluido | Redesign: Champion Page (hero violet, 4 sub-tabs, detecção de role impopular) |
 | p-0.9.15 | ✅ Concluido | Redesign: Match Detail (3 tabs Overview/Análise de Equipe/Builds, TeamBlock com Metis Score, SplitDonut por métrica, timeline de frames reusada) |
 | p-0.9.16 | ✅ Concluido | Admin redesign com design system + bugfix avatar header (condicional em `is_admin`) |
-| **p-0.9.17** | ✅ **Concluido** | **Tier List por z-score (S+ ≥ +2σ) + filtro de role_share (nicho legítimo entra mesmo com sample baixo). Frontend consome `c.tier` do backend, mostra z_score como +X.Yσ** |
+| p-0.9.17 | ✅ Concluido | Tier List por z-score (S+ ≥ +2σ) + filtro de role_share (nicho legítimo entra mesmo com sample baixo). Frontend consome `c.tier` do backend, mostra z_score como +X.Yσ |
+| p-0.9.18 | ✅ Concluido | i18n Foundation: PT + EN via `next-intl` cookie-based. Piloto migrado: AppHeader + Home + Admin. `LangSwitcher` no header. `formatNumber` substitui `toLocaleString('pt-BR')`. URL-based documentado em `plano_i18n_url_future.md` pra migração futura. |
+| **p-0.9.19** | ✅ **Concluido** | **i18n 100% das telas: team, auth, changelog, items, pricing, chat, champions list, champion detail, players dashboard, match detail + componentes compartilhados (ThemeSwitcher, TimelineChart). 15 namespaces, ~650 chaves. Build passou.** |
 
 ---
 

@@ -2,6 +2,110 @@
 
 *Diário de mudanças significativas no ecossistema e na stack do projeto.*
 
+## p-0.9.19 — i18n 100% das telas PT/EN (2026-04-23)
+
+Todo o site agora fala PT e EN. Telas restantes do p-0.9.18 foram migradas. Build passou com 13 rotas, 0 erros typecheck.
+
+### Telas traduzidas nesta versão
+- **team** (`app/team/page.tsx`) — eyebrow, título, cards dos membros (title/tags/quote/link por id), stats footer
+- **auth** (`app/auth/page.tsx`) — toggle login/signup, labels, placeholders, validações, tela pós-cadastro
+- **changelog** (`app/changelog/page.tsx`) — restructured RELEASES: cada release tem `id` e as entries passam a ser indexadas por `releases.<id>.entry_N`. Labels de tag (NOVO/MELHORIA/FIX/BIG UPDATE) via dict
+- **items** (`app/items/page.tsx`) — eyebrow, título, spotlights (populares + WR), filtros de role/patch, tabela, tendências
+- **pricing** (`app/pricing/page.tsx`) — 4 tier cards (Free/Doador/Premium/Pro) com features por ID + índice, cupons, trust footer, comparativo, FAQ, Times & Empresas
+- **chat** (`app/chat/page.tsx`) — welcome, quick prompts, input placeholder, gate premium, usage bar, disclaimer
+- **champions** (`app/champions/page.tsx`) — tier list completa: filtros de role/server/patch range/elo, cards por tier, z_score tooltip
+- **champion detail** (`app/champions/[champion]/page.tsx`) — hero, 4 tabs (Overview, Builds, Matchups, Sinergias), KPIs, difficulty labels dinâmicos
+- **players dashboard** (`app/players/[puuid]/page.tsx`) — **2110 linhas** (~2073 original). Banner, 4 KPIs, winrate cumulativo, tabela campeões, recomendações Neo-Artemis com DualRadar (8 eixos com axis labels i18n), match history com `formatRelativeDate` promovido a hook `useFormatRelativeDate()`, sidebar rica (Roles, Play profile, Ask Metis, Played With, Nemesis)
+- **match detail** (`app/matches/[match_id]/page.tsx`) — **1595 linhas**. 3 tabs (Overview, Team Analysis, Builds & Runes), TeamBlock com Metis Score, SplitDonut por métrica, timeline reusada
+
+### Componentes compartilhados
+- **ThemeSwitcher** — tooltip e labels de cores (Azul/Roxo/Verde/Vermelho/Dourado)
+- **TimelineChart** — labels de métrica (Ouro/Gold, CS/m, XP) e aria-label
+
+### Dicionários
+- **pt.json**: ~650 chaves, 15 namespaces (`common`, `header`, `home`, `admin`, `team`, `auth`, `changelog`, `items`, `pricing`, `champion`, `champions`, `chat`, `players`, `match`, `timeline`)
+- **en.json**: mesma estrutura, traduções naturais (não literais). Termos técnicos de LoL (KDA, CS, DPM, Metis Score, runas) mantidos em inglês em ambos locales
+
+### Padrões adotados
+- `ROLE_I18N_KEY: Record<Role, 'role_top' | 'role_jungle' | ...>` mapeamento local em cada tela substitui o `ROLES_PT` do design system (que continua exportado mas será removido quando a tier list legada for limpa)
+- `formatNumber(n, locale)` substitui todos os `.toLocaleString('pt-BR')` em código novo
+- `new Date().toLocaleDateString('pt-BR', ...)` → usa `locale === 'pt' ? 'pt-BR' : 'en-US'`
+- Ícones de role Riot (top/jungle/mid/bot/sup) são universais, só os labels text traduzem
+- Códigos de servidor (BR1, NA1, etc) e rank (Iron, Gold, Master) ficam em inglês — universais
+- Release labels/entries do changelog indexados por ID (ex: `changelog.releases.p_0_9_9.entry_0`) ao invés de string inline — mantém dados no JSON
+
+### Decisões não-óbvias
+- **Victory/Defeat em match detail**: PT coloca adjetivo depois do substantivo ("Vitória azul"), EN coloca antes ("Blue victory"). Agent manteve a ordem PT em ambos ("Victory blue") pra preservar o layout JSX com team name destacado no meio. Natural-sounding EN reordering fica pra backlog.
+- **QUEUE_LABEL do match**: movido de const top-level pra dentro do componente (precisava de `t()`). Sem mudança de comportamento.
+- **Sync message color** no players dashboard: antes usava `syncMsg.startsWith('Erro')` pra colorir vermelho. Agora usa boolean state `syncIsError` — desacopla a cor do texto literal.
+- **formatRelativeDate** virou hook `useFormatRelativeDate()` porque precisa acessar `t` e `locale`.
+
+### Validação
+- `npx tsc --noEmit` → 0 erros
+- `npm run build` → passou, 13 rotas estáticas geradas
+- Cache do switcher PT↔EN persiste via cookie `NEXT_LOCALE`
+- Bundle sizes estáveis (sem crescimento significativo):
+  - Home: 195 kB (vs 196 kB antes — ganhou ~1 kB de economy em shared chunks)
+  - Players: 203 kB, Match: 202 kB, Champion detail: 198 kB
+
+### Pendente (não-bloqueante)
+- Layout natural EN pros casos "Vitória azul / Blue victory" (reordenar JSX condicional)
+- Revisar traduções EN da feature list do pricing (revisão do César)
+- `StatsTable` e `components/ui/Header` são dead code — removíveis em próxima limpeza
+
+---
+
+## p-0.9.18 — i18n Foundation + Piloto PT/EN (2026-04-23)
+
+Site agora fala português e inglês. Arquitetura cookie-based via `next-intl` — URL-based fica documentado em `.speckit/plano_i18n_url_future.md` pra eventual migração futura.
+
+### Infra nova
+- **Dependência:** `next-intl ^3.x` (padrão de facto pra Next.js 15 App Router, funciona em RSC)
+- **`src/i18n/config.ts`** — `SUPPORTED_LOCALES = ['pt', 'en']`, default `pt`, cookie `NEXT_LOCALE`
+- **`src/i18n/request.ts`** — `getRequestConfig` lê cookie via `next/headers`, carrega JSON dinâmico
+- **`src/i18n/actions.ts`** — server action `setLocale(locale)` grava cookie + `revalidatePath('/', 'layout')`
+- **`src/messages/pt.json` + `en.json`** — dicionários flat por namespace (`common`, `header`, `home`, `admin`)
+- **`src/lib/format.ts`** — `formatNumber(value, locale)` (usa `Intl.NumberFormat` com BCP47 `pt-BR`/`en-US`), substitui `toLocaleString('pt-BR')` espalhado
+
+### Integração
+- **`next.config.ts`** — wrapped com `createNextIntlPlugin('./src/i18n/request.ts')`
+- **`app/layout.tsx`** — agora async, wraps com `<NextIntlClientProvider>`, `<html lang>` dinâmico do locale, metadata via `getTranslations`
+
+### Componente novo
+- **`components/design/LangSwitcher.tsx`** — pill group PT/EN (accent background quando active), usa `useTransition` pra server action sem flash, acessibilidade via `aria-label`/`title`
+- Posição no header: logo após o botão "Chat Metis", antes do avatar/login (conforme pedido)
+
+### Telas piloto traduzidas
+- **AppHeader** — nav labels (Home/Tier List/Itens/Planos/Equipe), botão Chat Metis, CTA Entrar, tooltips
+- **Home (`app/page.tsx`)** — hero, subtítulo, stats strip, meta spotlight, tier list top-8 (com filtro de role i18n), sidebar watched/ask_metis/changelog
+- **Admin (`app/admin/page.tsx`)** — eyebrow, título, 8 KPI cards, breakdown de motivos (`REASON_LABEL` virou chave i18n), mensagens de cache refresh, footer com flag
+
+### Formatação numérica localizada
+- Antes: `1.234` fixo (pt-BR) em todo lugar
+- Agora: `1.234` em PT, `1,234` em EN — via `formatNumber(n, locale)` onde quer que haja `toLocaleString` nas telas piloto
+
+### Padrão adotado pras demais telas (p-0.9.19+)
+```tsx
+const t = useTranslations('namespace')
+const locale = useLocale() as Locale
+// JSX: {t('key')} ou t('key', { vars })
+// números: formatNumber(n, locale)
+```
+
+### Fallback e resiliência
+- Chave ausente em `en.json` → cai pra pt automaticamente (comportamento padrão do next-intl). Nunca mostra a chave crua pro usuário.
+- Cookie com valor desconhecido (`isLocale` type guard) → usa default `pt`
+
+### Validação
+- `npx tsc --noEmit` → 0 erros
+- `npm run build` → passou, 13 rotas geradas, bundle da home +5.57 kB (base 196 kB), admin +2.76 kB
+- Switch no header: PT → EN → persiste após F5 → números reformatam
+
+### Próximas telas (pendentes pra p-0.9.19+)
+champions (tier list completa), chat, pricing, player dashboard, champion page, match detail, changelog, team, auth, matches
+
+---
+
 ## p-0.9.17 — Tier List por z-score + filtro de nicho (2026-04-22)
 
 Tier agora é calculado estatisticamente (desvios padrão) e filtro de relevância permite nichos legítimos sem poluir com outliers.

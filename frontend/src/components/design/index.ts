@@ -26,6 +26,7 @@ export { AreaChart } from './AreaChart'
 export { RadarChart, type RadarAxis } from './RadarChart'
 export { Logo } from './Logo'
 export { AppHeader } from './AppHeader'
+export { LangSwitcher } from './LangSwitcher'
 
 export {
   TIER_COLORS,

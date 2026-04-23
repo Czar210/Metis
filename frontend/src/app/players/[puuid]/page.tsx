@@ -4,9 +4,12 @@ import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
+import { useLocale, useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase/client'
 import { DDRAGON_VERSION, championIconUrl, roleIconPath } from '@/lib/ddragon'
 import { apiFetch } from '@/lib/api'
+import { formatNumber } from '@/lib/format'
+import type { Locale } from '@/i18n/config'
 import {
   AppHeader,
   Card,
@@ -21,13 +24,20 @@ import {
   RadarChart as DsRadarChart,
   StackedBar,
   WinLossDots,
-  ROLES_PT,
   type Role,
 } from '@/components/design'
 
 // ── Types ──────────────────────────────────────────────────────────
 const PAGE_SIZE = 10
 const SERVERS = ['BR1', 'NA1', 'EUW1', 'KR', 'EUNE1', 'JP1', 'LA1', 'LA2', 'OC1']
+
+const ROLE_I18N_KEY: Record<Role, 'role_top' | 'role_jungle' | 'role_mid' | 'role_adc' | 'role_sup'> = {
+  TOP: 'role_top',
+  JUNGLE: 'role_jungle',
+  MIDDLE: 'role_mid',
+  BOTTOM: 'role_adc',
+  UTILITY: 'role_sup',
+}
 
 type PlayerInfo = {
   game_name: string
@@ -120,17 +130,24 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-function formatRelativeDate(ts: number | null): string {
-  if (!ts) return '—'
-  const diff = Date.now() - ts
-  const mins = Math.floor(diff / 60_000)
-  const hours = Math.floor(diff / 3_600_000)
-  const days = Math.floor(diff / 86_400_000)
-  if (mins < 1) return 'agora'
-  if (mins < 60) return `há ${mins}m`
-  if (hours < 24) return `há ${hours}h`
-  if (days < 7) return `há ${days}d`
-  return new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+function useFormatRelativeDate() {
+  const t = useTranslations('players')
+  const locale = useLocale() as Locale
+  return (ts: number | null): string => {
+    if (!ts) return '—'
+    const diff = Date.now() - ts
+    const mins = Math.floor(diff / 60_000)
+    const hours = Math.floor(diff / 3_600_000)
+    const days = Math.floor(diff / 86_400_000)
+    if (mins < 1) return t('time_now')
+    if (mins < 60) return t('time_minutes_ago', { n: mins })
+    if (hours < 24) return t('time_hours_ago', { n: hours })
+    if (days < 7) return t('time_days_ago', { n: days })
+    return new Date(ts).toLocaleDateString(locale === 'pt' ? 'pt-BR' : 'en-US', {
+      day: '2-digit',
+      month: 'short',
+    })
+  }
 }
 
 const RANK_COLOR: Record<string, string> = {
@@ -142,6 +159,8 @@ const RANK_COLOR: Record<string, string> = {
 
 // ── Page ───────────────────────────────────────────────────────────
 export default function PlayerPage() {
+  const t = useTranslations('players')
+  const locale = useLocale() as Locale
   const params = useParams()
   const router = useRouter()
   const supabase = createClient()
@@ -157,6 +176,7 @@ export default function PlayerPage() {
   const [syncServer, setSyncServer] = useState('BR1')
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  const [syncIsError, setSyncIsError] = useState(false)
   const [cooldownEnd, setCooldownEnd] = useState<number | null>(null)
   const [cooldownLeft, setCooldownLeft] = useState(0)
 
@@ -356,7 +376,7 @@ export default function PlayerPage() {
       setHasMore(data.has_more ?? false)
       setOffset(data.matches?.length ?? 0)
     } catch {
-      setMatchError('Não foi possível carregar o histórico. O backend pode estar offline.')
+      setMatchError(t('history_load_failed'))
     } finally {
       setLoadingMatches(false)
     }
@@ -389,6 +409,7 @@ export default function PlayerPage() {
 
     setSyncing(true)
     setSyncMsg(null)
+    setSyncIsError(false)
     try {
       const res = await apiFetch('/api/v1/player/sync', {
         method: 'POST',
@@ -401,24 +422,27 @@ export default function PlayerPage() {
         setCooldownEnd(end)
         setCooldownLeft(retryAfter)
         localStorage.setItem(cooldownKey, String(end))
-        setSyncMsg(`Aguarde ${Math.ceil(retryAfter / 60)} min para sincronizar novamente.`)
+        setSyncMsg(t('sync_wait_minutes', { n: Math.ceil(retryAfter / 60) }))
+        setSyncIsError(false)
         return
       }
       if (!res.ok)
-        throw new Error(typeof data.detail === 'string' ? data.detail : 'Erro desconhecido')
+        throw new Error(typeof data.detail === 'string' ? data.detail : t('error_unknown'))
       if (isRiotId && data.puuid) {
         router.replace(`/players/${encodeURIComponent(data.puuid)}`)
         return
       }
       const novas = data.novas ?? 0
-      setSyncMsg(novas > 0 ? `${novas} nova(s) partida(s) importada(s)` : 'Nenhuma partida nova encontrada')
+      setSyncMsg(novas > 0 ? t('sync_imported', { n: novas }) : t('sync_none_new'))
+      setSyncIsError(false)
       const end = Date.now() + 300_000
       setCooldownEnd(end)
       setCooldownLeft(300)
       localStorage.setItem(cooldownKey, String(end))
       if (resolvedPuuid) loadHistory(resolvedPuuid, 0)
     } catch (e: unknown) {
-      setSyncMsg(`Erro: ${e instanceof Error ? e.message : 'falha na sincronização'}`)
+      setSyncMsg(t('sync_error', { msg: e instanceof Error ? e.message : t('sync_fail') }))
+      setSyncIsError(true)
     } finally {
       setSyncing(false)
     }
@@ -558,11 +582,20 @@ export default function PlayerPage() {
 
   // Perfil do jogador (pra radar) — vem das recomendações.
   const playerRadarAxes = useMemo(() => {
-    const labels = ['Agressão', 'Mapa', 'Eficiência', 'Pressão', 'Sobrev.', 'Utilid.', 'Early', 'Consist.']
+    const labels = [
+      t('axis_aggression'),
+      t('axis_map'),
+      t('axis_efficiency'),
+      t('axis_pressure'),
+      t('axis_survivability'),
+      t('axis_utility'),
+      t('axis_early'),
+      t('axis_consistency'),
+    ]
     const src = recommendations.find((r) => r.player_profile)?.player_profile
     if (!src) return null
     return src.map((v, i) => ({ label: labels[i] ?? '', value: Math.min(1, v / 10) }))
-  }, [recommendations])
+  }, [recommendations, t])
 
   const displayName = playerInfo
     ? `${playerInfo.game_name}#${playerInfo.tag_line}`
@@ -731,7 +764,7 @@ export default function PlayerPage() {
             )}
             {nameHistory.length > 0 && (
               <div style={{ fontSize: 10, color: 'var(--m-muted)', marginTop: 6 }}>
-                antes: {nameHistory.map((n) => `${n.old_game_name}#${n.old_tag_line}`).join(' → ')}
+                {t('previously')}: {nameHistory.map((n) => `${n.old_game_name}#${n.old_tag_line}`).join(' → ')}
               </div>
             )}
             {watched && watchLabel && (
@@ -765,7 +798,7 @@ export default function PlayerPage() {
               }}
             >
               <Icon name="star" size={14} style={{ color: watched ? 'var(--m-accent)' : 'var(--m-text-dim)' }} />
-              {watched ? 'Remover' : 'Supervisionar'}
+              {watched ? t('watch_remove') : t('watch_add')}
             </button>
             <Link
               href="/chat"
@@ -785,7 +818,7 @@ export default function PlayerPage() {
               }}
             >
               <Icon name="brain" size={14} />
-              Analisar com IA
+              {t('analyze_with_ai')}
             </Link>
           </div>
         </div>
@@ -804,7 +837,7 @@ export default function PlayerPage() {
               <input
                 value={watchLabel}
                 onChange={(e) => setWatchLabel(e.target.value)}
-                placeholder="Apelido (opcional)"
+                placeholder={t('watch_label_placeholder')}
                 style={{
                   flex: 1,
                   padding: '8px 12px',
@@ -836,7 +869,7 @@ export default function PlayerPage() {
                   opacity: savingWatch ? 0.5 : 1,
                 }}
               >
-                Salvar
+                {t('save')}
               </button>
             </div>
           )}
@@ -911,23 +944,23 @@ export default function PlayerPage() {
                 <Icon name="compass" size={12} />
               </span>
               {syncing
-                ? 'Sincronizando...'
+                ? t('syncing')
                 : cooldownLeft > 0
                 ? `${Math.floor(cooldownLeft / 60)}m ${String(cooldownLeft % 60).padStart(2, '0')}s`
-                : 'Ver partidas novas'}
+                : t('sync_fetch_new')}
             </button>
             {syncMsg && (
               <span
                 style={{
                   fontSize: 11,
-                  color: syncMsg.startsWith('Erro') ? 'var(--m-red)' : 'var(--m-green)',
+                  color: syncIsError ? 'var(--m-red)' : 'var(--m-green)',
                 }}
               >
                 {syncMsg}
               </span>
             )}
             <span style={{ fontSize: 10, color: 'var(--m-muted)', marginLeft: 'auto', maxWidth: 420 }}>
-              O histórico abaixo é o cache do banco. Clique pra puxar as últimas 15 partidas da Riot.
+              {t('cache_hint')}
             </span>
           </div>
         </div>
@@ -939,10 +972,10 @@ export default function PlayerPage() {
           <Card>
             <div style={{ textAlign: 'center', padding: '8px 0' }}>
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
-                {rawParam} não está no nosso banco ainda
+                {t('not_in_db_title', { name: rawParam })}
               </div>
               <div style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>
-                Escolha o servidor e clique em &quot;Ver partidas novas&quot; acima pra importar o histórico.
+                {t('not_in_db_hint')}
               </div>
             </div>
           </Card>
@@ -972,7 +1005,7 @@ export default function PlayerPage() {
               }}
             >
               <Card>
-                <SectionLabel icon="target">Últimas {matches.length}</SectionLabel>
+                <SectionLabel icon="target">{t('last_n', { n: matches.length })}</SectionLabel>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <Donut
                     value={summary.winrate}
@@ -996,16 +1029,16 @@ export default function PlayerPage() {
                         letterSpacing: '0.06em',
                       }}
                     >
-                      winrate
+                      {t('winrate')}
                     </div>
                   </Donut>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                       <span className="tabular" style={{ color: 'var(--m-green)', fontWeight: 600 }}>
-                        {summary.wins}V
+                        {summary.wins}{t('wins_suffix')}
                       </span>
                       <span className="tabular" style={{ color: 'var(--m-red)', fontWeight: 600 }}>
-                        {summary.losses}D
+                        {summary.losses}{t('losses_suffix')}
                       </span>
                     </div>
                     {winLossResults.length > 0 && (
@@ -1016,7 +1049,7 @@ export default function PlayerPage() {
               </Card>
 
               <Card>
-                <SectionLabel icon="sword">KDA médio</SectionLabel>
+                <SectionLabel icon="sword">{t('avg_kda')}</SectionLabel>
                 <div className="tabular font-display" style={{ fontSize: 28, fontWeight: 700 }}>
                   {summary.avgKda}
                 </div>
@@ -1028,12 +1061,12 @@ export default function PlayerPage() {
               </Card>
 
               <Card>
-                <SectionLabel icon="crosshair">CS / min</SectionLabel>
+                <SectionLabel icon="crosshair">{t('cs_per_min')}</SectionLabel>
                 <div className="tabular font-display" style={{ fontSize: 28, fontWeight: 700 }}>
                   {summary.avgCspm}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 4 }}>
-                  média por partida
+                  {t('avg_per_match')}
                 </div>
                 <div style={{ marginTop: 10 }}>
                   <Bar
@@ -1052,12 +1085,12 @@ export default function PlayerPage() {
               </Card>
 
               <Card>
-                <SectionLabel icon="eye">Score de visão</SectionLabel>
+                <SectionLabel icon="eye">{t('vision_score')}</SectionLabel>
                 <div className="tabular font-display" style={{ fontSize: 28, fontWeight: 700 }}>
                   {summary.avgVision}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--m-text-dim)', marginTop: 4 }}>
-                  média por partida
+                  {t('avg_per_match')}
                 </div>
                 <div style={{ marginTop: 10 }}>
                   <Bar
@@ -1075,7 +1108,7 @@ export default function PlayerPage() {
           {wrSeries.length > 2 && (
             <Card>
               <SectionLabel icon="trending">
-                Winrate cumulativo · últimas {wrSeries.length} partidas
+                {t('winrate_cumulative', { n: wrSeries.length })}
               </SectionLabel>
               <div
                 style={{
@@ -1090,7 +1123,7 @@ export default function PlayerPage() {
                   <span style={{ fontSize: 14, color: 'var(--m-text-dim)' }}>%</span>
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--m-text-dim)' }}>
-                  no fim da janela
+                  {t('at_window_end')}
                 </span>
                 <span
                   className="tabular"
@@ -1105,7 +1138,7 @@ export default function PlayerPage() {
                   }}
                 >
                   {wrSeries[wrSeries.length - 1] - wrSeries[0] >= 0 ? '+' : ''}
-                  {wrSeries[wrSeries.length - 1] - wrSeries[0]}% vs início
+                  {wrSeries[wrSeries.length - 1] - wrSeries[0]}% {t('vs_start')}
                 </span>
               </div>
               <AreaChart data={wrSeries} height={140} color="var(--m-accent)" />
@@ -1137,7 +1170,7 @@ export default function PlayerPage() {
                           outline: 'none',
                         }}
                       >
-                        <option value="">Geral</option>
+                        <option value="">{t('filter_overall')}</option>
                         {seasons.map((s) => (
                           <option key={s} value={s}>
                             {s}
@@ -1161,7 +1194,7 @@ export default function PlayerPage() {
                           outline: 'none',
                         }}
                       >
-                        <option value="">Patch</option>
+                        <option value="">{t('filter_patch')}</option>
                         {patchList.map((p) => (
                           <option key={p} value={p}>
                             {p}
@@ -1182,17 +1215,17 @@ export default function PlayerPage() {
                           outline: 'none',
                         }}
                       >
-                        <option value="">Role</option>
-                        <option value="TOP">Top</option>
-                        <option value="JUNGLE">Jungle</option>
-                        <option value="MIDDLE">Mid</option>
-                        <option value="BOTTOM">ADC</option>
-                        <option value="UTILITY">Sup</option>
+                        <option value="">{t('filter_role')}</option>
+                        <option value="TOP">{t('role_top')}</option>
+                        <option value="JUNGLE">{t('role_jungle')}</option>
+                        <option value="MIDDLE">{t('role_mid')}</option>
+                        <option value="BOTTOM">{t('role_adc')}</option>
+                        <option value="UTILITY">{t('role_sup')}</option>
                       </select>
                     </div>
                   }
                 >
-                  Campeões jogados
+                  {t('champions_played')}
                 </SectionLabel>
               </div>
               {champStats.length === 0 ? (
@@ -1204,7 +1237,7 @@ export default function PlayerPage() {
                     color: 'var(--m-text-dim)',
                   }}
                 >
-                  Sem dados pros filtros selecionados.
+                  {t('no_data_filters')}
                 </div>
               ) : (
                 <>
@@ -1223,9 +1256,9 @@ export default function PlayerPage() {
                       borderBottom: '1px solid var(--m-border)',
                     }}
                   >
-                    <span>Campeão</span>
-                    <span className="tabular">Jogos</span>
-                    <span>WR</span>
+                    <span>{t('col_champion')}</span>
+                    <span className="tabular">{t('col_games')}</span>
+                    <span>{t('col_wr')}</span>
                     <span className="tabular">KDA</span>
                     <span className="tabular">CS/m</span>
                   </div>
@@ -1274,7 +1307,7 @@ export default function PlayerPage() {
                             {c.winrate.toFixed(0)}%
                           </div>
                           <div style={{ fontSize: 10, color: 'var(--m-text-dim)' }}>
-                            {c.wins}V {c.games - c.wins}D
+                            {c.wins}{t('wins_suffix')} {c.games - c.wins}{t('losses_suffix')}
                           </div>
                         </div>
                         <span className="tabular" style={{ fontSize: 12, color: 'var(--m-text-dim)' }}>
@@ -1303,7 +1336,7 @@ export default function PlayerPage() {
                         fontFamily: 'inherit',
                       }}
                     >
-                      {showAllChamps ? 'Mostrar menos' : `Ver todos (${champStats.length})`}
+                      {showAllChamps ? t('show_less') : t('show_all', { n: champStats.length })}
                     </button>
                   )}
                 </>
@@ -1315,7 +1348,7 @@ export default function PlayerPage() {
           {recommendations.length > 0 && (
             <Card pad={0}>
               <div style={{ padding: '16px 20px 12px' }}>
-                <SectionLabel icon="sparkles">Recomendados pra você</SectionLabel>
+                <SectionLabel icon="sparkles">{t('recommended_for_you')}</SectionLabel>
               </div>
               {recommendations.map((r, i) => {
                 const key = `${r.champion}-${r.role}`
@@ -1356,12 +1389,12 @@ export default function PlayerPage() {
                               marginLeft: 4,
                             }}
                           >
-                            {r.role_label}
+                            {t(ROLE_I18N_KEY[r.role as Role] ?? 'role_top')}
                           </span>
                         </div>
                         <div style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 2 }}>
-                          {r.winrate.toFixed(0)}% WR · {r.games_in_db}j
-                          {r.times_played > 0 && ` · jogou ${r.times_played}×`}
+                          {r.winrate.toFixed(0)}% WR · {r.games_in_db}{t('games_suffix')}
+                          {r.times_played > 0 && ` · ${t('played_n_times', { n: r.times_played })}`}
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
@@ -1382,7 +1415,7 @@ export default function PlayerPage() {
                         >
                           {r.confidence.toFixed(0)}%
                         </div>
-                        <div style={{ fontSize: 9, color: 'var(--m-muted)' }}>match</div>
+                        <div style={{ fontSize: 9, color: 'var(--m-muted)' }}>{t('match_label')}</div>
                       </div>
                       <Icon
                         name={expanded ? 'chevronUp' : 'chevronDown'}
@@ -1428,7 +1461,7 @@ export default function PlayerPage() {
                   borderTop: '1px solid var(--m-border)',
                 }}
               >
-                8 dimensões · similaridade de cosseno + distância euclidiana
+                {t('eight_dim_footer')}
               </div>
             </Card>
           )}
@@ -1443,9 +1476,9 @@ export default function PlayerPage() {
                 justifyContent: 'space-between',
               }}
             >
-              <SectionLabel icon="clock">Últimas partidas</SectionLabel>
+              <SectionLabel icon="clock">{t('recent_matches')}</SectionLabel>
               <Pill color="accent" icon="shield" active>
-                SoloQ / Flex
+                {t('soloq_flex')}
               </Pill>
             </div>
             {loadingMatches ? (
@@ -1491,7 +1524,7 @@ export default function PlayerPage() {
                   color: 'var(--m-text-dim)',
                 }}
               >
-                Nenhuma partida ranqueada encontrada no banco. Clique em &quot;Ver partidas novas&quot; pra importar.
+                {t('no_ranked_matches')}
               </div>
             ) : (
               <>
@@ -1544,7 +1577,7 @@ export default function PlayerPage() {
                     ) : (
                       <>
                         <Icon name="chevronDown" size={12} />
-                        Carregar mais partidas
+                        {t('load_more')}
                       </>
                     )}
                   </button>
@@ -1559,11 +1592,11 @@ export default function PlayerPage() {
           {/* Season summary */}
           {seasonSummary && (
             <Card>
-              <SectionLabel icon="medal">Temporada</SectionLabel>
+              <SectionLabel icon="medal">{t('season')}</SectionLabel>
               <div className="tabular font-display" style={{ fontSize: 26, fontWeight: 700 }}>
-                {seasonSummary.totalGames}
+                {formatNumber(seasonSummary.totalGames, locale)}
                 <span style={{ fontSize: 12, color: 'var(--m-text-dim)', fontWeight: 500 }}>
-                  {' '}partidas
+                  {' '}{t('matches_word')}
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
@@ -1583,7 +1616,7 @@ export default function PlayerPage() {
                   {seasonSummary.winrate}%
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--m-text-dim)' }}>
-                  {seasonSummary.wins}V {seasonSummary.losses}D · {seasonSummary.uniqueChamps} campeões
+                  {seasonSummary.wins}{t('wins_suffix')} {seasonSummary.losses}{t('losses_suffix')} · {t('n_champions', { n: seasonSummary.uniqueChamps })}
                 </span>
               </div>
             </Card>
@@ -1592,15 +1625,15 @@ export default function PlayerPage() {
           {/* Role distribution */}
           {roleDist && (
             <Card>
-              <SectionLabel icon="pieChart">Roles · {matches.length} partidas</SectionLabel>
+              <SectionLabel icon="pieChart">{t('roles_n_matches', { n: matches.length })}</SectionLabel>
               <div style={{ marginTop: 6, marginBottom: 12 }}>
                 <StackedBar
                   segments={[
-                    { label: 'Top', value: roleDist.TOP, color: 'var(--m-violet)' },
-                    { label: 'Jungle', value: roleDist.JUNGLE, color: 'var(--m-accent)' },
-                    { label: 'Mid', value: roleDist.MIDDLE, color: 'var(--m-cyan)' },
-                    { label: 'ADC', value: roleDist.BOTTOM, color: 'var(--m-pink)' },
-                    { label: 'Sup', value: roleDist.UTILITY, color: 'var(--m-green)' },
+                    { label: t('role_top'), value: roleDist.TOP, color: 'var(--m-violet)' },
+                    { label: t('role_jungle'), value: roleDist.JUNGLE, color: 'var(--m-accent)' },
+                    { label: t('role_mid'), value: roleDist.MIDDLE, color: 'var(--m-cyan)' },
+                    { label: t('role_adc'), value: roleDist.BOTTOM, color: 'var(--m-pink)' },
+                    { label: t('role_sup'), value: roleDist.UTILITY, color: 'var(--m-green)' },
                   ]}
                   height={10}
                   radius={5}
@@ -1608,15 +1641,15 @@ export default function PlayerPage() {
               </div>
               {(
                 [
-                  { label: 'Top', value: roleDist.TOP, color: 'var(--m-violet)', role: 'TOP' },
-                  { label: 'Jungle', value: roleDist.JUNGLE, color: 'var(--m-accent)', role: 'JUNGLE' },
-                  { label: 'Mid', value: roleDist.MIDDLE, color: 'var(--m-cyan)', role: 'MIDDLE' },
-                  { label: 'ADC', value: roleDist.BOTTOM, color: 'var(--m-pink)', role: 'BOTTOM' },
-                  { label: 'Sup', value: roleDist.UTILITY, color: 'var(--m-green)', role: 'UTILITY' },
+                  { labelKey: 'role_top', value: roleDist.TOP, color: 'var(--m-violet)', role: 'TOP' },
+                  { labelKey: 'role_jungle', value: roleDist.JUNGLE, color: 'var(--m-accent)', role: 'JUNGLE' },
+                  { labelKey: 'role_mid', value: roleDist.MIDDLE, color: 'var(--m-cyan)', role: 'MIDDLE' },
+                  { labelKey: 'role_adc', value: roleDist.BOTTOM, color: 'var(--m-pink)', role: 'BOTTOM' },
+                  { labelKey: 'role_sup', value: roleDist.UTILITY, color: 'var(--m-green)', role: 'UTILITY' },
                 ] as const
               ).map((s) => (
                 <div
-                  key={s.label}
+                  key={s.labelKey}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}
                 >
                   <Image
@@ -1627,7 +1660,7 @@ export default function PlayerPage() {
                     unoptimized
                     style={{ objectFit: 'contain', opacity: 0.8 }}
                   />
-                  <span style={{ fontSize: 12, flex: 1 }}>{s.label}</span>
+                  <span style={{ fontSize: 12, flex: 1 }}>{t(s.labelKey)}</span>
                   <span
                     className="tabular"
                     style={{ fontSize: 12, fontWeight: 600, color: s.value > 0 ? s.color : 'var(--m-muted)' }}
@@ -1642,7 +1675,7 @@ export default function PlayerPage() {
           {/* Player radar (das recomendações) */}
           {playerRadarAxes && (
             <Card>
-              <SectionLabel icon="target">Perfil de jogo</SectionLabel>
+              <SectionLabel icon="target">{t('play_profile')}</SectionLabel>
               <div style={{ display: 'flex', justifyContent: 'center', margin: '4px -10px -10px' }}>
                 <DsRadarChart size={220} color="var(--m-accent)" axes={playerRadarAxes} />
               </div>
@@ -1654,7 +1687,7 @@ export default function PlayerPage() {
                   padding: '4px 0 0',
                 }}
               >
-                8 dimensões Neo-Artemis
+                {t('eight_dim_neo')}
               </div>
             </Card>
           )}
@@ -1677,12 +1710,11 @@ export default function PlayerPage() {
                 <Icon name="brain" size={15} />
               </div>
               <div className="font-display" style={{ fontSize: 13, fontWeight: 600 }}>
-                Pergunte à Metis
+                {t('ask_metis')}
               </div>
             </div>
             <p style={{ fontSize: 12, color: 'var(--m-text-dim)', lineHeight: 1.55 }}>
-              A Metis pode analisar suas últimas {matches.length || 'N'} partidas, identificar padrões
-              e sugerir o que mudar na próxima ranqueada.
+              {t('ask_metis_body', { n: matches.length ? String(matches.length) : 'N' })}
             </p>
             <Link
               href="/chat"
@@ -1705,7 +1737,7 @@ export default function PlayerPage() {
               }}
             >
               <Icon name="messageCircle" size={13} />
-              Abrir Chat
+              {t('open_chat')}
             </Link>
           </Card>
 
@@ -1713,7 +1745,7 @@ export default function PlayerPage() {
           {allies.length > 0 && (
             <Card pad={0}>
               <div style={{ padding: '16px 20px 12px' }}>
-                <SectionLabel icon="users">Jogou com</SectionLabel>
+                <SectionLabel icon="users">{t('played_with')}</SectionLabel>
               </div>
               {allies.slice(0, 5).map((a, i) => (
                 <Link
@@ -1753,7 +1785,7 @@ export default function PlayerPage() {
                       {a.game_name}#{a.tag_line}
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--m-text-dim)', marginTop: 2 }}>
-                      {a.games_together}j · {a.wins_together}V {a.games_together - a.wins_together}D
+                      {a.games_together}{t('games_suffix')} · {a.wins_together}{t('wins_suffix')} {a.games_together - a.wins_together}{t('losses_suffix')}
                     </div>
                   </div>
                   <span
@@ -1780,7 +1812,7 @@ export default function PlayerPage() {
           {nemeses.length > 0 && (
             <Card pad={0}>
               <div style={{ padding: '16px 20px 12px' }}>
-                <SectionLabel icon="crosshair">Nemesis</SectionLabel>
+                <SectionLabel icon="crosshair">{t('nemesis')}</SectionLabel>
               </div>
               {nemeses.slice(0, 5).map((n, i) => (
                 <Link
@@ -1860,10 +1892,14 @@ export default function PlayerPage() {
 
 // ── Inline MatchRow ───────────────────────────────────────────────
 function MatchRow({ m, puuid }: { m: MatchData; puuid: string }) {
+  const t = useTranslations('players')
+  const formatRelativeDate = useFormatRelativeDate()
   const dur = formatDuration(m.matches?.game_duration ?? 0)
   const when = formatRelativeDate(m.matches?.game_end_timestamp ?? null)
-  const mode = m.matches?.queue_id === 440 ? 'Flex' : 'Ranked Solo'
+  const mode = m.matches?.queue_id === 440 ? t('mode_flex') : t('mode_ranked_solo')
   const items = (m.items ?? []).filter((id) => id && id > 0).slice(0, 6)
+  const role = m.team_position as Role | undefined
+  const roleLabel = role && ROLE_I18N_KEY[role] ? t(ROLE_I18N_KEY[role]) : m.team_position
 
   return (
     <Link
@@ -1894,7 +1930,7 @@ function MatchRow({ m, puuid }: { m: MatchData; puuid: string }) {
       <ChampPortrait
         name={m.champion_name}
         size={44}
-        role={m.team_position as Role | undefined}
+        role={role}
       />
       <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1905,12 +1941,12 @@ function MatchRow({ m, puuid }: { m: MatchData; puuid: string }) {
               color: m.win ? 'var(--m-green)' : 'var(--m-red)',
             }}
           >
-            {m.win ? 'Vitória' : 'Derrota'}
+            {m.win ? t('victory') : t('defeat')}
           </span>
           <span style={{ fontSize: 11, color: 'var(--m-text-dim)' }}>· {mode}</span>
         </div>
         <div style={{ fontSize: 11, color: 'var(--m-muted)', marginTop: 2 }}>
-          {when} · {dur} · {m.team_position && ROLES_PT[m.team_position as Role] ? ROLES_PT[m.team_position as Role] : m.team_position}
+          {when} · {dur} · {roleLabel}
         </div>
       </div>
       {/* Items */}
@@ -1970,7 +2006,7 @@ function MatchRow({ m, puuid }: { m: MatchData; puuid: string }) {
         className="tabular"
         style={{ fontSize: 11, color: 'var(--m-text-dim)', justifySelf: 'end' }}
       >
-        {m.champion_level ? `lvl ${m.champion_level}` : '—'}
+        {m.champion_level ? t('level_short', { n: m.champion_level }) : '—'}
       </span>
     </Link>
   )
@@ -1984,6 +2020,7 @@ function DualRadar({
   playerProfile: number[]
   championProfile: number[]
 }) {
+  const t = useTranslations('players')
   const labels = ['AGR', 'MAP', 'EFC', 'PRS', 'SBV', 'UTL', 'ERL', 'CST']
   const n = labels.length
   const cx = 100
@@ -2061,11 +2098,11 @@ function DualRadar({
       <div style={{ display: 'flex', gap: 14, fontSize: 10, color: 'var(--m-text-dim)', marginTop: 6 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
           <span style={{ width: 10, height: 2, background: 'var(--m-accent)' }} />
-          Você
+          {t('legend_you')}
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
           <span style={{ width: 10, height: 2, background: 'rgb(251,191,36)' }} />
-          Campeão
+          {t('legend_champion')}
         </span>
       </div>
     </div>
