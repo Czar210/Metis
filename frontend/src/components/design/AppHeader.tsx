@@ -7,8 +7,9 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase/client'
 import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
@@ -40,8 +41,12 @@ type Props = {
 
 export function AppHeader({ active = 'home', compact = false }: Props) {
   const t = useTranslations('header')
+  const router = useRouter()
   const [userEmail, setUserEmail] = useState<string | null | undefined>(undefined)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -58,6 +63,35 @@ export function AppHeader({ active = 'home', compact = false }: Props) {
       subscription.subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    function onClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [menuOpen])
+
+  async function handleSignOut() {
+    if (signingOut) return
+    setSigningOut(true)
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    setMenuOpen(false)
+    setSigningOut(false)
+    router.replace('/')
+    router.refresh()
+  }
 
   const initial = userEmail ? userEmail.charAt(0).toUpperCase() : null
 
@@ -158,27 +192,121 @@ export function AppHeader({ active = 'home', compact = false }: Props) {
             <Icon name="arrowRight" size={12} />
           </Link>
         ) : initial ? (
-          <Link
-            href={isAdmin ? '/admin' : '/'}
-            title={isAdmin ? `${userEmail} · ${t('admin_badge')}` : (userEmail ?? t('my_account'))}
-            className="m-hover-surface"
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              background: 'var(--m-surface-2)',
-              border: `1px solid ${isAdmin ? 'rgb(var(--m-accent-rgb) / 0.5)' : 'var(--m-border-2)'}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 12,
-              fontWeight: 700,
-              color: isAdmin ? 'var(--m-accent)' : 'var(--m-text)',
-              textDecoration: 'none',
-            }}
-          >
-            {initial}
-          </Link>
+          <div ref={menuRef} style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label={t('menu.open')}
+              title={isAdmin ? `${userEmail} · ${t('admin_badge')}` : (userEmail ?? t('my_account'))}
+              className="m-hover-surface"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: 'var(--m-surface-2)',
+                border: `1px solid ${isAdmin ? 'rgb(var(--m-accent-rgb) / 0.5)' : 'var(--m-border-2)'}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 12,
+                fontWeight: 700,
+                color: isAdmin ? 'var(--m-accent)' : 'var(--m-text)',
+                cursor: 'pointer',
+                padding: 0,
+                fontFamily: 'inherit',
+              }}
+            >
+              {initial}
+            </button>
+
+            {menuOpen && (
+              <div
+                role="menu"
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 8px)',
+                  right: 0,
+                  minWidth: 220,
+                  background: 'var(--m-surface)',
+                  border: '1px solid var(--m-border-2)',
+                  borderRadius: 10,
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+                  padding: 6,
+                  zIndex: 20,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2,
+                }}
+              >
+                <div
+                  style={{
+                    padding: '8px 10px 6px',
+                    fontSize: 11,
+                    color: 'var(--m-text-dim)',
+                    borderBottom: '1px solid var(--m-border)',
+                    marginBottom: 4,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {userEmail}
+                </div>
+
+                {isAdmin && (
+                  <Link
+                    role="menuitem"
+                    href="/admin"
+                    onClick={() => setMenuOpen(false)}
+                    className="m-hover-surface"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 10px',
+                      borderRadius: 6,
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: 'var(--m-accent)',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <Icon name="shield" size={14} />
+                    {t('menu.admin_panel')}
+                  </Link>
+                )}
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  className="m-hover-surface"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: 'var(--m-red)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: signingOut ? 'not-allowed' : 'pointer',
+                    fontFamily: 'inherit',
+                    textAlign: 'left',
+                    opacity: signingOut ? 0.6 : 1,
+                  }}
+                >
+                  <Icon name="logout" size={14} />
+                  {signingOut ? t('menu.signing_out') : t('menu.sign_out')}
+                </button>
+              </div>
+            )}
+          </div>
         ) : (
           // Placeholder invisível enquanto carrega — evita layout shift
           <div style={{ width: 32, height: 32 }} />
