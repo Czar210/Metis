@@ -55,11 +55,24 @@ Pasta: `analysis/power_curve/` (gitignored)
 
 ## 2. Tarefas do André (backend + AI)
 
-### Task 2.1 — System prompt de tom (C6)
-- [ ] Draft em `backend/app/ai/prompts/tone_guardrails.py` (Claude Code pode rascunhar pra revisão se quiser — ver Q C6)
-- [ ] Regras: nunca "Great job!", citar métrica concreta, não traduzir nome de champion, proibir jargão não-explicado
-- [ ] 3-5 few-shot examples mostrando tom correto (PT + EN)
-- [ ] Job semanal de sampling 50 respostas pra validação offline
+### Task 2.1 — System prompt de tom (C6) ✅ 2026-05-19
+- [x] Draft em `backend/app/ai/prompts/tone_guardrails.py`
+- [x] Regras: nunca "Great job!", citar métrica concreta, não traduzir nome de champion, proibir jargão não-explicado
+- [x] 3-5 few-shot examples mostrando tom correto (PT + EN) — 3 PT + 2 EN
+- [x] Job semanal de sampling 50 respostas pra validação offline → `scripts/sampling/sample_responses.py`
+
+**O que foi feito:**
+- `backend/app/ai/prompts/tone_guardrails.py` — `TONE_RULES` (7 regras com Errado/Certo) + `FEW_SHOT_EXAMPLES` (5 exemplos) + `build_few_shot_block()`
+- `backend/services/llm_adapter.py` — `METIS_SYSTEM_PROMPT` agora composto por base + TONE_RULES + few-shots PT; `max_output_tokens` aumentado 1024 → 2048
+- `backend/pyrightconfig.json` — corrige falsos positivos do pyright para imports dentro de `backend/`
+- `scripts/sampling/sample_responses.py` — 50 prompts em 9 categorias, checagem regex de violações, exporta CSV
+
+**Resultado do sampling (2026-05-19):**
+- 50/50 prompts rodaram sem erro de LLM
+- 0 violações reais de tom detectadas (3 falsos positivos corrigidos no regex)
+- Guardrail fora-de-escopo: 4/4 corretos; comportamento tóxico: 3/3 não validado
+- Pendência de produto: EN prompts sempre respondem em PT (decisão a tomar)
+- Spending cap Gemini atingido após 3 execuções — resetar em AI Studio antes da próxima rodada
 
 ### Task 2.2 — Validar escolha de LLM (C1)
 - [ ] Rodar 20 match-analyses de teste com Gemini 2.5 Flash
