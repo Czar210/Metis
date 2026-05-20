@@ -61,6 +61,13 @@ class LLMAdapter(ABC):
     def generate(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
         ...
 
+    def generate_stream(self, prompt: str, system_prompt: str | None = None):
+        """Itera sobre chunks de texto. Cada item e uma string (delta).
+        Implementacao padrao: emite a resposta completa como um unico chunk."""
+        result = self.generate(prompt, system_prompt)
+        yield result.text
+        yield f"__tokens__{result.tokens_used}"
+
 
 class GeminiAdapter(LLMAdapter):
     """Google Gemini via nova SDK google-genai."""
@@ -83,7 +90,7 @@ class GeminiAdapter(LLMAdapter):
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt or METIS_SYSTEM_PROMPT,
                 temperature=0.3,
-                max_output_tokens=2048,
+                max_output_tokens=8192,
             ),
         )
         tokens = 0
@@ -93,6 +100,30 @@ class GeminiAdapter(LLMAdapter):
                 + (response.usage_metadata.candidates_token_count or 0)
             )
         return LLMResponse(text=response.text or "", tokens_used=tokens)
+
+    def generate_stream(self, prompt: str, system_prompt: str | None = None):
+        """Itera chunks de texto via Gemini streaming. Ultimo item e '__tokens__N'."""
+        from google import genai as _genai
+        from google.genai import types
+
+        total_tokens = 0
+        for chunk in self._client.models.generate_content_stream(
+            model=self._model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt or METIS_SYSTEM_PROMPT,
+                temperature=0.3,
+                max_output_tokens=8192,
+            ),
+        ):
+            if chunk.text:
+                yield chunk.text
+            if chunk.usage_metadata:
+                total_tokens = (
+                    (chunk.usage_metadata.prompt_token_count or 0)
+                    + (chunk.usage_metadata.candidates_token_count or 0)
+                )
+        yield f"__tokens__{total_tokens}"
 
 
 class OllamaAdapter(LLMAdapter):

@@ -2,6 +2,64 @@
 
 *Diário de mudanças significativas no ecossistema e na stack do projeto.*
 
+## Ticket C — Nucleo AI: match-analysis, inline-insight, chat SSE (2026-05-20)
+
+**Responsavel:** Andre | **Status:** concluido (backend)
+
+### Entregaveis
+- `database/migrations/003_ai_cache.sql` — tabela `ai_cache (scope, id_hash, response JSONB, expires_at, tokens_used)`
+- `database/migrations/004_token_usage_monthly.sql` — tabela `token_usage_monthly (user_id, year_month, tokens_used)`
+- `backend/app/ai/prompts/inline_insight.py` — prompt compacto para scope match/player/champion
+- `backend/core/ai_cache.py` — `get_cached()` + `set_cached()` com TTL via Supabase
+- `backend/core/token_guard.py` — `MONTHLY_LIMITS` (1k/3k/50k/200k) + `check_limit()` + `update_monthly_usage()`
+- `backend/services/llm_adapter.py` — `generate_stream()` adicionado ao GeminiAdapter (Gemini streaming nativo) e base LLMAdapter
+- `backend/api/routes/ai.py` — 3 endpoints: `POST /api/ai/match-analysis`, `POST /api/ai/inline-insight`, `POST /api/ai/chat` (SSE)
+- `backend/main.py` — `ai.router` registrado
+- `tests/test_ai_routes.py` — 5 testes: happy path, cache hit, free gate, 429, 404
+- `tests/conftest.py` — `METIS_API_KEY=test` antes de qualquer import do main (fix pre-existente)
+
+### Comportamentos implementados
+- Cache 7d para match-analysis, 24h para inline-insight (Supabase ai_cache)
+- Free gate: `strengths[1:]`, `weaknesses[1:]`, `keyMoments[1:]` e `coaching` = None para tier free
+- Rate limit mensal: 1k/3k/50k/200k tokens por tier, 429 quando esgotado
+- SSE chat: deltas JSON por chunk, encerra com `{"done": true, "usage": {...}}`
+- Guardrail de topico preservado no /api/ai/chat (mesmo is_lol_related do /api/v1/chat)
+- /api/v1/chat legado intacto (frontend atual continua funcionando)
+
+### Testes: 5/5 passando
+
+### Pendente (destravado por outras tasks)
+- Frontend integration: `<AIInsightCard>` + Match Deep Analysis card (Takida, apos Ticket B backend)
+- Loja de tokens: checkout Stripe (destravado por task 1.3 do Cesar)
+- Pre-prompting via timeline event (destravado por Bloco 0 do Cesar)
+- Aplicar migrations no Supabase (Cesar aplica no projeto)
+
+---
+
+## Task 2.2 — Validacao de qualidade do match-analysis com Gemini 2.5 Flash (2026-05-20)
+
+**Responsavel:** Andre | **Status:** concluido
+
+### O que foi feito
+- `backend/app/ai/prompts/match_analysis.py` — prompt canonico `MATCH_ANALYSIS_SYSTEM` + `build_match_analysis_prompt()` que monta contexto completo (KDA, dano, CS/min, gold, ambos os times) e template JSON (MatchAnalysis)
+- `scripts/sampling/validate_match_analysis.py` — script de validacao: puxa N particadas do Supabase, analisa o jogador azul com maior Metis Score, exporta CSV
+- `backend/services/llm_adapter.py` — `max_output_tokens` aumentado de 2048 para 8192 (o valor anterior cortava a resposta JSON antes do fechamento)
+
+### Resultados (20 partidas, 2026-05-20)
+- 20/20 OK — JSON valido em 100% dos casos
+- 0 violacoes de tom detectadas (sem elogios vazios, sem nomes traduzidos)
+- Strengths: 3.0 avg | Weaknesses: 2.5 avg | KeyMoments: 3.0 avg | Coaching: 20/20
+- Tokens avg: 1.885 por analise
+- Latencia avg: 16.7s
+- Custo total (20 analises): $0.0188 (~$0.001 por analise)
+- Custo estimado para 100 users x 10 analises/mes: ~$1.00/mes
+
+### Decisao C1 confirmada
+Gemini 2.5 Flash mantem qualidade satisfatoria para match-analysis com system prompt bem calibrado.
+Fallback para Claude Haiku 4.5 nao necessario no momento (reservado se qualidade degradar em producao).
+
+---
+
 ## p-0.9.22 — DualRadar polish: primitive + tooltip + modal stub (2026-04-23)
 
 Escopo **frontend-only** do p-0.9.22 planejado. Reescrita estatística dos 8 eixos canônicos + perfil ideal vindo de batch semanal fica pro ticket de backend futuro (HANDOFF-TECNICO seção 2.3).

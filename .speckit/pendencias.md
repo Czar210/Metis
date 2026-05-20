@@ -74,10 +74,14 @@ Pasta: `analysis/power_curve/` (gitignored)
 - Pendência de produto: EN prompts sempre respondem em PT (decisão a tomar)
 - Spending cap Gemini atingido após 3 execuções — resetar em AI Studio antes da próxima rodada
 
-### Task 2.2 — Validar escolha de LLM (C1)
-- [ ] Rodar 20 match-analyses de teste com Gemini 2.5 Flash
-- [ ] Se qualidade insuficiente, fallback pra Claude Haiku 4.5 (10× mais caro mas ainda ~$13/mês/100 users)
-- [ ] Documentar decisão final em `.speckit/plano_backend_decisoes.md` seção C1
+### Task 2.2 — Validar escolha de LLM (C1) ✅ 2026-05-20
+- [x] Rodar 20 match-analyses de teste com Gemini 2.5 Flash
+- [x] Qualidade suficiente — fallback para Claude Haiku 4.5 nao necessario
+- [x] Documentado em `.speckit/patch_notes.md` secao Task 2.2
+
+**Resultados:** 20/20 JSON valido, 0 violacoes de tom, ~1.885 tokens/analise, ~$0.001/analise.
+`max_output_tokens` corrigido de 2048 para 8192 em `llm_adapter.py` (valor anterior cortava o JSON).
+Prompts em `backend/app/ai/prompts/match_analysis.py`. Script em `scripts/sampling/validate_match_analysis.py`.
 
 ### Task 2.3 — Pré-prompting do chat via timeline event (C5)
 - [ ] Só depois do Bloco 0 estar estável
@@ -132,17 +136,16 @@ Referência completa: `.speckit/plano_backend_decisoes.md`
 - [ ] A/B test 0..1 vs 0..10 no staging (B1 pendente)
 
 ### Ticket C · AI Insights + loja de tokens
-**Bloqueado por**: task 2.1 (prompts), task 1.3 (Stripe pra loja) · Q C3 (cotas), Q C6 (prompt)
+**Nucleo AI**: ✅ 2026-05-20
 
 **Núcleo AI**:
-- [ ] Migration `ai_cache (scope, id_hash, response JSONB, computed_at, tokens_used)`
-- [ ] Cloudflare KV namespace `metis-ai-cache` com TTL
-- [ ] Endpoint `POST /api/ai/match-analysis` (cache 7d, ~9k tokens)
-- [ ] Endpoint `POST /api/ai/inline-insight` (cache 24h, ~1k tokens)
-- [ ] Endpoint `POST /api/ai/chat` SSE streaming com contexto opcional
-- [ ] Rate limit middleware por tier (C3)
-- [ ] Gate Free no match-analysis: blur tldr+score+1 strength+1 weakness+1 keyMoment (C4)
-- [ ] Copywriting guardrails integrados no system prompt (task 2.1)
+- [x] Migration `ai_cache (scope, id_hash, response JSONB, computed_at, tokens_used, expires_at)`
+- [x] Endpoint `POST /api/ai/match-analysis` (cache 7d, limites mensais, free gate)
+- [x] Endpoint `POST /api/ai/inline-insight` (cache 24h, limites mensais)
+- [x] Endpoint `POST /api/ai/chat` SSE streaming com guardrail
+- [x] Rate limit mensal por tier — tabela `token_usage_monthly`
+- [x] Gate Free: `strengths[1:]`, `weaknesses[1:]`, `keyMoments[1:]`, `coaching` = None
+- [x] Copywriting guardrails integrados no system prompt (task 2.1)
 
 **Frontend AI Insights**:
 - [ ] Primitive `<AIInsight>` no design system (severity + icon + title + body + action)
