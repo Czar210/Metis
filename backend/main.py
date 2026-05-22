@@ -22,7 +22,7 @@ app = FastAPI(
     version="p-0.9.0"
 )
 
-from backend.api.routes import player, stats, match, admin, champion, item, coupon
+from backend.api.routes import player, stats, match, admin, champion, item, coupon, ai
 app.include_router(player.router)
 app.include_router(stats.router)
 app.include_router(match.router)
@@ -30,6 +30,7 @@ app.include_router(admin.router)
 app.include_router(champion.router)
 app.include_router(item.router)
 app.include_router(coupon.router)
+app.include_router(ai.router)
 
 # ── CORS ──────────────────────────────────────────────────────────────
 _default_origins = [

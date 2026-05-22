@@ -55,16 +55,33 @@ Pasta: `analysis/power_curve/` (gitignored)
 
 ## 2. Tarefas do André (backend + AI)
 
-### Task 2.1 — System prompt de tom (C6)
-- [ ] Draft em `backend/app/ai/prompts/tone_guardrails.py` (Claude Code pode rascunhar pra revisão se quiser — ver Q C6)
-- [ ] Regras: nunca "Great job!", citar métrica concreta, não traduzir nome de champion, proibir jargão não-explicado
-- [ ] 3-5 few-shot examples mostrando tom correto (PT + EN)
-- [ ] Job semanal de sampling 50 respostas pra validação offline
+### Task 2.1 — System prompt de tom (C6) ✅ 2026-05-19
+- [x] Draft em `backend/app/ai/prompts/tone_guardrails.py`
+- [x] Regras: nunca "Great job!", citar métrica concreta, não traduzir nome de champion, proibir jargão não-explicado
+- [x] 3-5 few-shot examples mostrando tom correto (PT + EN) — 3 PT + 2 EN
+- [x] Job semanal de sampling 50 respostas pra validação offline → `scripts/sampling/sample_responses.py`
 
-### Task 2.2 — Validar escolha de LLM (C1)
-- [ ] Rodar 20 match-analyses de teste com Gemini 2.5 Flash
-- [ ] Se qualidade insuficiente, fallback pra Claude Haiku 4.5 (10× mais caro mas ainda ~$13/mês/100 users)
-- [ ] Documentar decisão final em `.speckit/plano_backend_decisoes.md` seção C1
+**O que foi feito:**
+- `backend/app/ai/prompts/tone_guardrails.py` — `TONE_RULES` (7 regras com Errado/Certo) + `FEW_SHOT_EXAMPLES` (5 exemplos) + `build_few_shot_block()`
+- `backend/services/llm_adapter.py` — `METIS_SYSTEM_PROMPT` agora composto por base + TONE_RULES + few-shots PT; `max_output_tokens` aumentado 1024 → 2048
+- `backend/pyrightconfig.json` — corrige falsos positivos do pyright para imports dentro de `backend/`
+- `scripts/sampling/sample_responses.py` — 50 prompts em 9 categorias, checagem regex de violações, exporta CSV
+
+**Resultado do sampling (2026-05-19):**
+- 50/50 prompts rodaram sem erro de LLM
+- 0 violações reais de tom detectadas (3 falsos positivos corrigidos no regex)
+- Guardrail fora-de-escopo: 4/4 corretos; comportamento tóxico: 3/3 não validado
+- Pendência de produto: EN prompts sempre respondem em PT (decisão a tomar)
+- Spending cap Gemini atingido após 3 execuções — resetar em AI Studio antes da próxima rodada
+
+### Task 2.2 — Validar escolha de LLM (C1) ✅ 2026-05-20
+- [x] Rodar 20 match-analyses de teste com Gemini 2.5 Flash
+- [x] Qualidade suficiente — fallback para Claude Haiku 4.5 nao necessario
+- [x] Documentado em `.speckit/patch_notes.md` secao Task 2.2
+
+**Resultados:** 20/20 JSON valido, 0 violacoes de tom, ~1.885 tokens/analise, ~$0.001/analise.
+`max_output_tokens` corrigido de 2048 para 8192 em `llm_adapter.py` (valor anterior cortava o JSON).
+Prompts em `backend/app/ai/prompts/match_analysis.py`. Script em `scripts/sampling/validate_match_analysis.py`.
 
 ### Task 2.3 — Pré-prompting do chat via timeline event (C5)
 - [ ] Só depois do Bloco 0 estar estável
@@ -119,17 +136,16 @@ Referência completa: `.speckit/plano_backend_decisoes.md`
 - [ ] A/B test 0..1 vs 0..10 no staging (B1 pendente)
 
 ### Ticket C · AI Insights + loja de tokens
-**Bloqueado por**: task 2.1 (prompts), task 1.3 (Stripe pra loja) · Q C3 (cotas), Q C6 (prompt)
+**Nucleo AI**: ✅ 2026-05-20
 
 **Núcleo AI**:
-- [ ] Migration `ai_cache (scope, id_hash, response JSONB, computed_at, tokens_used)`
-- [ ] Cloudflare KV namespace `metis-ai-cache` com TTL
-- [ ] Endpoint `POST /api/ai/match-analysis` (cache 7d, ~9k tokens)
-- [ ] Endpoint `POST /api/ai/inline-insight` (cache 24h, ~1k tokens)
-- [ ] Endpoint `POST /api/ai/chat` SSE streaming com contexto opcional
-- [ ] Rate limit middleware por tier (C3)
-- [ ] Gate Free no match-analysis: blur tldr+score+1 strength+1 weakness+1 keyMoment (C4)
-- [ ] Copywriting guardrails integrados no system prompt (task 2.1)
+- [x] Migration `ai_cache (scope, id_hash, response JSONB, computed_at, tokens_used, expires_at)`
+- [x] Endpoint `POST /api/ai/match-analysis` (cache 7d, limites mensais, free gate)
+- [x] Endpoint `POST /api/ai/inline-insight` (cache 24h, limites mensais)
+- [x] Endpoint `POST /api/ai/chat` SSE streaming com guardrail
+- [x] Rate limit mensal por tier — tabela `token_usage_monthly`
+- [x] Gate Free: `strengths[1:]`, `weaknesses[1:]`, `keyMoments[1:]`, `coaching` = None
+- [x] Copywriting guardrails integrados no system prompt (task 2.1)
 
 **Frontend AI Insights**:
 - [ ] Primitive `<AIInsight>` no design system (severity + icon + title + body + action)

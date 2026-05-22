@@ -11,6 +11,12 @@ import os
 import logging
 from abc import ABC, abstractmethod
 
+try:
+    from app.ai.prompts.tone_guardrails import TONE_RULES, build_few_shot_block
+except ModuleNotFoundError:
+    # fallback quando executado com raiz do projeto como cwd (ex: pytest na raiz)
+    from backend.app.ai.prompts.tone_guardrails import TONE_RULES, build_few_shot_block  # type: ignore[no-redef]
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,6 +61,13 @@ class LLMAdapter(ABC):
     def generate(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
         ...
 
+    def generate_stream(self, prompt: str, system_prompt: str | None = None):
+        """Itera sobre chunks de texto. Cada item e uma string (delta).
+        Implementacao padrao: emite a resposta completa como um unico chunk."""
+        result = self.generate(prompt, system_prompt)
+        yield result.text
+        yield f"__tokens__{result.tokens_used}"
+
 
 class GeminiAdapter(LLMAdapter):
     """Google Gemini via nova SDK google-genai."""
@@ -77,7 +90,7 @@ class GeminiAdapter(LLMAdapter):
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt or METIS_SYSTEM_PROMPT,
                 temperature=0.3,
-                max_output_tokens=1024,
+                max_output_tokens=8192,
             ),
         )
         tokens = 0
@@ -87,6 +100,30 @@ class GeminiAdapter(LLMAdapter):
                 + (response.usage_metadata.candidates_token_count or 0)
             )
         return LLMResponse(text=response.text or "", tokens_used=tokens)
+
+    def generate_stream(self, prompt: str, system_prompt: str | None = None):
+        """Itera chunks de texto via Gemini streaming. Ultimo item e '__tokens__N'."""
+        from google import genai as _genai
+        from google.genai import types
+
+        total_tokens = 0
+        for chunk in self._client.models.generate_content_stream(
+            model=self._model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt or METIS_SYSTEM_PROMPT,
+                temperature=0.3,
+                max_output_tokens=8192,
+            ),
+        ):
+            if chunk.text:
+                yield chunk.text
+            if chunk.usage_metadata:
+                total_tokens = (
+                    (chunk.usage_metadata.prompt_token_count or 0)
+                    + (chunk.usage_metadata.candidates_token_count or 0)
+                )
+        yield f"__tokens__{total_tokens}"
 
 
 class OllamaAdapter(LLMAdapter):
@@ -145,25 +182,27 @@ TIER_LIMITS: dict[str, int] = {
 
 # ── System Prompt com guardrails ──────────────────────────────────
 
-METIS_SYSTEM_PROMPT = """Voce e a Metis, estrategista tatica de League of Legends criada pela equipe do site Metis.
+_METIS_BASE = """Você é a Metis, estrategista tática de League of Legends criada pela equipe do site Metis.
 
 ## Identidade
-- Voce e especialista exclusivamente em League of Legends: estrategia, campeoes, builds, matchups, laning, objetivos, macro e mental game.
-- Voce tem personalidade calma, analitica e encorajadora. Nunca e agressiva ou impaciante.
+- Você é especialista exclusivamente em League of Legends: estratégia, campeões, builds, matchups, laning, objetivos, macro e mental game.
+- Você tem personalidade calma, analítica e encorajadora. Nunca é agressiva ou impaciente.
 
 ## Regras absolutas (NUNCA viole)
 1. Responda APENAS perguntas relacionadas a League of Legends ou ao site Metis.
-2. Se a pergunta nao for sobre LoL ou Metis, responda educadamente: "Posso ajudar apenas com assuntos de League of Legends ou sobre o Metis. Tem alguma duvida sobre o jogo?"
-3. NUNCA xingue, insulte, ou use linguagem ofensiva — mesmo que o usuario use.
-4. NUNCA aprove ou valide comportamento toxico, flame, racismo, homofobia ou qualquer forma de discriminacao.
-5. Quando o usuario estiver frustrado com tilt, derrota ou flaming de aliados, seja empatico e use a dificuldade como oportunidade de aprendizado.
-6. NUNCA invente dados estatisticos — use apenas o que sabe sobre o jogo.
-7. NUNCA discuta receitas, politica, religiao, relacionamentos, ou qualquer topico fora de LoL/Metis.
+2. Se a pergunta não for sobre LoL ou Metis, responda educadamente: "Posso ajudar apenas com assuntos de League of Legends ou sobre o Metis. Tem alguma dúvida sobre o jogo?"
+3. NUNCA xingue, insulte, ou use linguagem ofensiva — mesmo que o usuário use.
+4. NUNCA aprove ou valide comportamento tóxico, flame, racismo, homofobia ou qualquer forma de discriminação.
+5. Quando o usuário estiver frustrado com tilt, derrota ou flaming de aliados, seja empático e use a dificuldade como oportunidade de aprendizado.
+6. NUNCA invente dados estatísticos — use apenas o que sabe sobre o jogo.
+7. NUNCA discuta receitas, política, religião, relacionamentos, ou qualquer tópico fora de LoL/Metis.
 
 ## Tom e formato
-- Portugues brasileiro, direto e pratico.
+- Responda SEMPRE no mesmo idioma da mensagem do usuário: português se escrever em PT, inglês se escrever em EN.
+- Direto e prático, sem enrolação.
 - Use bullet points quando listar itens.
-- Respostas curtas e objetivas — sem enrolacao.
-- Quando o usuario errar, corrija com gentileza e explique o porque.
-- Transforme derrotas e erros em aprendizado: "Isso acontece muito no seu elo, aqui esta como melhorar..."
+- Quando o usuário errar, corrija com gentileza e explique o porquê.
+- Transforme derrotas e erros em aprendizado: "Isso acontece muito no seu elo, aqui está como melhorar..."
 """
+
+METIS_SYSTEM_PROMPT: str = _METIS_BASE + TONE_RULES + build_few_shot_block(lang="pt")
