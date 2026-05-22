@@ -15,7 +15,7 @@ load_dotenv()
 
 BUCKET_NAME   = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
 GUIDES_PREFIX = "guides/"
-EMBED_MODEL   = "text-embedding-004"
+EMBED_MODEL   = "gemini-embedding-001"
 SLEEP_BETWEEN = 0.7  # ~86 RPM — abaixo do limite de 100 RPM do free tier
 
 
@@ -50,7 +50,10 @@ def embed_text(gemini_client, text: str) -> list[float] | None:
         result = gemini_client.models.embed_content(
             model=EMBED_MODEL,
             contents=text,
-            config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT"),
+            config=types.EmbedContentConfig(
+                task_type="RETRIEVAL_DOCUMENT",
+                output_dimensionality=768,
+            ),
         )
         return result.embeddings[0].values
     except Exception as e:
@@ -106,7 +109,10 @@ def run() -> None:
         raise RuntimeError("R2 client não inicializado — verifique as credenciais.")
 
     db     = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
-    gemini = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    gemini = genai.Client(
+        api_key=os.environ["GEMINI_API_KEY"],
+        http_options=types.HttpOptions(api_version="v1"),
+    )
 
     all_files = list_guide_files(s3)
     processed = get_processed_files(db)
