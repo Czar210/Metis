@@ -74,7 +74,7 @@ class GeminiAdapter(LLMAdapter):
 
     def __init__(self):
         from google import genai as _genai
-        api_key = os.environ.get("GEMINI_KEY")
+        api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             raise RuntimeError("LLM API key nao configurada")
         self._client = _genai.Client(api_key=api_key)
@@ -156,13 +156,13 @@ def get_llm(model: str | None = None) -> LLMAdapter:
     Factory: retorna o adapter adequado.
 
     Prioridade:
-      1. Se GEMINI_KEY existe → GeminiAdapter
+      1. Se GEMINI_API_KEY existe → GeminiAdapter
       2. Senao → OllamaAdapter (local)
     """
     if model and model.startswith("ollama:"):
         return OllamaAdapter(model=model.split(":", 1)[1])
 
-    if os.environ.get("GEMINI_KEY"):
+    if os.environ.get("GEMINI_API_KEY"):
         try:
             return GeminiAdapter()
         except Exception:
