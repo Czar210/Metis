@@ -110,7 +110,7 @@ def run() -> None:
 
     db     = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
     gemini = genai.Client(
-        api_key=os.environ["GEMINI_API_KEY"],
+        api_key=os.environ["GEMINI_KEY"],
         http_options=types.HttpOptions(api_version="v1"),
     )
 
