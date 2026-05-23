@@ -86,6 +86,7 @@ Cards na coluna [Revisão] são tarefas finalizadas aguardando validação conju
 ### SEMPRE
 - Consulte `.speckit/plano_atual.md` para estado atual dos tickets.
 - Consulte `.speckit/bugfixes.md` antes de iniciar qualquer feature — bugs bloqueadores têm precedência absoluta.
+- Consulte `.speckit/rag_roadmap.md` sempre que a task envolver RAG, embeddings, chat, pgvector ou pipeline de IA.
 - Atualize `.speckit/patch_notes.md` ao fechar um bloco significativo de trabalho.
 - Use **transações atômicas** em qualquer mutação no banco (DDL, bulk inserts, dumps SQL).
 - Respeite **RLS (Row Level Security)** do Supabase — isolamento de tenant é inquebrável.

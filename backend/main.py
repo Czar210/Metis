@@ -213,8 +213,23 @@ def chat(req: ChatRequest):
                 }
             }
 
-        # Topico aprovado — gera resposta completa
-        result = llm.generate(req.mensagem)
+        # Topico aprovado — busca contexto RAG e gera resposta
+        from backend.services.rag_service import get_rag_context
+        context = get_rag_context(req.mensagem)
+
+        if context:
+            prompt = (
+                f"Informações táticas relevantes sobre o assunto:\n\n"
+                f"{context}\n\n---\n\n"
+                f"Com base nessas informações e no seu conhecimento geral de LoL, "
+                f"responda de forma direta e natural — não mencione de onde veio a informação, "
+                f"não cite autores ou fontes, apenas responda como a Metis.\n\n"
+                f"Pergunta: {req.mensagem}"
+            )
+        else:
+            prompt = req.mensagem
+
+        result = llm.generate(prompt)
         new_total = tokens_used + guard_cost + max(result.tokens_used, 50)
 
         try:
