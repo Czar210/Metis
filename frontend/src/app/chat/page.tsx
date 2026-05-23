@@ -89,7 +89,7 @@ export default function ChatPage() {
     try {
       const res = await apiFetch('/api/v1/chat', {
         method: 'POST',
-        body: JSON.stringify({ mensagem: msg, supabase_token: accessToken }),
+        body: JSON.stringify({ mensagem: msg, supabase_token: accessToken, locale }),
       })
 
       if (res.status === 429) {

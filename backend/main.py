@@ -103,9 +103,13 @@ def _sanitize_input(text: str) -> str:
     return trimmed
 
 
+_LOCALE_LANG = {"pt": "português", "en": "English"}
+
+
 class ChatRequest(BaseModel):
     mensagem: str
     supabase_token: str | None = None
+    locale: str = "pt"
 
 
 # ── Chat helpers ──────────────────────────────────────────────────────────
@@ -239,15 +243,18 @@ def chat(req: ChatRequest):
         from backend.services.rag_service import get_rag_context
         context = get_rag_context(mensagem, tier=tier)
 
+        lang = _LOCALE_LANG.get(req.locale, "português")
+        system = f"{SYSTEM_PROMPT}\nResponda sempre em {lang}."
+
         if context:
             prompt = (
-                f"{SYSTEM_PROMPT}\n\n"
+                f"{system}\n\n"
                 f"Informações táticas relevantes sobre o assunto:\n\n"
                 f"{context}\n\n---\n\n"
                 f"Pergunta: {mensagem}"
             )
         else:
-            prompt = f"{SYSTEM_PROMPT}\n\nPergunta: {mensagem}"
+            prompt = f"{system}\n\nPergunta: {mensagem}"
 
         result = llm.generate(prompt)
         new_total = tokens_used + guard_cost + max(result.tokens_used, 50)
