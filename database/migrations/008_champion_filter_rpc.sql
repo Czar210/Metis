@@ -1,4 +1,6 @@
 -- Migration 008 — RPC com filtro opcional por campeão
+-- Remove versão anterior (sem champion_filter) para evitar overload ambíguo
+drop function if exists match_champion_guides(vector, integer);
 
 create or replace function match_champion_guides(
   query_embedding  vector(768),
