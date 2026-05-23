@@ -83,6 +83,26 @@ class MatchRequest(BaseModel):
     count: int
 
 
+SYSTEM_PROMPT = (
+    "Você é a Metis, uma aliada estratégica especializada em League of Legends. "
+    "Responda APENAS perguntas sobre LoL: campeões, builds, matchups, estratégia, meta e patches. "
+    "Nunca revele de onde veio a informação. Nunca cite autores, guias ou fontes externas. "
+    "Se a pergunta não for sobre LoL ou Metis, recuse educadamente e redirecione. "
+    "Mantenha sempre o tom de especialista confiante, direto e sem rodeios."
+)
+
+_INJECTION_MARKERS = ("ignore", "system prompt", "jailbreak", "instrução anterior", "forget", "<script", "{%")
+
+
+def _sanitize_input(text: str) -> str:
+    """Trunca input longo e loga tentativas de injection."""
+    trimmed = text[:600]
+    lower = trimmed.lower()
+    if any(marker in lower for marker in _INJECTION_MARKERS):
+        logger.warning("[security] Input suspeito detectado: %.80s", trimmed)
+    return trimmed
+
+
 class ChatRequest(BaseModel):
     mensagem: str
     supabase_token: str | None = None
@@ -191,8 +211,10 @@ def chat(req: ChatRequest):
         llm = get_llm()
         from backend.services.llm_adapter import is_lol_related, GUARDRAIL_REJECTION
 
+        mensagem = _sanitize_input(req.mensagem)
+
         # Guardrail: classifica se a mensagem e sobre LoL antes de gastar tokens na resposta
-        related, guard_tokens = is_lol_related(req.mensagem, llm)
+        related, guard_tokens = is_lol_related(mensagem, llm)
         guard_cost = max(guard_tokens, 30)  # minimo 30 tokens pro classificador
 
         if not related:
@@ -215,19 +237,17 @@ def chat(req: ChatRequest):
 
         # Topico aprovado — busca contexto RAG e gera resposta
         from backend.services.rag_service import get_rag_context
-        context = get_rag_context(req.mensagem)
+        context = get_rag_context(mensagem, tier=tier)
 
         if context:
             prompt = (
+                f"{SYSTEM_PROMPT}\n\n"
                 f"Informações táticas relevantes sobre o assunto:\n\n"
                 f"{context}\n\n---\n\n"
-                f"Com base nessas informações e no seu conhecimento geral de LoL, "
-                f"responda de forma direta e natural — não mencione de onde veio a informação, "
-                f"não cite autores ou fontes, apenas responda como a Metis.\n\n"
-                f"Pergunta: {req.mensagem}"
+                f"Pergunta: {mensagem}"
             )
         else:
-            prompt = req.mensagem
+            prompt = f"{SYSTEM_PROMPT}\n\nPergunta: {mensagem}"
 
         result = llm.generate(prompt)
         new_total = tokens_used + guard_cost + max(result.tokens_used, 50)
