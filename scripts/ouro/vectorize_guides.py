@@ -121,7 +121,8 @@ def vectorize_guide(guide: dict, source_file: str, gemini_client, db_client) -> 
         sub_chunks = chunk_text(content)
 
         for chunk_index, chunk in enumerate(sub_chunks):
-            embedding = embed_text(gemini_client, chunk)
+            embed_input = f"Campeão: {champion}. {title}: {chunk}"
+            embedding = embed_text(gemini_client, embed_input)
             time.sleep(SLEEP_BETWEEN)
 
             if embedding is None:
