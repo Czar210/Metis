@@ -2,6 +2,7 @@ import gzip
 import json
 import logging
 import os
+import re
 import time
 
 from dotenv import load_dotenv
@@ -16,7 +17,49 @@ load_dotenv()
 BUCKET_NAME   = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
 GUIDES_PREFIX = "guides/"
 EMBED_MODEL   = "gemini-embedding-001"
-SLEEP_BETWEEN = 0.7  # ~86 RPM — abaixo do limite de 100 RPM do free tier
+SLEEP_BETWEEN = 0.7   # ~86 RPM — abaixo do limite de 100 RPM do free tier
+MAX_CHUNK_CHARS = 1200
+MIN_CHUNK_CHARS = 40
+
+
+def chunk_text(text: str) -> list[str]:
+    """
+    Chunking inteligente em três camadas:
+    1. Agrupa linhas (\n simples) de forma gulosa até MAX_CHUNK_CHARS
+    2. Linhas individualmente grandes são divididas por sentença
+    3. Garante chunks entre MIN_CHUNK_CHARS e MAX_CHUNK_CHARS
+    """
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+
+    chunks = []
+    current = ""
+
+    for line in lines:
+        if len(line) > MAX_CHUNK_CHARS:
+            # Linha gigante: salva o current e divide por sentença
+            if len(current) >= MIN_CHUNK_CHARS:
+                chunks.append(current)
+                current = ""
+            for sentence in re.split(r"(?<=[.!?])\s+", line):
+                if len(current) + len(sentence) + 1 <= MAX_CHUNK_CHARS:
+                    current = (current + " " + sentence).strip()
+                else:
+                    if len(current) >= MIN_CHUNK_CHARS:
+                        chunks.append(current)
+                    current = sentence
+        elif len(current) + len(line) + 1 <= MAX_CHUNK_CHARS:
+            # Linha cabe no chunk atual
+            current = (current + " " + line).strip()
+        else:
+            # Chunk cheio: salva e começa novo
+            if len(current) >= MIN_CHUNK_CHARS:
+                chunks.append(current)
+            current = line
+
+    if len(current) >= MIN_CHUNK_CHARS:
+        chunks.append(current)
+
+    return chunks
 
 
 def list_guide_files(s3_client) -> list[str]:
@@ -62,38 +105,42 @@ def embed_text(gemini_client, text: str) -> list[float] | None:
 
 
 def vectorize_guide(guide: dict, source_file: str, gemini_client, db_client) -> int:
-    champion   = guide.get("champion", "Unknown")
-    author     = guide.get("author", "Unknown")
+    champion    = guide.get("champion", "Unknown")
+    author      = guide.get("author", "Unknown")
     tier_filter = guide.get("tier_filter", "")
-    chapters   = guide.get("chapters", [])
+    chapters    = guide.get("chapters", [])
 
     inserted = 0
     for chapter in chapters:
         title   = chapter.get("title", "")
         content = chapter.get("content", "")
 
-        if len(content) < 40:
+        if len(content) < MIN_CHUNK_CHARS:
             continue
 
-        embedding = embed_text(gemini_client, content)
-        time.sleep(SLEEP_BETWEEN)
+        sub_chunks = chunk_text(content)
 
-        if embedding is None:
-            continue
+        for chunk_index, chunk in enumerate(sub_chunks):
+            embedding = embed_text(gemini_client, chunk)
+            time.sleep(SLEEP_BETWEEN)
 
-        db_client.table("champion_guides").upsert(
-            {
-                "champion_name": champion,
-                "author":        author,
-                "tier_filter":   tier_filter,
-                "chapter_title": title,
-                "content":       content,
-                "source_file":   source_file,
-                "embedding":     embedding,
-            },
-            on_conflict="source_file,chapter_title",
-        ).execute()
-        inserted += 1
+            if embedding is None:
+                continue
+
+            db_client.table("champion_guides").upsert(
+                {
+                    "champion_name": champion,
+                    "author":        author,
+                    "tier_filter":   tier_filter,
+                    "chapter_title": title,
+                    "chunk_index":   chunk_index,
+                    "content":       chunk,
+                    "source_file":   source_file,
+                    "embedding":     embedding,
+                },
+                on_conflict="source_file,chapter_title,chunk_index",
+            ).execute()
+            inserted += 1
 
     return inserted
 
