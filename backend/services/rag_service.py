@@ -45,8 +45,10 @@ def get_rag_context(query: str) -> str:
 
         relevant = [r for r in rows.data if (r.get("similarity") or 0) >= MIN_SIMILARITY]
         if not relevant:
+            logger.info("[rag] 0 chunks encontrados (limiar %.2f não atingido)", MIN_SIMILARITY)
             return ""
 
+        logger.info("[rag] %d chunks encontrados (top sim=%.3f)", len(relevant), relevant[0].get("similarity", 0))
         parts = [
             f"[{r['champion_name']} — {r['chapter_title']}]\n{r['content']}"
             for r in relevant
