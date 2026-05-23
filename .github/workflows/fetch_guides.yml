@@ -58,4 +58,4 @@ jobs:
           CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
           CLOUDFLARE_R2_BUCKET_NAME: "metis"
         run: |
-          python -m scripts.ingestion.fetch_guides --auto --headless --guides 2
+          python -m scripts.ingestion.fetch_guides --auto --headless --guides 3

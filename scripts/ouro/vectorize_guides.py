@@ -12,14 +12,29 @@ from supabase import create_client
 
 from scripts.utils.r2_storage import get_r2_client
 
+import requests
+
 load_dotenv()
 
 BUCKET_NAME   = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
 GUIDES_PREFIX = "guides/"
 EMBED_MODEL   = "gemini-embedding-001"
-SLEEP_BETWEEN = 0.7   # ~86 RPM — abaixo do limite de 100 RPM do free tier
+SLEEP_BETWEEN = 0.7
 MAX_CHUNK_CHARS = 1200
 MIN_CHUNK_CHARS = 40
+
+
+def get_current_patch() -> str:
+    try:
+        versions = requests.get(
+            "https://ddragon.leagueoflegends.com/api/versions.json", timeout=10
+        ).json()
+        raw = versions[0]  # ex: "16.7.1"
+        parts = raw.split(".")
+        return f"{parts[0]}.{parts[1]}"  # ex: "16.7"
+    except Exception as e:
+        logging.warning("Falha ao buscar patch atual: %s", e)
+        return ""
 
 
 def chunk_text(text: str) -> list[str]:
@@ -104,7 +119,7 @@ def embed_text(gemini_client, text: str) -> list[float] | None:
         return None
 
 
-def vectorize_guide(guide: dict, source_file: str, gemini_client, db_client) -> int:
+def vectorize_guide(guide: dict, source_file: str, gemini_client, db_client, patch_version: str = "") -> int:
     champion    = guide.get("champion", "Unknown")
     author      = guide.get("author", "Unknown")
     tier_filter = guide.get("tier_filter", "")
@@ -128,17 +143,20 @@ def vectorize_guide(guide: dict, source_file: str, gemini_client, db_client) -> 
             if embedding is None:
                 continue
 
+            row = {
+                "champion_name": champion,
+                "author":        author,
+                "tier_filter":   tier_filter,
+                "chapter_title": title,
+                "chunk_index":   chunk_index,
+                "content":       chunk,
+                "source_file":   source_file,
+                "embedding":     embedding,
+            }
+            if patch_version:
+                row["patch_version"] = patch_version
             db_client.table("champion_guides").upsert(
-                {
-                    "champion_name": champion,
-                    "author":        author,
-                    "tier_filter":   tier_filter,
-                    "chapter_title": title,
-                    "chunk_index":   chunk_index,
-                    "content":       chunk,
-                    "source_file":   source_file,
-                    "embedding":     embedding,
-                },
+                row,
                 on_conflict="source_file,chapter_title,chunk_index",
             ).execute()
             inserted += 1
@@ -171,12 +189,15 @@ def run() -> None:
         len(all_files), len(processed), len(pending),
     )
 
+    patch_version = get_current_patch()
+    logging.info("Patch atual: %s", patch_version or "desconhecido")
+
     total = 0
     for file_key in pending:
         guide = download_guide(s3, file_key)
         if not guide:
             continue
-        n = vectorize_guide(guide, file_key, gemini, db)
+        n = vectorize_guide(guide, file_key, gemini, db, patch_version)
         total += n
         logging.info("[%s] %d chunks inseridos.", file_key, n)
 
