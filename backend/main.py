@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import secrets
 import datetime
 from fastapi import FastAPI, HTTPException, Request
@@ -104,6 +105,15 @@ def _sanitize_input(text: str) -> str:
 
 
 _LOCALE_LANG = {"pt": "português", "en": "English"}
+
+_PATCH_RE = re.compile(
+    r"\b(patch|nerfou|buffou|mudou|mudanca|meta|forte|fraco|overpowered|op)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_patch_relevant_local(text: str) -> bool:
+    return bool(_PATCH_RE.search(text))
 
 
 class ChatRequest(BaseModel):
@@ -241,20 +251,38 @@ def chat(req: ChatRequest):
 
         # Topico aprovado — busca contexto RAG e gera resposta
         from backend.services.rag_service import get_rag_context
-        context = get_rag_context(mensagem, tier=tier)
+        context, coverage = get_rag_context(mensagem, tier=tier)
 
-        lang = _LOCALE_LANG.get(req.locale, "português")
+        lang   = _LOCALE_LANG.get(req.locale, "português")
         system = f"{SYSTEM_PROMPT}\nResponda sempre em {lang}."
+
+        # Notices de transparencia de cobertura
+        notices: list[str] = []
+        champion = coverage.get("champion")
+        if champion:
+            if coverage["guides"] == 0:
+                notices.append(
+                    f"Nota interna: nao ha guias aprofundados sobre {champion} na base. "
+                    f"Informe o usuario de forma natural que sua base sobre esse campeo ainda e limitada."
+                )
+            if coverage["patch"] == 0 and _is_patch_relevant_local(mensagem):
+                notices.append(
+                    f"Nota interna: {champion} nao teve mudancas no patch atual. "
+                    f"Se o usuario perguntou sobre mudancas, informe que esse campeo nao foi alterado no patch mais recente."
+                )
+
+        notice_block = ("\n".join(notices) + "\n\n") if notices else ""
 
         if context:
             prompt = (
                 f"{system}\n\n"
-                f"Informações táticas relevantes sobre o assunto:\n\n"
+                f"{notice_block}"
+                f"Informacoes taticas relevantes sobre o assunto:\n\n"
                 f"{context}\n\n---\n\n"
                 f"Pergunta: {mensagem}"
             )
         else:
-            prompt = f"{system}\n\nPergunta: {mensagem}"
+            prompt = f"{system}\n\n{notice_block}Pergunta: {mensagem}"
 
         result = llm.generate(prompt)
         new_total = tokens_used + guard_cost + max(result.tokens_used, 50)
