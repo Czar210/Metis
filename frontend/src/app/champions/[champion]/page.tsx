@@ -714,7 +714,7 @@ function BuildsTab({ builds }: { builds: BuildItem[] }) {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 90px 110px 80px',
+            gridTemplateColumns: '1fr 80px 110px 90px 70px',
             gap: 12,
             padding: '8px 20px',
             fontSize: 10,
@@ -729,15 +729,16 @@ function BuildsTab({ builds }: { builds: BuildItem[] }) {
           <span>{t('col_item')}</span>
           <span className="tabular">{t('col_picks')}</span>
           <span>{t('col_winrate')}</span>
+          <span className="tabular">Score</span>
           <span>{t('col_patch')}</span>
         </div>
         {builds.map((b) => (
           <div
-            key={`${b.item_id}-${b.patch}`}
+            key={`${b.item_id}-${b.patch ?? 'all'}-${b.role ?? 'all'}`}
             className="m-hover-row"
             style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 90px 110px 80px',
+              gridTemplateColumns: '1fr 80px 110px 90px 70px',
               gap: 12,
               padding: '10px 20px',
               alignItems: 'center',
@@ -796,7 +797,13 @@ function BuildsTab({ builds }: { builds: BuildItem[] }) {
                 height={3}
               />
             </div>
-            <span style={{ fontSize: 11, color: 'var(--m-text-dim)' }}>{b.patch}</span>
+            <div>
+              <div className="tabular" style={{ fontSize: 13, fontWeight: 700, color: 'var(--m-accent)' }}>
+                {b.wilson_score?.toFixed(1) ?? '—'}
+              </div>
+              <div style={{ fontSize: 9, color: 'var(--m-muted)', marginTop: 1 }}>wilson</div>
+            </div>
+            <span style={{ fontSize: 11, color: 'var(--m-text-dim)' }}>{b.patch ?? '—'}</span>
           </div>
         ))}
       </Card>

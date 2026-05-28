@@ -65,7 +65,9 @@ def _classify_tier(item_id: int, payload: dict, gold: dict) -> str:
     # Support starters geram gold — threshold evita itens completos com tag GoldPer (Ápice da Tempestade)
     if "GoldPer" in tags and gold_total < 800:
         return "STARTER"
-    if "Boots" in tags:
+    # Apenas botas finalizadas (têm 'from', não têm 'into') são BOOTS.
+    # Boots of Speed (1001) tem 'into' mas não 'from' → COMPONENT.
+    if "Boots" in tags and has_from and not has_into:
         return "BOOTS"
     if has_into:
         return "COMPONENT"

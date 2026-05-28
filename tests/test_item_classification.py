@@ -44,8 +44,9 @@ class TestClassifyTier:
     def test_support_starter_goldper(self):
         assert _classify_tier(3850, {"tags": ["Health", "GoldPer", "Lane"]}, self._gold(400)) == "STARTER"
 
-    def test_boots_category(self):
-        assert _classify_tier(1001, {"tags": ["Boots"], "into": ["3006"]}, self._gold(300)) == "BOOTS"
+    def test_boots_base_is_component(self):
+        # Boots of Speed: tem 'into' mas não 'from' → componente intermediário
+        assert _classify_tier(1001, {"tags": ["Boots"], "into": ["3006"]}, self._gold(300)) == "COMPONENT"
 
     def test_advanced_boots_are_boots(self):
         assert _classify_tier(3006, {"tags": ["Boots", "CooldownReduction"], "from": ["1001"]}, self._gold(1000)) == "BOOTS"

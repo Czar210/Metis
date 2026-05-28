@@ -136,6 +136,25 @@ def buscar_builds(
 
     rows: list[dict] = query.execute().data or []
 
+    # Sem filtro de role: agregar por item_id somando picks/wins de todas as roles.
+    # Com filtro de role: manter as linhas individuais (já filtradas acima).
+    if not role:
+        aggregated: dict[int, dict] = {}
+        for r in rows:
+            iid = r["item_id"]
+            if iid not in aggregated:
+                aggregated[iid] = {
+                    "item_id":   iid,
+                    "item_name": r.get("item_name") or f"Item {iid}",
+                    "patch":     r.get("patch"),
+                    "role":      None,
+                    "pick_count": 0,
+                    "win_count":  0,
+                }
+            aggregated[iid]["pick_count"] += r.get("pick_count") or 0
+            aggregated[iid]["win_count"]  += r.get("win_count") or 0
+        rows = list(aggregated.values())
+
     result: list[dict[str, Any]] = []
     for r in rows:
         picks = r.get("pick_count") or 0

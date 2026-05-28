@@ -5,7 +5,7 @@
  * Fallback para 16.7.1 se a requisição falhar (ex: SSR, offline).
  */
 
-const FALLBACK_VERSION = '26.10.1'
+const FALLBACK_VERSION = '16.10.1'
 const VERSIONS_URL = 'https://ddragon.leagueoflegends.com/api/versions.json'
 
 let cachedVersion: string | null = null
