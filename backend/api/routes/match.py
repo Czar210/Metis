@@ -175,10 +175,10 @@ def get_match_details(match_id: str):
             db.table("match_timelines")
             .select("match_id")
             .eq("match_id", match_id)
-            .maybe_single()
+            .limit(1)
             .execute()
         )
-        has_timeline = tl_result.data is not None
+        has_timeline = bool(tl_result.data)
 
         # ── max_damage para normalização de barras ────────────
         max_damage = max(
@@ -232,11 +232,11 @@ def get_match_timeline(match_id: str):
             db.table("match_timelines")
             .select("frames")
             .eq("match_id", match_id)
-            .maybe_single()
+            .limit(1)
             .execute()
         )
         if tl_result.data:
-            return {"match_id": match_id, "frames": tl_result.data["frames"]}
+            return {"match_id": match_id, "frames": tl_result.data[0]["frames"]}
 
         # ── 2. Verificar se a partida existe no banco ─────────
         p_result = (
