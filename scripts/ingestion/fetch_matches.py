@@ -6,12 +6,12 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-# Re-exporta utilitários R2 para manter compatibilidade com imports existentes
+# Re-exporta utilitrios R2 para manter compatibilidade com imports existentes
 from scripts.utils.r2_storage import get_r2_client, check_file_exists, compress_and_upload  # noqa: F401
 
 load_dotenv()
 
-# --- Configurações de Ambiente ---
+# --- Configuraes de Ambiente ---
 BUCKET_NAME = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
 RIOT_API_KEY = os.environ.get("RIOT_API_KEY")
 
@@ -23,13 +23,13 @@ def get_routing_region(server):
     return 'sea'
 
 # =========================================================
-# 🔗 FUNÇÃO DA API (Usada pelo Backend do Render)
+#  FUNO DA API (Usada pelo Backend do Render)
 # =========================================================
 def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
-    """Busca as partidas de um jogador específico para o Backend."""
+    """Busca as partidas de um jogador especfico para o Backend."""
     if not RIOT_API_KEY:
-        logger.error("RIOT_API_KEY não encontrada no .env")
-        return {"status": "error", "error": "RIOT_API_KEY não encontrada no .env!"}
+        logger.error("RIOT_API_KEY no encontrada no .env")
+        return {"status": "error", "error": "RIOT_API_KEY no encontrada no .env!"}
 
     if tag_line.startswith("#"):
         tag_line = tag_line[1:]
@@ -43,7 +43,7 @@ def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
         account = riot_watcher.account.by_riot_id(routing_region, game_name, tag_line)
         puuid = account['puuid']
 
-        logger.info("PUUID encontrado — buscando últimas %d partidas", count)
+        logger.info("PUUID encontrado  buscando ltimas %d partidas", count)
         match_history = lol_watcher.match.matchlist_by_puuid(
             routing_region, puuid, count=count, type="ranked"
         )
@@ -54,7 +54,7 @@ def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
 
         for index, match_id in enumerate(match_history, start=1):
             if check_file_exists(s3_client, "matches", match_id):
-                logger.debug("Partida %s já existe no R2, pulando", match_id)
+                logger.debug("Partida %s j existe no R2, pulando", match_id)
                 continue
 
             match_data = lol_watcher.match.by_id(routing_region, match_id)
@@ -74,11 +74,11 @@ def fetch_player_matches(game_name, tag_line, server, count=5, s3_client=None):
             logger.warning("Rate Limit da Riot atingido")
             error_msg = "Rate Limit da Riot atingido!"
         elif err.response.status_code == 404:
-            logger.warning("Jogador ou partida não encontrados")
-            error_msg = "Jogador ou partida não encontrados."
+            logger.warning("Jogador ou partida no encontrados")
+            error_msg = "Jogador ou partida no encontrados."
         elif err.response.status_code == 403:
-            logger.error("Riot API Key expirada ou inválida")
-            error_msg = "Riot API Key expirada ou inválida."
+            logger.error("Riot API Key expirada ou invlida")
+            error_msg = "Riot API Key expirada ou invlida."
         else:
             logger.error("Erro na Riot API: %s", err)
             error_msg = f"Erro na Riot API: {err}"

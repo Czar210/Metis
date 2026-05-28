@@ -18,7 +18,7 @@ BUCKET_NAME = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
 
 def get_r2_client():
     if not all([R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY]):
-        logger.warning("Credenciais R2 ausentes — client não será criado.")
+        logger.warning("Credenciais R2 ausentes  client no ser criado.")
         return None
     return boto3.client(
         's3',

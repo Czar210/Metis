@@ -1,7 +1,7 @@
 """
-validate_match_analysis.py — Task 2.2: valida qualidade do match-analysis com Gemini 2.5 Flash.
+validate_match_analysis.py  Task 2.2: valida qualidade do match-analysis com Gemini 2.5 Flash.
 
-Puxa N partidas reais do Supabase, roda match-analysis em cada uma e exporta CSV para revisão.
+Puxa N partidas reais do Supabase, roda match-analysis em cada uma e exporta CSV para reviso.
 
 Uso:
     python scripts/sampling/validate_match_analysis.py
@@ -33,17 +33,17 @@ from app.ai.prompts.match_analysis import (  # type: ignore[import]  # noqa: E40
     build_match_analysis_prompt,
 )
 
-# ── Verificadores de violação (mesmos do sample_responses.py) ─────────
+#  Verificadores de violao (mesmos do sample_responses.py) 
 
 _FORBIDDEN = re.compile(
-    r"\b(ótimo trabalho|great job|parabéns|que jogada|boa pergunta!|"
-    r"claro!|com certeza!|ótima observação|sem dúvida!|"
+    r"\b(timo trabalho|great job|parabns|que jogada|boa pergunta!|"
+    r"claro!|com certeza!|tima observao|sem dvida!|"
     r"muito bem jogado|muito bem feito|perfeito demais)\b",
     re.IGNORECASE,
 )
 _CHAMP_TRANSLATED = re.compile(
     r"\b(a leoa|o jardineiro|a aranha|o detetive|o rei dos gelos|a sereia|"
-    r"o palhaço|rei macaco)\b",
+    r"o palhao|rei macaco)\b",
     re.IGNORECASE,
 )
 
@@ -57,7 +57,7 @@ def _check_violations(text: str) -> list[str]:
     return v
 
 
-# ── Metis Score (espelho de match.py — sem importar a rota) ───────────
+#  Metis Score (espelho de match.py  sem importar a rota) 
 
 _ROLE_WEIGHTS: dict[str, dict[str, float]] = {
     "TOP":     {"kda": 0.25, "dmg": 0.15, "gold": 0.20, "vis": 0.05, "cs": 0.15, "kp": 0.10},
@@ -111,7 +111,7 @@ def _compute_metis_scores(participants: list[dict]) -> None:
         p["metis_score"] = round(raw * 100, 1)
 
 
-# ── Fetch de partidas ─────────────────────────────────────────────────
+#  Fetch de partidas 
 
 def _fetch_matches(count: int) -> list[dict]:
     import os
@@ -159,7 +159,7 @@ def _fetch_matches(count: int) -> list[dict]:
     return result[:count]
 
 
-# ── Runner principal ──────────────────────────────────────────────────
+#  Runner principal 
 
 def run_validation(count: int, output_path: Path, debug: bool = False) -> None:
     llm = get_llm()
@@ -275,7 +275,7 @@ def run_validation(count: int, output_path: Path, debug: bool = False) -> None:
                 "reviewer_notes": "",
             })
 
-    # ── Exportar CSV ──────────────────────────────────────────────────
+    #  Exportar CSV 
     fieldnames = [
         "match_id", "puuid_prefix", "champion", "role", "result", "metis_score",
         "json_valid", "score", "strengths_n", "weaknesses_n", "key_moments_n", "has_coaching",
@@ -286,7 +286,7 @@ def run_validation(count: int, output_path: Path, debug: bool = False) -> None:
         writer.writeheader()
         writer.writerows(rows)
 
-    # ── Resumo ────────────────────────────────────────────────────────
+    #  Resumo 
     ok_n      = sum(1 for r in rows if r["status"] == "ok")
     inv_n     = sum(1 for r in rows if r["status"] == "JSON_INVALIDO")
     viol_n    = sum(1 for r in rows if r["status"] == "VIOLACAO")
@@ -298,9 +298,9 @@ def run_validation(count: int, output_path: Path, debug: bool = False) -> None:
 
     print(f"\n{'-' * 60}")
     print(f"Concluido -> {output_path}")
-    print(f"  Total: {len(rows)} | OK: {ok_n} | JSON inválido: {inv_n} | Violações: {viol_n} | Erros: {err_n}")
-    print(f"  Tokens médios/análise: {avg_tok:.0f}")
-    print(f"  Latência média: {avg_lat:.1f}s")
+    print(f"  Total: {len(rows)} | OK: {ok_n} | JSON invlido: {inv_n} | Violaes: {viol_n} | Erros: {err_n}")
+    print(f"  Tokens mdios/anlise: {avg_tok:.0f}")
+    print(f"  Latncia mdia: {avg_lat:.1f}s")
     print(f"  Custo total estimado: ${cost_est:.4f}")
 
     if inv_n > 0:
@@ -314,10 +314,10 @@ def run_validation(count: int, output_path: Path, debug: bool = False) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Task 2.2 — Valida qualidade do match-analysis com Gemini 2.5 Flash."
+        description="Task 2.2  Valida qualidade do match-analysis com Gemini 2.5 Flash."
     )
     parser.add_argument("--count", type=int, default=20, help="Partidas a analisar (default: 20)")
-    parser.add_argument("--output", type=str, default=None, help="Caminho do CSV de saída")
+    parser.add_argument("--output", type=str, default=None, help="Caminho do CSV de sada")
     parser.add_argument("--debug", action="store_true", help="Imprime raw da 1a resposta")
     args = parser.parse_args()
 

@@ -5,6 +5,7 @@ import secrets
 import datetime
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -23,7 +24,7 @@ app = FastAPI(
     version="p-0.9.0"
 )
 
-from backend.api.routes import player, stats, match, admin, champion, item, coupon, ai
+from backend.api.routes import player, stats, match, admin, champion, item, coupon, ai, static
 app.include_router(player.router)
 app.include_router(stats.router)
 app.include_router(match.router)
@@ -32,6 +33,7 @@ app.include_router(champion.router)
 app.include_router(item.router)
 app.include_router(coupon.router)
 app.include_router(ai.router)
+app.include_router(static.router)
 
 # ── CORS ──────────────────────────────────────────────────────────────
 _default_origins = [
@@ -60,7 +62,7 @@ if not _api_key:
     _api_key = secrets.token_urlsafe(32)
     logger.warning("[security] METIS_API_KEY nao definida. Gerada temporaria.")
 
-PUBLIC_PATHS = {"/api/v1/health", "/docs", "/openapi.json", "/redoc"}
+PUBLIC_PATHS = {"/api/v1/health", "/api/v1/static/runes", "/docs", "/openapi.json", "/redoc"}
 
 
 @app.middleware("http")
@@ -332,14 +334,32 @@ def chat_usage(supabase_token: str):
 
 @app.post("/api/v1/admin/refresh-cache")
 def refresh_cache():
-    """Invalida o cache da tier list e patches. Chamar apos ETL."""
+    """Invalida o cache da tier list, patches e stats R2. Chamar apos ETL."""
     from backend.services.stats_service import _cache
-    count = len(_cache)
+    from backend.services.stats_cache import invalidar_cache as invalidar_r2_cache
+    count_supabase = len(_cache)
     _cache.clear()
-    logger.info(f"[cache] Invalidado manualmente — {count} entradas removidas")
-    return {"status": "ok", "cleared": count}
+    count_r2 = invalidar_r2_cache()
+    total = count_supabase + count_r2
+    logger.info("[cache] Invalidado manualmente — %d Supabase + %d R2 entradas removidas", count_supabase, count_r2)
+    return {"status": "ok", "cleared": total}
 
 
 @app.get("/api/v1/health")
 def health_check():
     return {"status": "online", "system": "Metis", "version": "p-0.9.2"}
+
+
+def _custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(title=app.title, version=app.version, description=app.description, routes=app.routes)
+    schema.setdefault("components", {})["securitySchemes"] = {
+        "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+    }
+    schema["security"] = [{"ApiKeyAuth": []}]
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = _custom_openapi

@@ -12,7 +12,7 @@ BUCKET_NAME = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
 
 def fetch_pro_players_playwright():
     """Usa um navegador fantasma para extrair os dados da Wiki, incluindo as contas Smurfs."""
-    print("🎭 Invocando o Navegador Fantasma (Playwright)...")
+    print(" Invocando o Navegador Fantasma (Playwright)...")
 
     # URL turbinada: Adicionamos o campo 'SoloqueueIds'
     url = (
@@ -34,18 +34,18 @@ def fetch_pro_players_playwright():
         )
         page = context.new_page()
 
-        print("🕵️‍♂️ Acessando a Leaguepedia sorrateiramente...")
+        print(" Acessando a Leaguepedia sorrateiramente...")
         try:
             page.goto(url, wait_until="domcontentloaded")
-            time.sleep(3) # Tempo para o Cloudflare não desconfiar
+            time.sleep(3) # Tempo para o Cloudflare no desconfiar
 
             content = page.locator("body").inner_text()
             data = json.loads(content)
 
             if isinstance(data, list) and len(data) > 0:
-                print(f"✅ Sucesso! O disfarce funcionou. {len(data)} pro players capturados.")
+                print(f"OK: Sucesso! O disfarce funcionou. {len(data)} pro players capturados.")
 
-                # Salvamos o pacote completo de dados úteis!
+                # Salvamos o pacote completo de dados teis!
                 pros_data = []
                 for player in data:
                     pros_data.append({
@@ -58,16 +58,16 @@ def fetch_pro_players_playwright():
                 browser.close()
                 return pros_data
             else:
-                print("⚠️ Formato inesperado. O segurança da Wiki pode ter mudado a fechadura.")
+                print("AVISO: Formato inesperado. O segurana da Wiki pode ter mudado a fechadura.")
                 browser.close()
                 return None
 
         except json.JSONDecodeError:
-            print("❌ Erro ao ler os dados. A Wiki não retornou um JSON válido (Possível Captcha).")
+            print("ERRO ao ler os dados. A Wiki no retornou um JSON vlido (Possvel Captcha).")
             browser.close()
             return None
         except Exception as e:
-            print(f"❌ Erro durante a infiltração: {e}")
+            print(f"ERRO durante a infiltrao: {e}")
             browser.close()
             return None
 
@@ -83,9 +83,9 @@ def save_to_bronze(data, filename, s3_client):
             Bucket=BUCKET_NAME, Key=file_key, Body=json_string.encode('utf-8'),
             ContentType='application/json'
         )
-        print(f"☁️ Arquivo salvo com segurança no R2: {file_key}")
+        print(f"Upload R2: Arquivo salvo com segurana no R2: {file_key}")
     except Exception as e:
-        print(f"❌ Erro no R2: {e}")
+        print(f"ERRO no R2: {e}")
 
 if __name__ == "__main__":
     s3 = get_r2_client()
@@ -94,4 +94,4 @@ if __name__ == "__main__":
     if pros_list:
         save_to_bronze(pros_list, "leaguepedia_active_pros.json", s3)
     else:
-        print("🚫 A missão falhou.")
+        print(" A misso falhou.")

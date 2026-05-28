@@ -18,9 +18,9 @@ BATCH_SIZE = int(os.environ.get("BATCH_SIZE", 50))
 VALID_QUEUE_IDS = {420, 440}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DICIONÁRIO DE ITENS — carregado uma vez, reutilizado em toda a run
-# ─────────────────────────────────────────────────────────────────────────────
+# 
+# DICIONRIO DE ITENS  carregado uma vez, reutilizado em toda a run
+# 
 
 _ITEM_DICT: dict[int, str] | None = None
 _ITEM_JSON_PATH = Path(__file__).parents[2] / "data" / "static" / "item.json"
@@ -31,7 +31,7 @@ def _get_item_dict() -> dict[int, str]:
     global _ITEM_DICT
     if _ITEM_DICT is None:
         if not _ITEM_JSON_PATH.exists():
-            _logger.warning(f"  item.json não encontrado em {_ITEM_JSON_PATH}. Builds serão ignoradas.")
+            _logger.warning(f"  item.json no encontrado em {_ITEM_JSON_PATH}. Builds sero ignoradas.")
             _ITEM_DICT = {}
         else:
             with open(_ITEM_JSON_PATH, encoding="utf-8") as f:
@@ -40,12 +40,12 @@ def _get_item_dict() -> dict[int, str]:
     return _ITEM_DICT
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PARSING PURO — sem I/O, sem banco, totalmente testável
-# ─────────────────────────────────────────────────────────────────────────────
+# 
+# PARSING PURO  sem I/O, sem banco, totalmente testvel
+# 
 
 def _normalizar_patch(game_version: str) -> str:
-    """'14.10.123.456' → '14.10'"""
+    """'14.10.123.456' -> '14.10'"""
     parts = (game_version or "").split(".")
     if len(parts) >= 2:
         return f"{parts[0]}.{parts[1]}"
@@ -58,7 +58,7 @@ def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
     Aplica todos os filtros de limpeza sem tocar no banco.
 
     Retorna:
-        match_payload: dict | None  — None se a partida deve ser descartada
+        match_payload: dict | None   None se a partida deve ser descartada
         players_payload: list[dict]
         participants_payload: list[dict]
     """
@@ -69,25 +69,25 @@ def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
     if not match_id or not info:
         return None, [], []
 
-    # ── Filtro 1: Duração mínima (remake / queda de servidor) ─────────────────
+    #  Filtro 1: Durao mnima (remake / queda de servidor) 
     game_duration = info.get("gameDuration", 0)
     if game_duration < 190:
-        _logger.debug(f"  {match_id}: Descartado — duração {game_duration}s (remake).")
+        _logger.debug(f"  {match_id}: Descartado  durao {game_duration}s (remake).")
         return None, [], []
 
-    # ── Filtro 2: Queue válida (só Ranked Solo/Flex) ──────────────────────────
+    #  Filtro 2: Queue vlida (s Ranked Solo/Flex) 
     queue_id = info.get("queueId", 0)
     if queue_id not in VALID_QUEUE_IDS:
-        _logger.debug(f"  {match_id}: Descartado — queue {queue_id} (não é ranked).")
+        _logger.debug(f"  {match_id}: Descartado  queue {queue_id} (no  ranked).")
         return None, [], []
 
-    # ── Filtro 3: Partida com exatamente 10 participantes ────────────────────
+    #  Filtro 3: Partida com exatamente 10 participantes 
     participants_raw = info.get("participants", [])
     if len(participants_raw) != 10:
-        _logger.debug(f"  {match_id}: Descartado — {len(participants_raw)} participantes (corrompido).")
+        _logger.debug(f"  {match_id}: Descartado  {len(participants_raw)} participantes (corrompido).")
         return None, [], []
 
-    # ── Montar payload da partida ─────────────────────────────────────────────
+    #  Montar payload da partida 
     end_type = "normal"
     if info.get("gameEndedInEarlySurrender"):
         end_type = "early_ff"
@@ -102,16 +102,16 @@ def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
         "end_type": end_type,
     }
 
-    # ── Montar payloads de jogadores e participantes ──────────────────────────
+    #  Montar payloads de jogadores e participantes 
     players_payload = []
     participants_payload = []
 
     for p in participants_raw:
         puuid = p.get("puuid", "")
 
-        # ── Filtro 4: Bots ────────────────────────────────────────────────────
+        #  Filtro 4: Bots 
         if not puuid or puuid.startswith("BOT_") or p.get("botPlayer", False):
-            print(f"   🤖 Bot detectado em {match_id} — participante ignorado.")
+            print(f"    Bot detectado em {match_id}  participante ignorado.")
             continue
 
         players_payload.append({
@@ -121,7 +121,7 @@ def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
             "profile_icon_id": p.get("profileIcon"),
         })
 
-        # ── Filtro 5: teamPosition vazia → UNKNOWN ────────────────────────────
+        #  Filtro 5: teamPosition vazia -> UNKNOWN 
         team_position = p.get("teamPosition") or "UNKNOWN"
 
         time_played = p.get("timePlayed", game_duration)
@@ -129,10 +129,10 @@ def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
         challenges = dict(p.get("challenges", {}))
         challenges["is_afk"] = is_afk
 
-        # ── Items (slots 0-6, slot 6 = trinket) ──────────────────────────────
+        #  Items (slots 0-6, slot 6 = trinket) 
         items = [p.get(f"item{i}", 0) for i in range(7)]
 
-        # ── Runas ─────────────────────────────────────────────────────────────
+        #  Runas 
         perks = p.get("perks", {})
         styles = perks.get("styles", [])
         primary       = styles[0] if styles else {}
@@ -140,7 +140,7 @@ def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
         primary_sels  = primary.get("selections") or []
         keystone      = primary_sels[0].get("perk") if primary_sels else None
 
-        # ── CS e CS/min ───────────────────────────────────────────────────────
+        #  CS e CS/min 
         total_cs = p.get("totalMinionsKilled", 0) + p.get("neutralMinionsKilled", 0)
         cspm = round(total_cs / (game_duration / 60), 2) if game_duration > 0 else 0.0
 
@@ -163,7 +163,7 @@ def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
             "kill_participation": challenges.get("killParticipation", 0.0),
             "early_laning_phase_gold_exp_advantage": challenges.get("earlyLaningPhaseGoldExpAdvantage", 0.0),
             # challenges JSONB removido pra economizar espaco
-            # ── Campos enriquecidos (v0.6.4) ──────────────────────────────────
+            #  Campos enriquecidos (v0.6.4) 
             "team_id":         p.get("teamId"),
             "items":           items,
             "summoner1_id":    p.get("summoner1Id"),
@@ -184,15 +184,15 @@ def extrair_dados_partida(match_json: dict) -> tuple[dict | None, list, list]:
 def extrair_builds_partida(match_json: dict, item_dict: dict[int, str]) -> list[dict]:
     """
     Extrai as builds de itens de cada participante da partida.
-    Função pura — sem I/O, sem banco.
+    Funo pura  sem I/O, sem banco.
 
     Retorna lista de registros prontos para a tabela champion_builds:
         [{champion_name, item_id, item_name, patch, pick_count, win_count}, ...]
 
     Regras:
-    - Slots zerados (item_id == 0) são ignorados.
-    - item_id ausente no item_dict é ignorado (ward, token de missão, etc.).
-    - Bots já filtrados em extrair_dados_partida não chegam aqui.
+    - Slots zerados (item_id == 0) so ignorados.
+    - item_id ausente no item_dict  ignorado (ward, token de misso, etc.).
+    - Bots j filtrados em extrair_dados_partida no chegam aqui.
     """
     metadata = match_json.get("metadata", {})
     info = match_json.get("info", {})
@@ -211,6 +211,7 @@ def extrair_builds_partida(match_json: dict, item_dict: dict[int, str]) -> list[
 
         champion = p.get("championName")
         won = bool(p.get("win"))
+        role = (p.get("teamPosition") or "UNKNOWN").upper() or "UNKNOWN"
 
         for slot in item_slots:
             item_id = p.get(slot, 0)
@@ -225,6 +226,7 @@ def extrair_builds_partida(match_json: dict, item_dict: dict[int, str]) -> list[
                 "item_id": item_id,
                 "item_name": item_name,
                 "patch": patch,
+                "role": role,
                 "pick_count": 1,
                 "win_count": 1 if won else 0,
             })
@@ -232,9 +234,9 @@ def extrair_builds_partida(match_json: dict, item_dict: dict[int, str]) -> list[
     return builds
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PERSISTÊNCIA — depende do db_client injetável
-# ─────────────────────────────────────────────────────────────────────────────
+# 
+# PERSISTNCIA  depende do db_client injetvel
+# 
 
 def processar_partida(match_json: dict, db_client=None) -> bool:
     """
@@ -242,7 +244,7 @@ def processar_partida(match_json: dict, db_client=None) -> bool:
 
     Args:
         match_json: JSON bruto da Riot Match API.
-        db_client: cliente Supabase injetável. Se None, cria usando variáveis de ambiente.
+        db_client: cliente Supabase injetvel. Se None, cria usando variveis de ambiente.
     """
     match_payload, players_payload, participants_payload = extrair_dados_partida(match_json)
 
@@ -252,7 +254,7 @@ def processar_partida(match_json: dict, db_client=None) -> bool:
     if db_client is None:
         from supabase import create_client
         if not SUPABASE_URL or not SUPABASE_KEY:
-            print("❌ Credenciais do Supabase não encontradas no .env!")
+            print("ERRO: Credenciais do Supabase no encontradas no .env!")
             return False
         db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -262,30 +264,30 @@ def processar_partida(match_json: dict, db_client=None) -> bool:
         if players_payload:
             db_client.table("players").upsert(players_payload).execute()
         if participants_payload:
-            # on_conflict garante que re-runs não criam duplicatas (UNIQUE match_id, puuid)
+            # on_conflict garante que re-runs no criam duplicatas (UNIQUE match_id, puuid)
             db_client.table("match_participants").upsert(
                 participants_payload, on_conflict="match_id,puuid"
             ).execute()
 
         builds = extrair_builds_partida(match_json, _get_item_dict())
         if builds:
-            # RPC atomic: INSERT … ON CONFLICT DO UPDATE SET pick_count += 1, win_count += won
+            # RPC atomic: INSERT  ON CONFLICT DO UPDATE SET pick_count += 1, win_count += won
             db_client.rpc("upsert_champion_builds", {"builds": builds}).execute()
 
         _logger.debug(f" {match_id}: Salvo ({match_payload['end_type']}, patch {match_payload['game_version']}, {len(builds)} builds).")
         return True
     except Exception as e:
-        _logger.error(f" {match_id}: Erro ao salvar — {e}")
+        _logger.error(f" {match_id}: Erro ao salvar  {e}")
         return False
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LOOP DO R2 — lista, baixa, processa, marca
-# ─────────────────────────────────────────────────────────────────────────────
+# 
+# LOOP DO R2  lista, baixa, processa, marca
+# 
 
 def _get_processed_ids(db_client) -> set:
-    """Retorna os match_ids já processados registrados no Supabase.
-    Usa paginação para não ser limitado pelo teto de 1000 linhas do PostgREST.
+    """Retorna os match_ids j processados registrados no Supabase.
+    Usa paginao para no ser limitado pelo teto de 1000 linhas do PostgREST.
     """
     try:
         ids: set[str] = set()
@@ -306,7 +308,7 @@ def _get_processed_ids(db_client) -> set:
             offset += page_size
         return ids
     except Exception as e:
-        _logger.warning(f"  Não foi possível buscar processed_matches: {e}")
+        _logger.warning(f"  No foi possvel buscar processed_matches: {e}")
         return set()
 
 
@@ -342,10 +344,10 @@ def _baixar_e_descomprimir(s3_client, bucket: str, key: str) -> dict | None:
 
 def rodar_pipeline(s3_client=None, db_client=None, batch_size: int = BATCH_SIZE) -> dict:
     """
-    Loop principal Bronze → Prata.
-    Lista partidas do R2, filtra as já processadas, processa em batch.
+    Loop principal Bronze -> Prata.
+    Lista partidas do R2, filtra as j processadas, processa em batch.
 
-    Retorna relatório: {"processadas": int, "descartadas": int, "erros": int}
+    Retorna relatrio: {"processadas": int, "descartadas": int, "erros": int}
     """
     from scripts.utils.r2_storage import get_r2_client
     from supabase import create_client
@@ -353,26 +355,26 @@ def rodar_pipeline(s3_client=None, db_client=None, batch_size: int = BATCH_SIZE)
     if s3_client is None:
         s3_client = get_r2_client()
     if s3_client is None:
-        print("❌ R2 client não disponível.")
+        print("ERRO: R2 client no disponvel.")
         return {"processadas": 0, "descartadas": 0, "erros": 0}
 
     if db_client is None:
         if not SUPABASE_URL or not SUPABASE_KEY:
-            print("❌ Credenciais do Supabase não encontradas.")
+            print("ERRO: Credenciais do Supabase no encontradas.")
             return {"processadas": 0, "descartadas": 0, "erros": 0}
         db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     bucket = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
 
-    print("📋 Buscando partidas já processadas no Supabase...")
+    print("Lista: Buscando partidas j processadas no Supabase...")
     processed_ids = _get_processed_ids(db_client)
-    print(f"   {len(processed_ids)} partidas já processadas.")
+    print(f"   {len(processed_ids)} partidas j processadas.")
 
-    print("📦 Listando partidas no R2...")
+    print("Listando Listando partidas no R2...")
     all_keys = _listar_keys_r2(s3_client, bucket, prefix="matches/")
     print(f"   {len(all_keys)} arquivos encontrados no R2.")
 
-    # Filtra apenas as não processadas, extrai match_id da key (matches/BR1_123.json.gz)
+    # Filtra apenas as no processadas, extrai match_id da key (matches/BR1_123.json.gz)
     pendentes = [
         k for k in all_keys
         if k.replace("matches/", "").replace(".json.gz", "") not in processed_ids
@@ -384,12 +386,12 @@ def rodar_pipeline(s3_client=None, db_client=None, batch_size: int = BATCH_SIZE)
 
     for i, key in enumerate(batch, 1):
         match_id = key.replace("matches/", "").replace(".json.gz", "")
-        _logger.debug(f"[{i}/{len(batch)}] {match_id}", end=" — ")
+        _logger.debug(f"[{i}/{len(batch)}] {match_id}", end="  ")
 
         match_json = _baixar_e_descomprimir(s3_client, bucket, key)
         if match_json is None:
             stats["erros"] += 1
-            _marcar_processado(db_client, match_id)  # não tentar de novo
+            _marcar_processado(db_client, match_id)  # no tentar de novo
             continue
 
         ok = processar_partida(match_json, db_client=db_client)
@@ -400,13 +402,13 @@ def rodar_pipeline(s3_client=None, db_client=None, batch_size: int = BATCH_SIZE)
 
         _marcar_processado(db_client, match_id)
 
-    print(f"\n📊 Resultado: {stats}")
+    print(f"\nResultado: Resultado: {stats}")
     return stats
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 # ENTRYPOINT
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 
 if __name__ == "__main__":
     rodar_pipeline()

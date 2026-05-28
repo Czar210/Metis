@@ -162,7 +162,7 @@ def _expand_query(gemini_client, query: str) -> list[str]:
         result = gemini_client.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt,
-            config=types.GenerateContentConfig(max_output_tokens=80, temperature=0.3),
+            config=types.GenerateContentConfig(max_output_tokens=200, temperature=0.3),
         )
         lines      = [l.strip() for l in result.text.strip().split("\n") if l.strip()]
         expansions = lines[:2]

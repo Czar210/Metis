@@ -27,8 +27,9 @@ class LLMResponse:
 
 
 GUARDRAIL_PROMPT = (
-    'A mensagem abaixo e sobre League of Legends, LoL, sobre o site Metis (plataforma de analytics de LoL), '
-    'ou sobre jogos em geral relacionados a LoL? Responda APENAS "sim" ou "nao".\n'
+    'A mensagem abaixo e sobre League of Legends, LoL, Metis (plataforma de analytics de LoL), '
+    'ou qualquer aspecto do jogo (patch, campeoes, builds, itens, estrategia, elo, meta, habilidades)? '
+    'Responda APENAS "sim" ou "nao".\n'
     'Mensagem: {mensagem}'
 )
 
@@ -46,7 +47,7 @@ def is_lol_related(mensagem: str, llm: 'LLMAdapter') -> tuple[bool, int]:
     """
     try:
         result = llm.generate(
-            GUARDRAIL_PROMPT.format(mensagem=mensagem[:300]),  # limita input pra nao gastar token
+            GUARDRAIL_PROMPT.format(mensagem=mensagem[:300]),
             system_prompt="Voce e um classificador binario. Responda APENAS 'sim' ou 'nao'."
         )
         answer = result.text.strip().lower()

@@ -6,7 +6,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
 import { championIconUrl, roleIconPath, DDRAGON_VERSION } from '@/lib/ddragon'
-import { runeIconUrl, RUNE_TREES } from '@/lib/runes'
+import { runeIconUrl, refreshRuneMap, RUNE_TREES } from '@/lib/runes'
 import { TimelineChart } from '@/components/matches/TimelineChart'
 import { apiFetch } from '@/lib/api'
 import { formatNumber } from '@/lib/format'
@@ -151,6 +151,8 @@ export default function MatchPage() {
   const [timelineFrames, setTimelineFrames] = useState<TimelineFrame[] | null>(null)
   const [timelineLoading, setTimelineLoading] = useState(false)
   const [timelineError, setTimelineError] = useState<string | null>(null)
+
+  useEffect(() => { refreshRuneMap() }, [])
 
   useEffect(() => {
     async function load() {
@@ -936,9 +938,7 @@ function TeamBlock({
         const damage = p.total_damage_dealt_to_champions ?? 0
         const damageBar = maxDamage > 0 ? (damage / maxDamage) * 100 : 0
         const cspm = p.cs_per_minute ?? 0
-        const keystoneUrl = p.rune_keystone
-          ? runeIconUrl(p.rune_keystone, DDRAGON_VERSION)
-          : null
+        const keystoneUrl = p.rune_keystone ? runeIconUrl(p.rune_keystone) : null
         const scoreStyle = p.metis_score != null ? metisScoreStyle(p.metis_score) : null
         const items = (p.items ?? []).filter((id) => id > 0).slice(0, 6)
         const roleKey = ROLE_I18N_KEY[p.team_position as Role]
@@ -1476,9 +1476,7 @@ function BuildRow({ p }: { p: Participant }) {
   const t = useTranslations('match')
   const teamColor = p.team_id === 100 ? 'var(--m-green)' : 'var(--m-red)'
   const items = p.items ?? []
-  const keystoneUrl = p.rune_keystone
-    ? runeIconUrl(p.rune_keystone, DDRAGON_VERSION)
-    : null
+  const keystoneUrl = p.rune_keystone ? runeIconUrl(p.rune_keystone) : null
   const spell1 = SUMMONER_SPELL[p.summoner1_id ?? 0]
   const spell2 = SUMMONER_SPELL[p.summoner2_id ?? 0]
 

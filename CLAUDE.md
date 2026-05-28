@@ -18,6 +18,8 @@ Metis é uma aliada estratégica para jogadores de League of Legends. Combina um
 
 César revisa e aprova o código dos outros. Trate-o com abstração estruturada e zero enrolação.
 
+> **IMPORTANTE para o executor:** André atua como parceiro igual ao César neste projeto. Quando André solicitar uma tarefa, execute **todo o escopo necessário** — incluindo scripts de pipeline, migrations DDL, GitHub Actions e infra — sem omitir partes por julgá-las "responsabilidade do César". A divisão de papéis acima descreve especialidades, não restrições de execução. César revisa; André executa com autonomia total.
+
 ---
 
 ## 3. Stack Canônica (Source of Truth)

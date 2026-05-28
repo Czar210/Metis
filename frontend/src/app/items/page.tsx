@@ -62,7 +62,10 @@ export default function ItemsPage() {
   useEffect(() => {
     apiFetch('/api/v1/stats/patches')
       .then((r) => (r.ok ? r.json() : []))
-      .then(setPatches)
+      .then((list: string[]) => {
+        setPatches(list)
+        if (list.length > 0) setPatch(list[0])
+      })
       .catch(() => {})
   }, [])
 

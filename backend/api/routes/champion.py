@@ -58,17 +58,18 @@ def get_champion_overview(
 def get_champion_builds(
     champion:  str,
     patch:     str | None = Query(default=None, description="Filtrar por patch"),
+    role:      str | None = Query(default=None, description="Filtrar por lane (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY)"),
     min_picks: int        = Query(default=3, ge=1, description="Mínimo de picks para incluir o item"),
 ):
     """
     🛡 Builds do Campeão
 
-    Retorna os itens mais frequentes com winrate, via view champion_item_stats.
-    Ordenado por pick_count desc. Máximo 20 itens.
+    Retorna os itens mais frequentes com Wilson score (estimativa conservadora de winrate).
+    Exclui STARTER e CONSUMABLE. Ordenado por wilson_score desc.
     """
     try:
         db = _get_supabase()
-        return buscar_builds(db, champion, patch=patch, min_picks=min_picks)
+        return buscar_builds(db, champion, patch=patch, role=role, min_picks=min_picks)
     except RuntimeError as err:
         raise HTTPException(status_code=500, detail=str(err))
     except Exception as err:

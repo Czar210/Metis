@@ -47,8 +47,9 @@ def get_latest_patch() -> str:
         "https://ddragon.leagueoflegends.com/api/versions.json", timeout=10
     ).json()
     raw = versions[0]
-    parts = raw.split(".")
-    return f"{parts[0]}.{parts[1]}"
+    minor = raw.split(".")[1]
+    year_2d = str(datetime.date.today().year)[-2:]
+    return f"{year_2d}.{minor}"
 
 
 def find_and_fetch_patch(patch: str) -> tuple[str | None, str | None]:
@@ -140,10 +141,10 @@ def _parse_change_lines(block_text: str) -> list[str]:
 
 
 _ABILITY_RE = re.compile(r"^[QWERP] -", re.IGNORECASE)
-_CHANGE_RE  = re.compile(r"⇒|=>")
+_CHANGE_RE  = re.compile(r"=>|=>")
 _NOISE_RE   = re.compile(
     r"opens in a new|opens an external|cookie|privacy notice|esrb|"
-    r"riot games|terms of service|™|this website utilizes|"
+    r"riot games|terms of service||this website utilizes|"
     r"wrong patch notes|looking for more",
     re.IGNORECASE,
 )
@@ -171,8 +172,8 @@ def parse_patch_html(html: str, patch: str) -> list[dict]:
     Parseia o HTML da pagina oficial de patch notes da Riot (2026+).
 
     Estrutura real da pagina:
-    - Nenhum header de secao explicito — campeoes aparecem diretamente
-    - Mudancas de stat: "Nome do stat\\n: valor_antigo ⇒\\nvalor_novo" (3 linhas)
+    - Nenhum header de secao explicito  campeoes aparecem diretamente
+    - Mudancas de stat: "Nome do stat\\n: valor_antigo =>\\nvalor_novo" (3 linhas)
     - Habilidades: "Q - Nome", "W - Nome", etc.
     - Secoes Arena/ARAM aparecem depois e devem ser ignoradas
     """
@@ -192,13 +193,13 @@ def parse_patch_html(html: str, patch: str) -> list[dict]:
         cut.append(line)
 
     # Une mudancas de 3 linhas em 1:
-    # "Stat Name" + ": old ⇒" + "new"  →  "Stat Name: old ⇒ new"
+    # "Stat Name" + ": old =>" + "new"  ->  "Stat Name: old => new"
     joined: list[str] = []
     for line in cut:
         if line.startswith(":") and joined:
-            joined[-1] += line                     # "Stat Name: old ⇒" ou "Stat Name: old ⇒ new"
-        elif joined and joined[-1].rstrip().endswith("⇒"):
-            joined[-1] += " " + line              # "Stat Name: old ⇒ new"
+            joined[-1] += line                     # "Stat Name: old =>" ou "Stat Name: old => new"
+        elif joined and joined[-1].rstrip().endswith("=>"):
+            joined[-1] += " " + line              # "Stat Name: old => new"
         else:
             joined.append(line)
 
@@ -259,7 +260,7 @@ def parse_patch_html(html: str, patch: str) -> list[dict]:
             i += 1
             continue
 
-        # Candidato a entidade — confirma com lookahead de ate 20 linhas
+        # Candidato a entidade  confirma com lookahead de ate 20 linhas
         if _is_entity_candidate(line):
             has_upcoming = any(
                 _CHANGE_RE.search(joined[j])
@@ -345,6 +346,15 @@ def run(patch: str | None = None) -> None:
     url, html = find_and_fetch_patch(patch)
     logging.info("URL: %s", url)
 
+    # Extract the real patch version from the URL (e.g. "patch-26-10-notes" -> "26.10")
+    if url:
+        m = re.search(r"patch-(\d+)-(\d+)-notes", url, re.IGNORECASE)
+        if m:
+            derived = f"{m.group(1)}.{m.group(2)}"
+            if derived != patch:
+                logging.info("Versao corrigida de '%s' para '%s' (via URL)", patch, derived)
+                patch = derived
+
     if not html:
         logging.error("Nao foi possivel carregar a pagina do patch %s", patch)
         return
@@ -373,7 +383,7 @@ def debug_dump(patch: str | None = None) -> None:
     if not patch:
         patch = get_latest_patch()
     url, html = find_and_fetch_patch(patch)
-    logging.info("Debug dump para patch %s — URL: %s", patch, url)
+    logging.info("Debug dump para patch %s  URL: %s", patch, url)
     if not html:
         logging.error("Falha ao buscar HTML")
         return

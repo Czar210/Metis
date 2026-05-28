@@ -13,13 +13,13 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 def extrair_dados_timeline(timeline_json_data: dict) -> tuple[str | None, list, list]:
     """
-    Parsing puro da Timeline da Riot — sem I/O, sem banco.
-    Extrai fotografias temporais (10, 15, 20 min) e eventos críticos.
+    Parsing puro da Timeline da Riot sem I/O, sem banco.
+    Extrai fotografias temporais (10, 15, 20 min) e eventos criticos.
 
     Retorna:
         match_id: str | None
-        snapshots: list[dict]  — linhas para a tabela participant_snapshots
-        events:   list[dict]   — linhas para a tabela critical_events
+        snapshots: list[dict]   linhas para participant_snapshots
+        events:   list[dict]    linhas para critical_events
     """
     metadata = timeline_json_data.get("metadata", {})
     info = timeline_json_data.get("info", {})
@@ -55,33 +55,44 @@ def extrair_dados_timeline(timeline_json_data: dict) -> tuple[str | None, list, 
                     "champion_damage_done": damage_stats.get("totalDamageDoneToChampions", 0),
                 })
 
-        # Eventos críticos (Abates, Objetivos, Torres)
         for event in frame.get("events", []):
             e_type = event.get("type")
-            if e_type not in ["CHAMPION_KILL", "ELITE_MONSTER_KILL", "BUILDING_KILL"]:
+            if e_type not in [
+                "CHAMPION_KILL",
+                "ELITE_MONSTER_KILL",
+                "BUILDING_KILL",
+                "ITEM_PURCHASED",
+                "SKILL_LEVEL_UP",
+            ]:
                 continue
-            killer_id = event.get("killerId")
-            position = event.get("position", {})
 
+            position = event.get("position", {})
+            primary_participant_id = None
             secondary_participant_id = None
             assisting_participant_ids = None
             details = None
 
             if e_type == "CHAMPION_KILL":
+                killer_id = event.get("killerId")
+                primary_participant_id = id_to_puuid.get(killer_id) if killer_id else None
                 victim_id = event.get("victimId")
                 secondary_participant_id = id_to_puuid.get(victim_id) if victim_id else None
                 assist_ids = event.get("assistingParticipantIds", [])
-                assisting_participant_ids = [
-                    id_to_puuid[a] for a in assist_ids if a in id_to_puuid
-                ] or None
+                assisting_participant_ids = (
+                    [id_to_puuid[a] for a in assist_ids if a in id_to_puuid] or None
+                )
 
             elif e_type == "ELITE_MONSTER_KILL":
+                killer_id = event.get("killerId")
+                primary_participant_id = id_to_puuid.get(killer_id) if killer_id else None
                 details = {
                     "monsterType": event.get("monsterType"),
                     "monsterSubType": event.get("monsterSubType"),
                 }
 
             elif e_type == "BUILDING_KILL":
+                killer_id = event.get("killerId")
+                primary_participant_id = id_to_puuid.get(killer_id) if killer_id else None
                 details = {
                     "buildingType": event.get("buildingType"),
                     "laneType": event.get("laneType"),
@@ -89,11 +100,24 @@ def extrair_dados_timeline(timeline_json_data: dict) -> tuple[str | None, list, 
                     "teamId": event.get("teamId"),
                 }
 
+            elif e_type == "ITEM_PURCHASED":
+                p_id = event.get("participantId")
+                primary_participant_id = id_to_puuid.get(p_id) if p_id else None
+                details = {"itemId": event.get("itemId")}
+
+            elif e_type == "SKILL_LEVEL_UP":
+                p_id = event.get("participantId")
+                primary_participant_id = id_to_puuid.get(p_id) if p_id else None
+                details = {
+                    "skillSlot": event.get("skillSlot"),
+                    "levelUpType": event.get("levelUpType"),
+                }
+
             events_payload.append({
                 "match_id": match_id,
                 "timestamp": event.get("timestamp", 0),
                 "event_type": e_type,
-                "primary_participant_id": id_to_puuid.get(killer_id) if killer_id else None,
+                "primary_participant_id": primary_participant_id,
                 "secondary_participant_id": secondary_participant_id,
                 "assisting_participant_ids": assisting_participant_ids,
                 "details": details,
@@ -110,23 +134,25 @@ def processar_timeline(timeline_json_data: dict, db_client=None) -> bool:
 
     Args:
         timeline_json_data: JSON bruto da Riot Timeline API.
-        db_client: cliente Supabase injetável (facilita testes com mock).
-                   Se None, cria o cliente real usando variáveis de ambiente.
+        db_client: cliente Supabase injetavel (facilita testes com mock).
+                   Se None, cria o cliente real usando variaveis de ambiente.
     """
     match_id, snapshots_payload, events_payload = extrair_dados_timeline(timeline_json_data)
 
     if not match_id:
-        print("⚠️ Timeline inválida ou corrompida. Ignorando.")
+        print("AVISO: Timeline invalida ou corrompida. Ignorando.")
         return False
 
     if db_client is None:
         from supabase import create_client
         if not SUPABASE_URL or not SUPABASE_KEY:
-            print("❌ ERRO: Credenciais do Supabase não encontradas no .env!")
+            print("ERRO: Credenciais do Supabase nao encontradas no .env!")
             return False
         db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    logging.getLogger(__name__).debug(f"Timeline {match_id}: {len(snapshots_payload)} snapshots, {len(events_payload)} eventos")
+    logging.getLogger(__name__).debug(
+        "Timeline %s: %d snapshots, %d eventos", match_id, len(snapshots_payload), len(events_payload)
+    )
 
     try:
         if snapshots_payload:
@@ -140,7 +166,7 @@ def processar_timeline(timeline_json_data: dict, db_client=None) -> bool:
 
         return True
     except Exception as e:
-        logging.getLogger(__name__).error(f"Timeline {match_id}: {e}")
+        logging.getLogger(__name__).error("Timeline %s: %s", match_id, e)
         return False
 
 
@@ -148,7 +174,7 @@ BATCH_SIZE = int(os.environ.get("BATCH_SIZE", 50))
 
 
 def _get_processed_timeline_ids(db_client) -> set:
-    """Retorna match_ids de timelines já processadas, com paginação completa."""
+    """Retorna match_ids de timelines ja processadas, com paginacao completa."""
     try:
         ids: set[str] = set()
         page_size = 1000
@@ -168,7 +194,7 @@ def _get_processed_timeline_ids(db_client) -> set:
             offset += page_size
         return ids
     except Exception as e:
-        print(f"⚠️  Não foi possível buscar processed_timelines: {e}")
+        print(f"AVISO: Nao foi possivel buscar processed_timelines: {e}")
         return set()
 
 
@@ -176,7 +202,7 @@ def _marcar_timeline_processada(db_client, match_id: str) -> None:
     try:
         db_client.table("processed_timelines").upsert({"match_id": match_id}).execute()
     except Exception as e:
-        print(f"⚠️  Falha ao marcar timeline {match_id} como processada: {e}")
+        print(f"AVISO: Falha ao marcar timeline {match_id} como processada: {e}")
 
 
 def _listar_keys_r2(s3_client, bucket: str) -> list[str]:
@@ -195,15 +221,15 @@ def _baixar_e_descomprimir(s3_client, bucket: str, key: str) -> dict | None:
         with gzip.open(io.BytesIO(compressed), "rt", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"❌ Falha ao baixar {key}: {e}")
+        print(f"ERRO: Falha ao baixar {key}: {e}")
         return None
 
 
 def rodar_pipeline_timelines(s3_client=None, db_client=None, batch_size: int = BATCH_SIZE) -> dict:
     """
-    Loop Bronze → Prata para timelines.
-    Lista timelines do R2, filtra as já processadas, processa em batch.
-    Só processa timelines cujas partidas já estão na tabela processed_matches
+    Loop Bronze -> Prata para timelines.
+    Lista timelines do R2, filtra as ja processadas, processa em batch.
+    So processa timelines cujas partidas ja estao na tabela processed_matches
     (garante que match + timeline ficam em sincronia na camada Prata).
     """
     from scripts.utils.r2_storage import get_r2_client
@@ -212,22 +238,22 @@ def rodar_pipeline_timelines(s3_client=None, db_client=None, batch_size: int = B
     if s3_client is None:
         s3_client = get_r2_client()
     if s3_client is None:
-        print("❌ R2 client não disponível.")
+        print("ERRO: R2 client nao disponivel.")
         return {"processadas": 0, "descartadas": 0, "erros": 0}
 
     if db_client is None:
         if not SUPABASE_URL or not SUPABASE_KEY:
-            print("❌ Credenciais do Supabase não encontradas.")
+            print("ERRO: Credenciais do Supabase nao encontradas.")
             return {"processadas": 0, "descartadas": 0, "erros": 0}
         db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     bucket = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
 
-    print("📋 Buscando timelines já processadas...")
+    print("Buscando timelines ja processadas...")
     processed_ids = _get_processed_timeline_ids(db_client)
-    print(f"   {len(processed_ids)} timelines já processadas.")
+    print(f"   {len(processed_ids)} timelines ja processadas.")
 
-    print("📦 Listando timelines no R2...")
+    print("Listando timelines no R2...")
     all_keys = _listar_keys_r2(s3_client, bucket)
     print(f"   {len(all_keys)} arquivos encontrados.")
 
@@ -242,7 +268,7 @@ def rodar_pipeline_timelines(s3_client=None, db_client=None, batch_size: int = B
 
     for i, key in enumerate(batch, 1):
         match_id = key.replace("timelines/", "").replace(".json.gz", "")
-        print(f"[{i}/{len(batch)}] {match_id}", end=" — ")
+        print(f"[{i}/{len(batch)}] {match_id}", end="  ")
 
         timeline_json = _baixar_e_descomprimir(s3_client, bucket, key)
         if timeline_json is None:
@@ -258,7 +284,7 @@ def rodar_pipeline_timelines(s3_client=None, db_client=None, batch_size: int = B
 
         _marcar_timeline_processada(db_client, match_id)
 
-    print(f"\n📊 Resultado: {stats}")
+    print(f"Resultado: {stats}")
     return stats
 
 

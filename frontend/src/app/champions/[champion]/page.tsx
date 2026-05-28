@@ -46,7 +46,10 @@ type BuildItem = {
   pick_count: number
   win_count: number
   winrate_pct: number
+  wilson_score: number
   patch: string
+  category?: string | null
+  role?: string | null
 }
 
 type Matchup = {
@@ -153,7 +156,10 @@ export default function ChampionPage() {
   useEffect(() => {
     apiFetch('/api/v1/stats/patches')
       .then((r) => (r.ok ? r.json() : []))
-      .then(setPatches)
+      .then((list: string[]) => {
+        setPatches(list)
+        if (list.length > 0) setPatch(list[0])
+      })
       .catch(() => {})
   }, [])
 
@@ -688,8 +694,15 @@ function BuildsTab({ builds }: { builds: BuildItem[] }) {
     )
   }
 
-  // Top 6 por picks = build recomendada
-  const top6 = [...builds].sort((a, b) => b.pick_count - a.pick_count).slice(0, 6)
+  // Top 6 por wilson_score (ordem já vem do backend), max 1 bota
+  let bootsIncluded = false
+  const top6 = builds.filter((b) => {
+    if (b.category === 'BOOTS') {
+      if (bootsIncluded) return false
+      bootsIncluded = true
+    }
+    return true
+  }).slice(0, 6)
   const maxPicks = builds.reduce((m, b) => Math.max(m, b.pick_count), 0) || 1
 
   return (

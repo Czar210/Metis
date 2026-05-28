@@ -1,21 +1,21 @@
 """
-build_champion_csv_template.py — monta o CSV template pra classificação manual
-dos campeões por César (Fase 4 do plano v0.9.0).
+build_champion_csv_template.py  monta o CSV template pra classificao manual
+dos campees por Csar (Fase 4 do plano v0.9.0).
 
-Lê o championFull.json do DDragon e gera:
+L o championFull.json do DDragon e gera:
     data/champion_classification.csv
 
 Colunas preenchidas automaticamente:
-    champion_name   — chave da Riot (ex: "MonkeyKing", não "Wukong")
-    display_name    — nome exibido em pt-BR (ex: "Vayne")
-    title           — alcunha (ex: "A Caçadora Noturna")
-    ddragon_tags    — tags oficiais separadas por '|' (ex: "Marksman|Assassin")
-    short_blurb     — descrição curta (200 chars, pt-BR)
+    champion_name    chave da Riot (ex: "MonkeyKing", no "Wukong")
+    display_name     nome exibido em pt-BR (ex: "Vayne")
+    title            alcunha (ex: "A Caadora Noturna")
+    ddragon_tags     tags oficiais separadas por '|' (ex: "Marksman|Assassin")
+    short_blurb      descrio curta (200 chars, pt-BR)
 
-Colunas em branco, César preenche à mão:
-    primary_class      — uma das 10 classes da nossa taxonomia
-    secondary_classes  — extras, separados por '|' (opcional)
-    notes              — observações livres (opcional)
+Colunas em branco, Csar preenche  mo:
+    primary_class       uma das 10 classes da nossa taxonomia
+    secondary_classes   extras, separados por '|' (opcional)
+    notes               observaes livres (opcional)
 
 Uso:
     python -m scripts.processing.build_champion_csv_template
@@ -64,7 +64,7 @@ def clean_blurb(text: str) -> str:
     if not text:
         return ""
     flat = " ".join(text.split())
-    return flat[:200] + ("…" if len(flat) > 200 else "")
+    return flat[:200] + ("" if len(flat) > 200 else "")
 
 
 def main() -> int:
@@ -74,7 +74,7 @@ def main() -> int:
         logger.error(f"Falha ao buscar DDragon: {err}")
         return 1
 
-    logger.info(f"{len(data)} campeões recebidos da versão {VERSION}")
+    logger.info(f"{len(data)} campees recebidos da verso {VERSION}")
 
     rows = []
     for name, ch in sorted(data.items(), key=lambda kv: kv[1].get("name", kv[0]).lower()):
@@ -95,7 +95,7 @@ def main() -> int:
         writer.writeheader()
         writer.writerows(rows)
 
-    logger.info(f"✓ Escrito {len(rows)} rows em {OUTPUT}")
+    logger.info(f" Escrito {len(rows)} rows em {OUTPUT}")
     return 0
 
 

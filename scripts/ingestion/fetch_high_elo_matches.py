@@ -18,7 +18,7 @@ RIOT_API_KEY = os.environ.get("RIOT_API_KEY")
 
 MAX_WORKERS = 5
 RATE_LIMIT_PAUSE = 120
-# Limite de jogadores verificados por tier por run — evita timeout de 6h no Actions
+# Limite de jogadores verificados por tier por run  evita timeout de 6h no Actions
 MAX_PLAYERS_PER_TIER = int(os.environ.get("MAX_PLAYERS_PER_TIER", 500))
 
 def get_league_data(lol_watcher, server, tier):
@@ -28,21 +28,21 @@ def get_league_data(lol_watcher, server, tier):
             if tier == 'CHALLENGER': return lol_watcher.league.challenger_by_queue(server, 'RANKED_SOLO_5x5')
             if tier == 'GRANDMASTER': return lol_watcher.league.grandmaster_by_queue(server, 'RANKED_SOLO_5x5')
             if tier == 'MASTER': return lol_watcher.league.masters_by_queue(server, 'RANKED_SOLO_5x5')
-            # CORREÇÃO AQUI: O método correto é 'entries', não 'entries_by_rank'
+            # CORREO AQUI: O mtodo correto  'entries', no 'entries_by_rank'
             if tier == 'DIAMOND': return lol_watcher.league.entries(server, 'RANKED_SOLO_5x5', 'DIAMOND', 'I')
         except ApiError as e:
             if e.response.status_code == 403:
-                print("❌ ERRO 403: SUA CHAVE DA RIOT EXPIROU!")
+                print("ERRO: ERRO 403: SUA CHAVE DA RIOT EXPIROU!")
                 return None
-            print(f"⚠️ Tentativa {tentativa+1} falhou. Erro: {e}. Retentando em 5s...")
+            print(f"AVISO: Tentativa {tentativa+1} falhou. Erro: {e}. Retentando em 5s...")
             time.sleep(5)
         except Exception as e:
-            print(f"⚠️ Erro inesperado: {e}")
+            print(f"AVISO: Erro inesperado: {e}")
             time.sleep(5)
     return None
 
 def process_single_match(match_id, routing_region, lol_watcher, s3_client):
-    """Executa o download e upload de uma única partida."""
+    """Executa o download e upload de uma nica partida."""
     if check_file_exists(s3_client, "matches", match_id):
         return "EXISTE"
     try:
@@ -60,18 +60,18 @@ def process_single_match(match_id, routing_region, lol_watcher, s3_client):
         return "ERRO"
 
 def fetch_high_elo_turbo(server, target_per_tier=250):
-    print(f"🌍 Iniciando Varredura Turbo em {server}...")
-    print(f"⚙️  Config: target={target_per_tier} partidas/tier | max_players={MAX_PLAYERS_PER_TIER}/tier")
+    print(f" Iniciando Varredura Turbo em {server}...")
+    print(f"  Config: target={target_per_tier} partidas/tier | max_players={MAX_PLAYERS_PER_TIER}/tier")
 
     if not RIOT_API_KEY:
-        print("❌ ERRO CRÍTICO: RIOT_API_KEY não encontrada no arquivo .env!")
+        print("ERRO: ERRO CRTICO: RIOT_API_KEY no encontrada no arquivo .env!")
         return
 
     lol_watcher = LolWatcher(RIOT_API_KEY)
     s3 = get_r2_client()
     routing_region = get_routing_region(server)
-    # Diamond removido do loop diário — 9k+ jogadores estouram o timeout de 6h do Actions.
-    # Diamond roda separadamente via workflow_dispatch quando necessário.
+    # Diamond removido do loop dirio  9k+ jogadores estouram o timeout de 6h do Actions.
+    # Diamond roda separadamente via workflow_dispatch quando necessrio.
     tiers = ['CHALLENGER', 'GRANDMASTER', 'MASTER']
 
     for tier in tiers:
@@ -79,19 +79,19 @@ def fetch_high_elo_turbo(server, target_per_tier=250):
         data = get_league_data(lol_watcher, server, tier)
 
         if not data:
-            print(f"🤷‍♂️ Nenhum dado retornado para {tier}. Pulando...")
+            print(f" Nenhum dado retornado para {tier}. Pulando...")
             continue
 
         entries = data['entries'] if isinstance(data, dict) else data
 
-        # O método 'entries' do Diamante às vezes retorna uma lista direta, precisamos tratar
+        # O mtodo 'entries' do Diamante s vezes retorna uma lista direta, precisamos tratar
         if type(data) is list:
             entries = data
 
-        print(f"📊 Encontrados {len(entries)} jogadores na liga {tier}!")
+        print(f"Resultado: Encontrados {len(entries)} jogadores na liga {tier}!")
         random.shuffle(entries)
         entries = entries[:MAX_PLAYERS_PER_TIER]  # cap por run
-        print(f"🎯 Verificando até {len(entries)} jogadores nesta tier.")
+        print(f" Verificando at {len(entries)} jogadores nesta tier.")
 
         coletadas = 0
         idx = 0
@@ -99,23 +99,23 @@ def fetch_high_elo_turbo(server, target_per_tier=250):
         while coletadas < target_per_tier and idx < len(entries):
             player = entries[idx]
 
-            # Pegamos PUUID ou SummonerId com segurança
+            # Pegamos PUUID ou SummonerId com segurana
             puuid = player.get('puuid')
             s_id = player.get('summonerId')
 
             try:
-                # Se a Riot não deu o puuid, buscamos usando o summonerId
+                # Se a Riot no deu o puuid, buscamos usando o summonerId
                 if not puuid and s_id:
                     summ = lol_watcher.summoner.by_id(server, s_id)
                     puuid = summ['puuid']
 
-                # Se ainda assim não tiver, pulamos
+                # Se ainda assim no tiver, pulamos
                 if not puuid:
-                    print(f"👻 Jogador {idx+1} é um fantasma. Pulando...", end="\r")
+                    print(f" Jogador {idx+1}  um fantasma. Pulando...", end="\r")
                     idx += 1
                     continue
 
-                print(f"🔍 [{idx+1}/{len(entries)}] Analisando jogador (PUUID: {puuid[:8]})...", end="\r")
+                print(f" [{idx+1}/{len(entries)}] Analisando jogador (PUUID: {puuid[:8]})...", end="\r")
 
                 m_list = lol_watcher.match.matchlist_by_puuid(routing_region, puuid, count=3, type="ranked")
 
@@ -130,14 +130,14 @@ def fetch_high_elo_turbo(server, target_per_tier=250):
                 coletadas += novas
 
                 if novas > 0:
-                    print(f"\n✅ [{coletadas}/{target_per_tier}] Jogador {idx+1} ({puuid[:8]}): +{novas} partidas.")
+                    print(f"\nOK: [{coletadas}/{target_per_tier}] Jogador {idx+1} ({puuid[:8]}): +{novas} partidas.")
 
                 if "LIMIT" in results:
-                    print(f"\n⏳ Rate Limit atingido! Pausando {RATE_LIMIT_PAUSE}s...")
+                    print(f"\n Rate Limit atingido! Pausando {RATE_LIMIT_PAUSE}s...")
                     time.sleep(RATE_LIMIT_PAUSE)
 
             except Exception as e:
-                print(f"\n❌ Erro no jogador {idx+1}: {e}")
+                print(f"\nERRO no jogador {idx+1}: {e}")
                 time.sleep(1)
 
             idx += 1

@@ -64,21 +64,92 @@ class TestProcessTimelines(unittest.TestCase):
         TESTE 2: Verifica a inserção no banco SEM SUJAR o Supabase!
         Usamos o MagicMock para ser nosso "Dublê".
         """
-        # Criamos um cliente falso do Supabase
         mock_supabase_client = MagicMock()
-
-        # Rodamos a função principal injetando o nosso cliente falso
         sucesso = processar_timeline(self.mock_timeline, db_client=mock_supabase_client)
 
-        # O script tem que retornar True
         self.assertTrue(sucesso)
-
-        # VERIFICAÇÃO DE OURO: O script tentou salvar os snapshots no supabase?
         mock_supabase_client.table.assert_any_call("participant_snapshots")
         mock_supabase_client.table.assert_any_call("critical_events")
-
-        # Verifica se o .upsert().execute() foi chamado para o db_client falso
         self.assertTrue(mock_supabase_client.table().upsert().execute.called)
+
+    def test_item_purchased_extraido(self):
+        """TESTE 3: ITEM_PURCHASED gera evento com itemId no details."""
+        timeline = {
+            "metadata": {"matchId": "BR1_ITEM_TEST"},
+            "info": {
+                "participants": [{"participantId": 1, "puuid": "puuid_1"}],
+                "frames": [{
+                    "timestamp": 120000,
+                    "participantFrames": {},
+                    "events": [{
+                        "type": "ITEM_PURCHASED",
+                        "participantId": 1,
+                        "itemId": 3157,
+                        "timestamp": 120500,
+                        "position": {"x": 100, "y": 200},
+                    }]
+                }]
+            }
+        }
+        match_id, snapshots, events = extrair_dados_timeline(timeline)
+
+        self.assertEqual(match_id, "BR1_ITEM_TEST")
+        self.assertEqual(len(snapshots), 0)
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["event_type"], "ITEM_PURCHASED")
+        self.assertEqual(ev["primary_participant_id"], "puuid_1")
+        self.assertEqual(ev["details"]["itemId"], 3157)
+        self.assertIsNone(ev["secondary_participant_id"])
+
+    def test_skill_level_up_extraido(self):
+        """TESTE 4: SKILL_LEVEL_UP gera evento com skillSlot e levelUpType no details."""
+        timeline = {
+            "metadata": {"matchId": "BR1_SKILL_TEST"},
+            "info": {
+                "participants": [{"participantId": 2, "puuid": "puuid_2"}],
+                "frames": [{
+                    "timestamp": 60000,
+                    "participantFrames": {},
+                    "events": [{
+                        "type": "SKILL_LEVEL_UP",
+                        "participantId": 2,
+                        "skillSlot": 1,
+                        "levelUpType": "NORMAL",
+                        "timestamp": 60100,
+                        "position": {},
+                    }]
+                }]
+            }
+        }
+        match_id, snapshots, events = extrair_dados_timeline(timeline)
+
+        self.assertEqual(match_id, "BR1_SKILL_TEST")
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["event_type"], "SKILL_LEVEL_UP")
+        self.assertEqual(ev["primary_participant_id"], "puuid_2")
+        self.assertEqual(ev["details"]["skillSlot"], 1)
+        self.assertEqual(ev["details"]["levelUpType"], "NORMAL")
+
+    def test_eventos_desconhecidos_ignorados(self):
+        """TESTE 5: Tipos de evento nao mapeados nao geram linhas."""
+        timeline = {
+            "metadata": {"matchId": "BR1_UNKNOWN"},
+            "info": {
+                "participants": [{"participantId": 1, "puuid": "puuid_1"}],
+                "frames": [{
+                    "timestamp": 0,
+                    "participantFrames": {},
+                    "events": [
+                        {"type": "WARD_PLACED", "participantId": 1, "timestamp": 100},
+                        {"type": "LEVEL_UP", "participantId": 1, "timestamp": 200},
+                    ]
+                }]
+            }
+        }
+        _, _, events = extrair_dados_timeline(timeline)
+        self.assertEqual(len(events), 0)
 
 if __name__ == '__main__':
     unittest.main()

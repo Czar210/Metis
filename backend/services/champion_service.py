@@ -9,8 +9,32 @@ Endpoints suportados:
 """
 
 from __future__ import annotations
+
+import math
 from collections import defaultdict
 from typing import Any
+
+_EXCLUDED_CATEGORIES = {"STARTER", "CONSUMABLE", "COMPONENT"}
+
+
+def _wilson_lower(picks: int, wins: int, z: float = 1.96) -> float:
+    """Wilson score lower bound — estimativa conservadora de winrate real."""
+    if picks == 0:
+        return 0.0
+    p = wins / picks
+    n = picks
+    return (p + z * z / (2 * n) - z * math.sqrt((p * (1 - p) + z * z / (4 * n)) / n)) / (1 + z * z / n)
+
+
+def _load_item_categories(db_client) -> dict[int, str | None]:
+    """Retorna {item_id: category} carregado da tabela items."""
+    rows = (
+        db_client.table("items")
+        .select("item_id, category")
+        .execute()
+        .data or []
+    )
+    return {int(r["item_id"]): r.get("category") for r in rows}
 
 
 # ── Overview ──────────────────────────────────────────────────────────────────
@@ -85,26 +109,57 @@ def buscar_builds(
     db_client,
     champion: str,
     patch: str | None = None,
+    role: str | None = None,
     min_picks: int = 3,
 ) -> list[dict[str, Any]]:
     """
-    Retorna os itens mais frequentes do campeão via view champion_item_stats.
+    Retorna os itens mais frequentes do campeão com Wilson score.
 
-    Campos retornados: item_id, item_name, pick_count, win_count, winrate_pct, patch.
-    Ordenado por pick_count desc.
+    Filtros opcionais: patch, role.
+    Exclui STARTER e CONSUMABLE via join com tabela items.
+    Ordenado por wilson_score desc (estimativa conservadora de winrate real).
+
+    Campos retornados: item_id, item_name, patch, role, pick_count, win_count,
+                       winrate_pct, wilson_score, category.
     """
+    categories = _load_item_categories(db_client)
+
     query = (
-        db_client.table("champion_item_stats")
-        .select("item_id, item_name, pick_count, win_count, winrate_pct, patch")
+        db_client.table("champion_builds")
+        .select("item_id, item_name, patch, role, pick_count, win_count")
         .ilike("champion_name", champion)
     )
-
     if patch:
         query = query.eq("patch", patch)
+    if role:
+        query = query.eq("role", role.upper())
 
-    rows: list[dict] = query.order("pick_count", desc=True).limit(20).execute().data or []
+    rows: list[dict] = query.execute().data or []
 
-    return [r for r in rows if (r.get("pick_count") or 0) >= min_picks]
+    result: list[dict[str, Any]] = []
+    for r in rows:
+        picks = r.get("pick_count") or 0
+        wins = r.get("win_count") or 0
+        if picks < min_picks:
+            continue
+        item_id = r["item_id"]
+        category = categories.get(item_id)
+        if category in _EXCLUDED_CATEGORIES:
+            continue
+        result.append({
+            "item_id":      item_id,
+            "item_name":    r.get("item_name") or f"Item {item_id}",
+            "patch":        r.get("patch"),
+            "role":         r.get("role"),
+            "pick_count":   picks,
+            "win_count":    wins,
+            "winrate_pct":  round(wins / picks * 100, 1) if picks else 0.0,
+            "wilson_score": round(_wilson_lower(picks, wins) * 100, 1),
+            "category":     category,
+        })
+
+    result.sort(key=lambda x: x["wilson_score"], reverse=True)
+    return result
 
 
 # ── Matchups ──────────────────────────────────────────────────────────────────

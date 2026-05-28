@@ -28,12 +28,12 @@ REGION_MAP = {
 }
 
 def get_pros_from_bronze(s3_client):
-    """Lê a lista de pro players capturada da Wiki."""
+    """L a lista de pro players capturada da Wiki."""
     try:
         response = s3_client.get_object(Bucket=BUCKET_NAME, Key="pros/leaguepedia_active_pros.json")
         return json.loads(response['Body'].read().decode('utf-8'))
     except Exception as e:
-        print(f"❌ Erro ao ler lista de Pros: {e}")
+        print(f"ERRO ao ler lista de Pros: {e}")
         return []
 
 def get_blacklist(s3_client):
@@ -45,7 +45,7 @@ def get_blacklist(s3_client):
         return set()
 
 def save_blacklist(s3_client, blacklist_set):
-    """Salva a memória de erros no R2."""
+    """Salva a memria de erros no R2."""
     s3_client.put_object(
         Bucket=BUCKET_NAME, Key="pros/blacklist_404.json",
         Body=json.dumps(list(blacklist_set)).encode('utf-8'),
@@ -67,7 +67,7 @@ def fetch_pro_matches(target_matches_per_account=2):
     total_alvos = len(pros_list)
     new_404s = False
 
-    print(f"🌍 Ingestão Integral ({total_alvos} alvos) | Blacklist: {len(blacklist)} nicks")
+    print(f" Ingesto Integral ({total_alvos} alvos) | Blacklist: {len(blacklist)} nicks")
 
     for idx, pro in enumerate(pros_list):
         nome_oficial = pro.get("id", "Desconhecido")
@@ -84,13 +84,13 @@ def fetch_pro_matches(target_matches_per_account=2):
         if not contas_para_tentar:
             contas_para_tentar.append(('BR', f"{nome_oficial}#BR1"))
 
-        # Pula times amadores/universitários — consomem cota sem valor analítico
+        # Pula times amadores/universitrios  consomem cota sem valor analtico
         time_lower = (time_do_pro or '').lower()
         if any(kw in time_lower for kw in TEAM_BLOCKLIST_KEYWORDS):
-            print(f"\n[{idx+1}/{total_alvos}] ⏭️ {nome_oficial} | {time_do_pro} — BLOQUEADO (universitário/amateur)")
+            print(f"\n[{idx+1}/{total_alvos}]  {nome_oficial} | {time_do_pro}  BLOQUEADO (universitrio/amateur)")
             continue
 
-        print(f"\n[{idx+1}/{total_alvos}] 🕵️ {nome_oficial} | 🛡️ {time_do_pro} | ⚔️ {rota_do_pro}")
+        print(f"\n[{idx+1}/{total_alvos}]  {nome_oficial} |  {time_do_pro} |  {rota_do_pro}")
 
         for servidor_wiki, conta in contas_para_tentar:
             continente = REGION_MAP.get(servidor_wiki)
@@ -109,33 +109,33 @@ def fetch_pro_matches(target_matches_per_account=2):
                 match_ids = lol_watcher.match.matchlist_by_puuid(continente, puuid, count=target_matches_per_account, type="ranked")
 
                 if not match_ids:
-                    print(f"    🤷‍♂️ Sem ranqueadas recentes.")
+                    print(f"     Sem ranqueadas recentes.")
                     continue
 
-                # 🚀 O PULO DO GATO:
-                # Se a primeira partida (mais recente) já existe, todas as outras
-                # (que são mais antigas) também estarão lá. Podemos pular este jogador.
+                #  O PULO DO GATO:
+                # Se a primeira partida (mais recente) j existe, todas as outras
+                # (que so mais antigas) tambm estaro l. Podemos pular este jogador.
                 if check_file_exists(s3, "matches", match_ids):
-                    print(f"    ⏭️ Jogador atualizado. Partida mais recente ({match_ids}) já consta no R2.")
-                    break # Sai do loop de contas deste Pro e vai para o próximo jogador
+                    print(f"     Jogador atualizado. Partida mais recente ({match_ids}) j consta no R2.")
+                    break # Sai do loop de contas deste Pro e vai para o prximo jogador
 
                 for m_id in match_ids:
                     if not check_file_exists(s3, "matches", m_id):
                         m_data = lol_watcher.match.by_id(continente, m_id)
                         if not compress_and_upload(m_data, "matches", m_id, s3):
-                            print(f"    ⚠️ Falha no upload de match {m_id}, pulando timeline.")
+                            print(f"    AVISO: Falha no upload de match {m_id}, pulando timeline.")
                             continue
                         t_data = lol_watcher.match.timeline_by_match(continente, m_id)
                         if not compress_and_upload(t_data, "timelines", m_id, s3):
-                            print(f"    ⚠️ Falha no upload de timeline {m_id}.")
+                            print(f"    AVISO: Falha no upload de timeline {m_id}.")
                         time.sleep(1.2)
 
-                print(f"  🎯 Partidas capturadas!")
+                print(f"   Partidas capturadas!")
                 break
 
             except ApiError as e:
                 if e.response.status_code == 404:
-                    print(f"    🥷 404 Detectado: Adicionando à blacklist.")
+                    print(f"     404 Detectado: Adicionando  blacklist.")
                     blacklist.add(conta_limpa)
                     new_404s = True
                 elif e.response.status_code == 429:

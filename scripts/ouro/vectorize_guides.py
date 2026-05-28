@@ -26,12 +26,13 @@ MIN_CHUNK_CHARS = 40
 
 def get_current_patch() -> str:
     try:
+        import datetime
         versions = requests.get(
             "https://ddragon.leagueoflegends.com/api/versions.json", timeout=10
         ).json()
-        raw = versions[0]  # ex: "16.7.1"
-        parts = raw.split(".")
-        return f"{parts[0]}.{parts[1]}"  # ex: "16.7"
+        minor   = versions[0].split(".")[1]
+        year_2d = str(datetime.date.today().year)[-2:]
+        return f"{year_2d}.{minor}"
     except Exception as e:
         logging.warning("Falha ao buscar patch atual: %s", e)
         return ""
@@ -39,9 +40,9 @@ def get_current_patch() -> str:
 
 def chunk_text(text: str) -> list[str]:
     """
-    Chunking inteligente em três camadas:
-    1. Agrupa linhas (\n simples) de forma gulosa até MAX_CHUNK_CHARS
-    2. Linhas individualmente grandes são divididas por sentença
+    Chunking inteligente em trs camadas:
+    1. Agrupa linhas (\n simples) de forma gulosa at MAX_CHUNK_CHARS
+    2. Linhas individualmente grandes so divididas por sentena
     3. Garante chunks entre MIN_CHUNK_CHARS e MAX_CHUNK_CHARS
     """
     lines = [l.strip() for l in text.split("\n") if l.strip()]
@@ -51,7 +52,7 @@ def chunk_text(text: str) -> list[str]:
 
     for line in lines:
         if len(line) > MAX_CHUNK_CHARS:
-            # Linha gigante: salva o current e divide por sentença
+            # Linha gigante: salva o current e divide por sentena
             if len(current) >= MIN_CHUNK_CHARS:
                 chunks.append(current)
                 current = ""
@@ -66,7 +67,7 @@ def chunk_text(text: str) -> list[str]:
             # Linha cabe no chunk atual
             current = (current + " " + line).strip()
         else:
-            # Chunk cheio: salva e começa novo
+            # Chunk cheio: salva e comea novo
             if len(current) >= MIN_CHUNK_CHARS:
                 chunks.append(current)
             current = line
@@ -136,7 +137,7 @@ def vectorize_guide(guide: dict, source_file: str, gemini_client, db_client, pat
         sub_chunks = chunk_text(content)
 
         for chunk_index, chunk in enumerate(sub_chunks):
-            embed_input = f"Campeão: {champion}. {title}: {chunk}"
+            embed_input = f"Campeo: {champion}. {title}: {chunk}"
             embedding = embed_text(gemini_client, embed_input)
             time.sleep(SLEEP_BETWEEN)
 
@@ -172,7 +173,7 @@ def run() -> None:
 
     s3 = get_r2_client()
     if not s3:
-        raise RuntimeError("R2 client não inicializado — verifique as credenciais.")
+        raise RuntimeError("R2 client no inicializado  verifique as credenciais.")
 
     db     = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
     gemini = genai.Client(
@@ -185,7 +186,7 @@ def run() -> None:
     pending   = [f for f in all_files if f not in processed]
 
     logging.info(
-        "Guides no R2: %d | Já vetorizados: %d | Pendentes: %d",
+        "Guides no R2: %d | J vetorizados: %d | Pendentes: %d",
         len(all_files), len(processed), len(pending),
     )
 
@@ -201,7 +202,7 @@ def run() -> None:
         total += n
         logging.info("[%s] %d chunks inseridos.", file_key, n)
 
-    logging.info("Concluído — %d chunks no total.", total)
+    logging.info("Concludo  %d chunks no total.", total)
 
 
 if __name__ == "__main__":

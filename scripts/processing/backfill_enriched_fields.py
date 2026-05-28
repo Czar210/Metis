@@ -1,15 +1,15 @@
 """
-backfill_enriched_fields.py — Backfill dos campos enriquecidos em match_participants
+backfill_enriched_fields.py  Backfill dos campos enriquecidos em match_participants
 
-Problema: antes da v0.6.4, o pipeline batch (process_matches.py) não extraía
+Problema: antes da v0.6.4, o pipeline batch (process_matches.py) no extraa
 items, runas, CS/m, team_id, summoner spells e champion_level. Este script
-lê o JSON bruto do R2 de cada partida não enriquecida e atualiza o Supabase.
+l o JSON bruto do R2 de cada partida no enriquecida e atualiza o Supabase.
 
-Estratégia:
+Estratgia:
   1. Buscar no Supabase os match_ids distintos onde `items IS NULL`
   2. Para cada match_id, baixar o .json.gz do R2 (matches/{match_id}.json.gz)
-  3. Extrair somente os 12 campos enriquecidos por participante (função pura)
-  4. Upsert em match_participants — só os campos novos, sem sobrescrever os antigos
+  3. Extrair somente os 12 campos enriquecidos por participante (funo pura)
+  4. Upsert em match_participants  s os campos novos, sem sobrescrever os antigos
   5. Reportar progresso com contadores
 
 Uso:
@@ -28,7 +28,7 @@ import logging
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Garante que a raiz do projeto está no path ao rodar o script diretamente
+# Garante que a raiz do projeto est no path ao rodar o script diretamente
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
 load_dotenv()
@@ -44,9 +44,9 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 BUCKET_NAME  = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Extração pura — somente os campos enriquecidos
-# ─────────────────────────────────────────────────────────────────────────────
+# 
+# Extrao pura  somente os campos enriquecidos
+# 
 
 def _extrair_campos_enriquecidos(match_json: dict) -> list[dict]:
     """
@@ -69,10 +69,10 @@ def _extrair_campos_enriquecidos(match_json: dict) -> list[dict]:
         if not puuid or puuid.startswith("BOT_") or p.get("botPlayer", False):
             continue
 
-        # ── Items (slots 0-6) ─────────────────────────────────────────────
+        #  Items (slots 0-6) 
         items = [p.get(f"item{i}", 0) for i in range(7)]
 
-        # ── Runas ─────────────────────────────────────────────────────────
+        #  Runas 
         perks        = p.get("perks", {})
         styles       = perks.get("styles", [])
         primary      = styles[0] if styles else {}
@@ -80,7 +80,7 @@ def _extrair_campos_enriquecidos(match_json: dict) -> list[dict]:
         primary_sels = primary.get("selections") or []
         keystone     = primary_sels[0].get("perk") if primary_sels else None
 
-        # ── CS/m ──────────────────────────────────────────────────────────
+        #  CS/m 
         total_cs = p.get("totalMinionsKilled", 0) + p.get("neutralMinionsKilled", 0)
         cspm     = round(total_cs / (game_duration / 60), 2) if game_duration > 0 else 0.0
 
@@ -104,20 +104,20 @@ def _extrair_campos_enriquecidos(match_json: dict) -> list[dict]:
     return rows
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Supabase — buscar match_ids pendentes (paginado)
-# ─────────────────────────────────────────────────────────────────────────────
+# 
+# Supabase  buscar match_ids pendentes (paginado)
+# 
 
 def _buscar_match_ids_pendentes(db_client) -> list[str]:
     """
     Retorna lista de match_ids distintos onde `items IS NULL`.
-    Usa paginação para não ser limitado pelo teto do PostgREST.
+    Usa paginao para no ser limitado pelo teto do PostgREST.
     """
     ids: list[str] = []
     page_size = 1000
     offset    = 0
 
-    logger.info("Buscando match_ids com campos não enriquecidos no Supabase...")
+    logger.info("Buscando match_ids com campos no enriquecidos no Supabase...")
 
     while True:
         result = (
@@ -150,9 +150,9 @@ def _buscar_match_ids_pendentes(db_client) -> list[str]:
     return unique
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# R2 — download + descompressão
-# ─────────────────────────────────────────────────────────────────────────────
+# 
+# R2  download + descompresso
+# 
 
 def _baixar_json(s3_client, match_id: str) -> dict | None:
     key = f"matches/{match_id}.json.gz"
@@ -168,9 +168,9 @@ def _baixar_json(s3_client, match_id: str) -> dict | None:
         return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 # Loop principal
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 
 def rodar_backfill(
     s3_client=None,
@@ -185,7 +185,7 @@ def rodar_backfill(
         s3_client:  cliente boto3 S3/R2. Criado automaticamente se None.
         db_client:  cliente Supabase. Criado automaticamente se None.
         batch_size: quantas partidas processar por vez antes de fazer upsert.
-        dry_run:    se True, não escreve nada no Supabase.
+        dry_run:    se True, no escreve nada no Supabase.
 
     Retorna: {"ok": int, "sem_r2": int, "erros": int, "total": int}
     """
@@ -195,23 +195,23 @@ def rodar_backfill(
     if s3_client is None:
         s3_client = get_r2_client()
     if s3_client is None:
-        logger.error("R2 client não disponível — verifique as variáveis de ambiente.")
+        logger.error("R2 client no disponvel  verifique as variveis de ambiente.")
         return {"ok": 0, "sem_r2": 0, "erros": 0, "total": 0}
 
     if db_client is None:
         if not SUPABASE_URL or not SUPABASE_KEY:
-            logger.error("SUPABASE_URL e SUPABASE_KEY obrigatórios no .env")
+            logger.error("SUPABASE_URL e SUPABASE_KEY obrigatrios no .env")
             return {"ok": 0, "sem_r2": 0, "erros": 0, "total": 0}
         db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     if dry_run:
-        logger.info("*** DRY RUN — nenhum dado será gravado no Supabase ***")
+        logger.info("*** DRY RUN  nenhum dado ser gravado no Supabase ***")
 
     match_ids = _buscar_match_ids_pendentes(db_client)
     total = len(match_ids)
 
     if total == 0:
-        logger.info("Nenhuma partida pendente. Tudo já está enriquecido!")
+        logger.info("Nenhuma partida pendente. Tudo j est enriquecido!")
         return {"ok": 0, "sem_r2": 0, "erros": 0, "total": 0}
 
     stats = {"ok": 0, "sem_r2": 0, "erros": 0, "total": total}
@@ -237,18 +237,18 @@ def rodar_backfill(
 
         match_json = _baixar_json(s3_client, match_id)
         if match_json is None:
-            logger.warning(f"  [{pct}] {match_id} — não encontrado no R2, pulando.")
+            logger.warning(f"  [{pct}] {match_id}  no encontrado no R2, pulando.")
             stats["sem_r2"] += 1
             continue
 
         rows = _extrair_campos_enriquecidos(match_json)
         if not rows:
-            logger.warning(f"  [{pct}] {match_id} — JSON inválido ou sem participantes.")
+            logger.warning(f"  [{pct}] {match_id}  JSON invlido ou sem participantes.")
             stats["erros"] += 1
             continue
 
         upsert_buffer.extend(rows)
-        logger.info(f"  [{pct}] {match_id} — {len(rows)} participantes extraídos.")
+        logger.info(f"  [{pct}] {match_id}  {len(rows)} participantes extrados.")
 
         # Flush quando bate o batch_size
         if len(upsert_buffer) >= batch_size * 10:  # ~10 participantes por partida
@@ -262,15 +262,15 @@ def rodar_backfill(
         stats["ok"] += total - stats["sem_r2"] - stats["erros"]
 
     logger.info(
-        f"\n{'[DRY RUN] ' if dry_run else ''}Backfill concluído: "
+        f"\n{'[DRY RUN] ' if dry_run else ''}Backfill concludo: "
         f"{stats['ok']} ok | {stats['sem_r2']} sem R2 | {stats['erros']} erros | {total} total"
     )
     return stats
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 # Entrypoint
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Backfill de campos enriquecidos em match_participants")

@@ -18,8 +18,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 # ── Cache simples em memoria com TTL ─────────────────────────────────────────
-# Persiste enquanto o processo estiver rodando (Railway mantem UP 24h+).
-# Chave = string descrevendo os filtros. Valor = (timestamp, dados).
 _CACHE_TTL = 60 * 60 * 24  # 24 horas em segundos
 _cache: dict[str, tuple[float, Any]] = {}
 
@@ -56,6 +54,100 @@ def buscar_patches_disponiveis(db_client) -> list[str]:
     return patches
 
 
+def _build_tierlist_from_cache(
+    cache_data: dict,
+    role: str | None,
+    server: str | None,
+    min_matches: int,
+    min_role_share: float,
+    min_matches_relative: int,
+) -> list[dict[str, Any]] | None:
+    """
+    Monta a tier list a partir dos dados pre-computados do R2.
+    Retorna None se server for especificado (nao ha dados por servidor no cache).
+    """
+    if server:
+        return None
+
+    ROLE_LABELS = {
+        "TOP": "Top", "JUNGLE": "Jungle", "MIDDLE": "Mid",
+        "BOTTOM": "ADC", "UTILITY": "Suporte",
+    }
+
+    total_unique_matches = cache_data.get("total_unique_matches") or 1
+    ban_counts: dict[str, int] = cache_data.get("ban_counts") or {}
+    champions_raw: list[dict] = cache_data.get("champions") or []
+
+    result_list: list[dict[str, Any]] = []
+    for c in champions_raw:
+        champ_role = c.get("role", "UNKNOWN")
+        if role and champ_role != role.upper():
+            continue
+
+        total = c.get("total_matches", 0)
+        wins = c.get("wins", 0)
+        role_share = c.get("role_share", 0.0)
+
+        passes_abs = total >= min_matches
+        passes_nicho = (role_share >= min_role_share * 100) and total >= min_matches_relative
+        if not (passes_abs or passes_nicho):
+            continue
+
+        champion = c["champion"]
+        avg_deaths = c.get("avg_deaths") or 0
+        kda = round((c.get("avg_kills", 0) + c.get("avg_assists", 0)) / max(avg_deaths, 0.1), 2)
+
+        result_list.append({
+            "champion": champion,
+            "role": champ_role,
+            "role_label": ROLE_LABELS.get(champ_role, champ_role),
+            "total_matches": total,
+            "winrate": round(wins / total * 100, 2) if total else 0.0,
+            "pickrate": round(total / total_unique_matches * 100, 2),
+            "banrate": round(ban_counts.get(champion, 0) / total_unique_matches * 100, 2),
+            "role_share": role_share,
+            "kda": kda,
+            "avg_kills": c.get("avg_kills", 0),
+            "avg_deaths": avg_deaths,
+            "avg_assists": c.get("avg_assists", 0),
+            "avg_gold": c.get("avg_gold", 0),
+            "avg_damage_per_minute": c.get("avg_damage_per_minute", 0),
+        })
+
+    result_list.sort(key=lambda x: x["winrate"], reverse=True)
+
+    by_role: dict[str, list[dict]] = defaultdict(list)
+    for c in result_list:
+        by_role[c["role"]].append(c)
+
+    def _assign_tiers(items: list[dict]) -> None:
+        if not items:
+            return
+        wrs = [c["winrate"] for c in items]
+        n = len(wrs)
+        mean = sum(wrs) / n
+        variance = sum((w - mean) ** 2 for w in wrs) / n if n > 1 else 0.0
+        stddev = variance ** 0.5
+        for c in items:
+            if stddev == 0:
+                c["z_score"] = 0.0
+                c["tier"] = "A"
+                continue
+            z = (c["winrate"] - mean) / stddev
+            c["z_score"] = round(z, 2)
+            if z >= 2.0:    c["tier"] = "S+"
+            elif z >= 1.0:  c["tier"] = "S"
+            elif z >= 0.0:  c["tier"] = "A"
+            elif z >= -1.0: c["tier"] = "B"
+            elif z >= -2.0: c["tier"] = "C"
+            else:           c["tier"] = "D"
+
+    for role_items in by_role.values():
+        _assign_tiers(role_items)
+
+    return result_list
+
+
 def buscar_stats_campeao(
     db_client,
     champion: str,
@@ -68,7 +160,52 @@ def buscar_stats_campeao(
     Agrega estatísticas de um campeão a partir do Supabase.
 
     Retorna sempre 200 — se total_matches < min_matches, retorna stats=None.
+    Tenta servir do cache R2 (via stats_cache) quando patch e especificado e server nao.
     """
+    # ── Tentativa via cache R2 ─────────────────────────────────────────
+    if patch and not server:
+        try:
+            from backend.services.stats_cache import get_champion_stats
+            cache_data = get_champion_stats(patch)
+            if cache_data:
+                champions_raw = cache_data.get("champions") or []
+                champ_lower = champion.lower()
+                matching = [
+                    c for c in champions_raw
+                    if c.get("champion", "").lower() == champ_lower
+                    and (not role or c.get("role") == role.upper())
+                ]
+                total = sum(c["total_matches"] for c in matching)
+                if total < min_matches:
+                    return {
+                        "champion": champion,
+                        "filters": {"role": role, "server": server, "patch": patch},
+                        "total_matches": total,
+                        "stats": None,
+                    }
+                wins = sum(c["wins"] for c in matching)
+
+                def wavg(field: str) -> float:
+                    weighted = sum(c.get(field, 0) * c["total_matches"] for c in matching)
+                    return weighted / total
+
+                return {
+                    "champion": champion,
+                    "filters": {"role": role, "server": server, "patch": patch},
+                    "total_matches": total,
+                    "stats": {
+                        "winrate": round(wins / total * 100, 2),
+                        "avg_kills": round(wavg("avg_kills"), 2),
+                        "avg_deaths": round(wavg("avg_deaths"), 2),
+                        "avg_assists": round(wavg("avg_assists"), 2),
+                        "avg_gold": round(wavg("avg_gold"), 0),
+                        "avg_damage_per_minute": round(wavg("avg_damage_per_minute"), 1),
+                        "avg_kill_participation": round(wavg("avg_kill_participation"), 3),
+                    },
+                }
+        except Exception as e:
+            logger.warning("buscar_stats_campeao: cache falhou, usando Supabase: %s", e)
+
     # ── Busca paginada ─────────────────────────────────────────────────
     select_cols = (
         "champion_name, team_position, win, kills, deaths, assists, "
@@ -162,6 +299,55 @@ def buscar_tierlist(
     if cached is not None:
         logger.debug(f"[cache] tierlist hit: {cache_key[:60]}")
         return cached
+
+    # ── Tentativa via cache R2 (patch ou patch_list especificados) ─────
+    if patch and not patch_list:
+        try:
+            from backend.services.stats_cache import get_champion_stats
+            cache_data = get_champion_stats(patch)
+            if cache_data is not None:
+                result = _build_tierlist_from_cache(
+                    cache_data, role, server,
+                    min_matches, min_role_share, min_matches_relative,
+                )
+                if result is not None:
+                    _cache_set(cache_key, result)
+                    logger.info("[cache] tierlist R2 hit patch=%s: %d entradas", patch, len(result))
+                    return result
+        except Exception as e:
+            logger.warning("buscar_tierlist: cache R2 falhou, usando Supabase: %s", e)
+
+    if patch_list:
+        try:
+            from backend.services.stats_cache import get_champion_stats
+            merged_rows: list[dict] = []
+            total_matches_agg = 0
+            ban_counts_agg: dict[str, int] = defaultdict(int)
+            for p in patch_list:
+                cd = get_champion_stats(p)
+                if cd is None:
+                    merged_rows = []
+                    break
+                merged_rows.extend(cd.get("champions") or [])
+                total_matches_agg += cd.get("total_unique_matches") or 0
+                for champ, cnt in (cd.get("ban_counts") or {}).items():
+                    ban_counts_agg[champ] += cnt
+            if merged_rows:
+                merged_data = {
+                    "total_unique_matches": total_matches_agg or 1,
+                    "ban_counts": dict(ban_counts_agg),
+                    "champions": merged_rows,
+                }
+                result = _build_tierlist_from_cache(
+                    merged_data, role, server,
+                    min_matches, min_role_share, min_matches_relative,
+                )
+                if result is not None:
+                    _cache_set(cache_key, result)
+                    logger.info("[cache] tierlist R2 hit patch_list=%s: %d entradas", patch_list, len(result))
+                    return result
+        except Exception as e:
+            logger.warning("buscar_tierlist: cache R2 (patch_list) falhou, usando Supabase: %s", e)
 
     # Paginar pra pegar TODOS os registros (PostgREST limita 1000 por default)
     select_cols = (

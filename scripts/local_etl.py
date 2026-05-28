@@ -1,5 +1,5 @@
 """
-local_etl.py — ETL local: processa partidas e timelines do R2 -> Supabase.
+local_etl.py  ETL local: processa partidas e timelines do R2 -> Supabase.
 
 Uso:
     python scripts/local_etl.py --count 500 --skip-existing
@@ -24,7 +24,7 @@ from supabase import create_client
 from scripts.processing.process_matches import processar_partida, _get_processed_ids
 from scripts.processing.process_timelines import processar_timeline
 
-# ── Logging: erros vao pro arquivo, terminal fica limpo ──────────────────────
+#  Logging: erros vao pro arquivo, terminal fica limpo 
 LOG_FILE = os.path.join(os.path.dirname(__file__), "..", "etl.log")
 
 file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
@@ -39,7 +39,7 @@ logger = logging.getLogger("etl")
 logger.setLevel(logging.DEBUG)
 logger.addHandler(file_handler)
 
-# Handler de terminal so pra CRITICAL (nada aparece — tqdm cuida da UI)
+# Handler de terminal so pra CRITICAL (nada aparece  tqdm cuida da UI)
 console = logging.StreamHandler()
 console.setLevel(logging.CRITICAL)
 logger.addHandler(console)
@@ -108,7 +108,7 @@ def main():
         os.system(f"{sys.executable} -m pip install tqdm -q")
         from tqdm import tqdm
 
-    parser = argparse.ArgumentParser(description="Metis ETL — processa partidas e timelines do R2")
+    parser = argparse.ArgumentParser(description="Metis ETL  processa partidas e timelines do R2")
     parser.add_argument("--count", type=int, default=50, help="Itens a processar (default: 50)")
     parser.add_argument("--skip-existing", action="store_true", help="Pular ja processados")
     parser.add_argument("--bucket", default="metis", help="Bucket R2 (default: metis)")
@@ -124,10 +124,10 @@ def main():
     if not s3 or not db:
         sys.exit(1)
 
-    print(f"\n  Metis ETL — {datetime.now().strftime('%H:%M:%S')}")
+    print(f"\n  Metis ETL  {datetime.now().strftime('%H:%M:%S')}")
     print(f"  Log completo: {os.path.abspath(LOG_FILE)}\n")
 
-    # ── Listar e parear partidas + timelines ────────────────────────
+    #  Listar e parear partidas + timelines 
     print("  Listando arquivos no R2...")
 
     match_keys = [] if args.only_timelines else list_r2_keys(s3, args.bucket, "matches/")
@@ -158,7 +158,7 @@ def main():
         if tk:
             seen_tl.add(mid)
 
-    # Timelines orfas (sem match correspondente) — so se --only-timelines
+    # Timelines orfas (sem match correspondente)  so se --only-timelines
     if args.only_timelines:
         for tk in tl_keys[:args.count]:
             mid = tk.split("/")[-1].replace(".json.gz", "")
@@ -204,7 +204,7 @@ def main():
     logger.info(f"ETL: {ok} partidas salvas, {dirty} dirty, {tl_ok} timelines, {err + tl_err} erros")
     print(f"  Resultado: {ok} partidas, {dirty} dirty, {tl_ok} timelines, {err + tl_err} erros\n")
 
-    # ── Refresh cache ────────────────────────────────────────────
+    #  Refresh cache 
     if args.refresh_cache and args.api_key:
         print("  Atualizando tier list...", end=" ")
         try:
