@@ -21,7 +21,7 @@ def _load_items_catalog(db_client) -> dict[int, dict[str, Any]]:
     """
     rows = (
         db_client.table("items")
-        .select("item_id, name, gold_total, tags, category, trend")
+        .select("item_id, name, gold_total, tags, category, trend, purchasable")
         .execute()
         .data
         or []
@@ -35,6 +35,7 @@ def _load_items_catalog(db_client) -> dict[int, dict[str, Any]]:
             "trend": r.get("trend"),
         }
         for r in rows
+        if r.get("purchasable", True)
     }
 
 
@@ -77,7 +78,9 @@ def buscar_item_ranking(
                         if picks < min_picks:
                             continue
                         item_id = entry["item_id"]
-                        meta = catalog.get(item_id, {})
+                        meta = catalog.get(item_id)
+                        if not meta:
+                            continue  # item fora do catálogo atual (deprecated)
                         if meta.get("category") in _EXCLUDED_CACHE:
                             continue
                         result.append({
@@ -133,7 +136,9 @@ def buscar_item_ranking(
     for item_id, d in buckets.items():
         if d["picks"] < min_picks:
             continue
-        meta = catalog.get(item_id, {})
+        meta = catalog.get(item_id)
+        if not meta:
+            continue  # item fora do catálogo atual (deprecated)
         if meta.get("category") in _EXCLUDED:
             continue
         result_fallback.append({

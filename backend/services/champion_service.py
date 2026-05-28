@@ -27,14 +27,18 @@ def _wilson_lower(picks: int, wins: int, z: float = 1.96) -> float:
 
 
 def _load_item_categories(db_client) -> dict[int, str | None]:
-    """Retorna {item_id: category} carregado da tabela items."""
+    """Retorna {item_id: category} apenas para itens purchasable do catálogo atual."""
     rows = (
         db_client.table("items")
-        .select("item_id, category")
+        .select("item_id, category, purchasable")
         .execute()
         .data or []
     )
-    return {int(r["item_id"]): r.get("category") for r in rows}
+    return {
+        int(r["item_id"]): r.get("category")
+        for r in rows
+        if r.get("purchasable", True)
+    }
 
 
 # ── Overview ──────────────────────────────────────────────────────────────────
@@ -162,6 +166,8 @@ def buscar_builds(
         if picks < min_picks:
             continue
         item_id = r["item_id"]
+        if item_id not in categories:
+            continue  # item removido do jogo (não está no catálogo DDragon atual)
         category = categories.get(item_id)
         if category in _EXCLUDED_CATEGORIES:
             continue
