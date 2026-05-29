@@ -7,6 +7,8 @@ Endpoints:
 """
 
 from fastapi import APIRouter, HTTPException
+import gzip
+import json
 import os
 from supabase import create_client
 from riotwatcher import LolWatcher, ApiError
@@ -18,6 +20,72 @@ def _get_supabase():
     if not url or not key:
         raise RuntimeError("SUPABASE_URL e SUPABASE_KEY são obrigatórios no .env")
     return create_client(url, key)
+
+
+def _get_r2_client():
+    try:
+        import boto3
+        account_id = os.environ.get("CLOUDFLARE_R2_ACCOUNT_ID")
+        access_key = os.environ.get("CLOUDFLARE_R2_ACCESS_KEY_ID")
+        secret_key = os.environ.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY")
+        if not all([account_id, access_key, secret_key]):
+            return None
+        return boto3.client(
+            "s3",
+            endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name="auto",
+        )
+    except Exception:
+        return None
+
+
+def _r2_key(match_id: str) -> str:
+    return f"timeline_frames/{match_id}.json.gz"
+
+
+def _timeline_exists_r2(match_id: str) -> bool:
+    s3 = _get_r2_client()
+    if not s3:
+        return False
+    bucket = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
+    try:
+        s3.head_object(Bucket=bucket, Key=_r2_key(match_id))
+        return True
+    except Exception:
+        return False
+
+
+def _read_timeline_r2(match_id: str) -> list | None:
+    s3 = _get_r2_client()
+    if not s3:
+        return None
+    bucket = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
+    try:
+        obj = s3.get_object(Bucket=bucket, Key=_r2_key(match_id))
+        data = json.loads(gzip.decompress(obj["Body"].read()))
+        return data.get("frames")
+    except Exception:
+        return None
+
+
+def _write_timeline_r2(match_id: str, frames: list) -> bool:
+    s3 = _get_r2_client()
+    if not s3:
+        return False
+    bucket = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
+    try:
+        payload = json.dumps({"match_id": match_id, "frames": frames}, ensure_ascii=False)
+        s3.put_object(
+            Bucket=bucket,
+            Key=_r2_key(match_id),
+            Body=gzip.compress(payload.encode("utf-8")),
+            ContentType="application/gzip",
+        )
+        return True
+    except Exception:
+        return False
 
 
 def _get_routing_region(server: str) -> str:
@@ -171,14 +239,7 @@ def get_match_details(match_id: str):
             raise HTTPException(status_code=404, detail=f"Partida '{match_id}' não encontrada.")
 
         # ── Timeline flag ─────────────────────────────────────
-        tl_result = (
-            db.table("match_timelines")
-            .select("match_id")
-            .eq("match_id", match_id)
-            .limit(1)
-            .execute()
-        )
-        has_timeline = bool(tl_result.data)
+        has_timeline = _timeline_exists_r2(match_id)
 
         # ── max_damage para normalização de barras ────────────
         max_damage = max(
@@ -228,15 +289,9 @@ def get_match_timeline(match_id: str):
         db = _get_supabase()
 
         # ── 1. Cache hit ──────────────────────────────────────
-        tl_result = (
-            db.table("match_timelines")
-            .select("frames")
-            .eq("match_id", match_id)
-            .limit(1)
-            .execute()
-        )
-        if tl_result.data:
-            return {"match_id": match_id, "frames": tl_result.data[0]["frames"]}
+        frames_cached = _read_timeline_r2(match_id)
+        if frames_cached is not None:
+            return {"match_id": match_id, "frames": frames_cached}
 
         # ── 2. Verificar se a partida existe no banco ─────────
         p_result = (
@@ -281,10 +336,7 @@ def get_match_timeline(match_id: str):
         frames = _parse_timeline_frames(frames_raw, puuids_ordered)
 
         if frames:
-            db.table("match_timelines").upsert(
-                {"match_id": match_id, "frames": frames},
-                on_conflict="match_id",
-            ).execute()
+            _write_timeline_r2(match_id, frames)
 
         return {"match_id": match_id, "frames": frames}
 

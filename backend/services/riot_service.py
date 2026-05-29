@@ -323,11 +323,9 @@ def _salvar_timeline(
             })
 
         if frames:
-            supabase.table("match_timelines").upsert(
-                {"match_id": match_id, "frames": frames},
-                on_conflict="match_id",
-            ).execute()
-            logger.info(f"[timeline] {match_id} — {len(frames)} frames salvos")
+            from backend.api.routes.match import _write_timeline_r2
+            _write_timeline_r2(match_id, frames)
+            logger.info(f"[timeline] {match_id} — {len(frames)} frames salvos no R2")
 
     except Exception as e:
         logger.warning(f"[timeline] {match_id} falhou (não bloqueia o sync): {e}")

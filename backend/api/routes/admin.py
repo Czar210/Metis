@@ -69,9 +69,26 @@ def get_admin_stats(authorization: str | None = Header(default=None)):
         participants_total = (
             db.table("match_participants").select("puuid", count="exact").execute().count or 0
         )
-        timelines_saved = (
-            db.table("match_timelines").select("match_id", count="exact").execute().count or 0
-        )
+        try:
+            import boto3
+            account_id = os.environ.get("CLOUDFLARE_R2_ACCOUNT_ID")
+            access_key = os.environ.get("CLOUDFLARE_R2_ACCESS_KEY_ID")
+            secret_key = os.environ.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY")
+            bucket = os.environ.get("CLOUDFLARE_R2_BUCKET_NAME", "metis")
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name="auto",
+            )
+            paginator = s3.get_paginator("list_objects_v2")
+            timelines_saved = sum(
+                page.get("KeyCount", 0)
+                for page in paginator.paginate(Bucket=bucket, Prefix="timelines/")
+            )
+        except Exception:
+            timelines_saved = 0
 
         # ── Dirty matches por motivo ──────────────────────────
         dirty_by_reason: dict[str, int] = {}
