@@ -4,7 +4,7 @@
 
 Metis é uma aliada estratégica de alto nível para jogadores de League of Legends. Combinando o poder de LLMs (Gemini 2.5 Flash em produção, Llama 3 via Ollama no dev local) com uma arquitetura de dados robusta (RAG sobre pgvector + OpenRAG), a Metis não apenas exibe estatísticas, mas "entende" o estado do jogo e oferece sabedoria tática real.
 
-**Versão atual**: p-0.9.22 (Alpha). Próximo marco: Beta v1.0.0 — requer os 5 tickets de backend documentados em [.speckit/plano_backend_decisoes.md](.speckit/plano_backend_decisoes.md).
+**Versão atual**: p-0.9.24 (Alpha) — chat com IA via RAG sobre guias reais + recomendação de itens/builds por campeão. Próximo marco: Beta v1.0.0 — requer os 5 tickets de backend documentados em [.speckit/plano_backend_decisoes.md](.speckit/plano_backend_decisoes.md).
 
 ## 🧑‍💻 Equipe Principal
 - **César (Tech Lead, Data Eng & CI/CD) - [LinkedIn](https://www.linkedin.com/in/cesar-sibila/):** Maestro da infraestrutura e engenharia de dados. Focado na orquestração de deploy via CI/CD (Actions) e sustentação atômica. Como Tech Lead, também guia e revisa ativamente as formatações e mudanças técnicas desenvolvidas pelos parceiros.

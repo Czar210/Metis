@@ -20,11 +20,25 @@ type Release = {
 // ── Data (entries em ordem, textos vêm via i18n) ───────────────
 const RELEASES: Release[] = [
   {
+    id: 'p_0_9_24',
+    version: 'p-0.9.24',
+    date: '05/2026',
+    hasLabel: true,
+    current: true,
+    entries: ['novo', 'melhoria', 'melhoria', 'fix'],
+  },
+  {
+    id: 'p_0_9_23',
+    version: 'p-0.9.23',
+    date: '05/2026',
+    hasLabel: true,
+    entries: ['novo', 'novo', 'melhoria', 'melhoria'],
+  },
+  {
     id: 'p_0_9_22',
     version: 'p-0.9.22',
     date: '04/2026',
     hasLabel: true,
-    current: true,
     entries: ['melhoria', 'melhoria', 'novo'],
   },
   {

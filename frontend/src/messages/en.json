@@ -206,6 +206,20 @@
     "tag_melhoria": "IMPROVED",
     "tag_fix": "FIX",
     "releases": {
+      "p_0_9_24": {
+        "label": "Better item and build recommendations",
+        "entry_0": "Metis now recommends the best items per champion and role, based on thousands of high-elo matches — not guesswork.",
+        "entry_1": "Fairer item ranking: an item with few matches no longer inflates to the top, and you can now see a confidence score for each recommendation.",
+        "entry_2": "Builds stopped repeating the same item in the same role and now treat base items correctly as components.",
+        "entry_3": "We removed items that left the game from builds and rankings, and fixed item images that weren't loading."
+      },
+      "p_0_9_23": {
+        "label": "The Metis chat got a lot smarter",
+        "entry_0": "The chat now answers based on real champion guides — knowledge from experienced players, not generic replies.",
+        "entry_1": "Metis knows when it doesn't know: if we don't have an in-depth guide for a champion yet, it says so instead of making things up.",
+        "entry_2": "Sharper answers: Metis understands which champion you're asking about and reformulates your question behind the scenes to find the best answer.",
+        "entry_3": "Metis replies in the site's language (PT/EN) and now factors in the meta and recent patch changes to champions and items."
+      },
       "p_0_9_22": {
         "label": "More readable recommendation radar",
         "entry_0": "Recommendation radar: the champion's ideal profile now appears dashed (used to blend with your filled profile). Your profile got vertex dots for clarity.",

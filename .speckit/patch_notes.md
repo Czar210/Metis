@@ -2,6 +2,26 @@
 
 *Diário de mudanças significativas no ecossistema e na stack do projeto.*
 
+## Cupom `FIRST5` — seed de cupom de escassez (2026-06-08)
+
+**Responsavel:** Cesar | **Status:** linha criada (exibicao); enforcement pendente
+
+### Entregaveis
+- `database/migrations/018_seed_coupon_first5.sql` — INSERT idempotente (`ON CONFLICT (code) DO NOTHING`)
+- Cupom: `code='FIRST5'`, 5.000 tokens validos ate o fim de junho, `max_uses=5`, `public_list=true`, `active=true`
+- `effect`: `{"tier":"premium","tokens":5000,"duration":"until_end_of_month"}`
+- Valido de 2026-06-01 a 2026-06-30
+
+### Comportamento real
+- Aparece na `/pricing` e `/account` com contador "5 restantes" e codigo escondido (easter-egg)
+- **Cosmetico por enquanto:** o efeito NAO e aplicado. Resgate (`/account`) e stub; `token_guard.py` e mensal por tier e nao tem caminho pra cupom conceder tokens nem incrementar `uses_count`
+- Pendente (ticket futuro): endpoint de resgate atomico ("primeiros 5" race-safe) + grant de 5k tokens valido ate o fim do mes no `token_guard`
+
+### Aplicacao no Supabase
+- [ ] Cesar aplica a migration 018 no projeto (writes em `coupons` sao service_role)
+
+---
+
 ## Ticket C — Nucleo AI: match-analysis, inline-insight, chat SSE (2026-05-20)
 
 **Responsavel:** Andre | **Status:** concluido (backend)
