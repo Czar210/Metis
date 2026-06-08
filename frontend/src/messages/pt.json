@@ -206,6 +206,20 @@
     "tag_melhoria": "MELHORIA",
     "tag_fix": "FIX",
     "releases": {
+      "p_0_9_24": {
+        "label": "Recomendações de itens e builds melhores",
+        "entry_0": "A Metis agora recomenda os melhores itens por campeão e função, com base em milhares de partidas de alto elo — não em achismo.",
+        "entry_1": "Ranking de itens mais justo: um item com poucas partidas não infla mais no topo, e agora você vê o índice de confiança de cada recomendação.",
+        "entry_2": "As builds pararam de repetir o mesmo item na mesma função e passaram a tratar itens base corretamente como componentes.",
+        "entry_3": "Removemos itens que saíram do jogo das builds e do ranking, e corrigimos imagens de itens que não carregavam."
+      },
+      "p_0_9_23": {
+        "label": "O chat da Metis ficou muito mais inteligente",
+        "entry_0": "O chat agora responde com base em guias reais de campeões — conhecimento de jogadores experientes, não respostas genéricas.",
+        "entry_1": "A Metis sabe quando não sabe: se ainda não temos um guia aprofundado de um campeão, ela avisa em vez de inventar.",
+        "entry_2": "Respostas mais precisas: a Metis entende sobre qual campeão você está perguntando e reformula sua pergunta nos bastidores pra achar a melhor resposta.",
+        "entry_3": "A Metis responde no idioma do site (PT/EN) e já leva em conta o meta e mudanças recentes de patch dos campeões e itens."
+      },
       "p_0_9_22": {
         "label": "Radar de recomendação mais legível",
         "entry_0": "Radar de recomendações: perfil ideal do campeão agora aparece tracejado (antes confundia com o seu preenchido). Seu perfil ganhou pontos de destaque nos vértices.",
