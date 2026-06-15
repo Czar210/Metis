@@ -175,6 +175,36 @@ def _update_token_usage(user_id: str, total_tokens: int) -> None:
     ).execute()
 
 
+def _get_coupon_bonus(user_id: str | None) -> int:
+    """Soma de tokens concedidos por cupons ativos (nao expirados) do usuario.
+
+    O bonus e somado ao limite DIARIO do chat enquanto o cupom estiver valido
+    (expires_at > now). Como o chat reseta a meia-noite UTC, isso equivale a
+    +N tokens por dia ate o cupom expirar. Falha silenciosa (retorna 0).
+    """
+    if not user_id:
+        return 0
+    try:
+        from supabase import create_client
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_KEY")
+        if not url or not key:
+            return 0
+        sb = create_client(url, key)
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        res = (
+            sb.table("coupon_redemptions")
+            .select("tokens_granted")
+            .eq("user_id", user_id)
+            .gt("expires_at", now_iso)
+            .execute()
+        )
+        return sum(int(r.get("tokens_granted", 0)) for r in (res.data or []))
+    except Exception as exc:
+        logger.warning(f"[coupon] _get_coupon_bonus falhou: {exc}")
+        return 0
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────
 
 @app.post("/api/v1/ingestion/fetch-matches")
@@ -205,7 +235,8 @@ def chat(req: ChatRequest):
     if not user_id:
         raise HTTPException(status_code=401, detail="Login necessario para usar o chat.")
 
-    token_limit = TIER_LIMITS.get(tier, 0)
+    # Limite diario = base do tier + bonus de cupons ativos (ex: FIRST5 = +5k/dia).
+    token_limit = TIER_LIMITS.get(tier, 0) + _get_coupon_bonus(user_id)
     if token_limit == 0:
         raise HTTPException(
             status_code=403,
@@ -316,16 +347,18 @@ def chat(req: ChatRequest):
 
 @app.get("/api/v1/chat/usage")
 def chat_usage(supabase_token: str):
-    """Retorna uso de tokens do usuario hoje."""
+    """Retorna uso de tokens do usuario hoje (limite ja inclui bonus de cupons)."""
     from backend.services.llm_adapter import TIER_LIMITS
     tier, user_id = _get_user_tier(supabase_token)
     if not user_id:
         raise HTTPException(status_code=401, detail="Login necessario.")
-    token_limit = TIER_LIMITS.get(tier, 0)
+    coupon_bonus = _get_coupon_bonus(user_id)
+    token_limit = TIER_LIMITS.get(tier, 0) + coupon_bonus
     tokens_used = _get_tokens_used_today(user_id) if token_limit > 0 else 0
     return {
         "tokens_used": tokens_used,
         "token_limit": token_limit,
+        "coupon_bonus": coupon_bonus,
         "pct": round(tokens_used / token_limit * 100, 1) if token_limit > 0 else 0,
         "tier": tier,
         "resets_at": "meia-noite UTC (horario de Londres)",

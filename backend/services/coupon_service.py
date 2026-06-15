@@ -1,8 +1,9 @@
 """
 coupon_service.py — Camada de negócio pra cupons.
 
-Por enquanto só tem `list_public_coupons` (lê). Resgate (mutação) fica pra
-versão futura quando tivermos fluxo de aplicar benefício no user_metadata.
+`list_public_coupons` lê os cupons públicos; `redeem_coupon` resgata via a RPC
+atômica `redeem_coupon()` (migration 019), que valida, concede tokens e
+incrementa `uses_count` numa única transação.
 """
 
 from __future__ import annotations
@@ -39,3 +40,30 @@ def list_public_coupons(db_client) -> list[dict[str, Any]]:
         return int(c.get("uses_count", 0)) < int(c["max_uses"])
 
     return [c for c in rows if _available(c)]
+
+
+def redeem_coupon(db_client, user_id: str, code: str) -> dict[str, Any]:
+    """Resgata um cupom para o usuário via a RPC atômica `redeem_coupon`.
+
+    Retorna o JSONB da RPC, ex: {"status": "ok", "tokens_granted": 5000,
+    "expires_at": "..."} ou {"status": "not_found" | "expired" |
+    "already_redeemed" | "exhausted"}.
+
+    `code` é normalizado para MAIÚSCULO (os cupons são armazenados assim).
+    """
+    normalized = (code or "").strip().upper()
+    if not normalized:
+        return {"status": "invalid_code"}
+
+    res = db_client.rpc(
+        "redeem_coupon",
+        {"p_user_id": user_id, "p_code": normalized},
+    ).execute()
+
+    data = res.data
+    # supabase-py pode devolver o JSONB direto ou dentro de lista, conforme versão.
+    if isinstance(data, list):
+        data = data[0] if data else None
+    if not isinstance(data, dict):
+        return {"status": "error"}
+    return data

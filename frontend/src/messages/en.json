@@ -975,7 +975,13 @@
       "input_placeholder": "Redeem code",
       "redeem": "Redeem",
       "copy": "Copy code",
-      "copied": "Copied!"
+      "copied": "Copied!",
+      "redeem_success": "Coupon applied! +{tokens} tokens per day until the end of the month.",
+      "redeem_already": "You've already redeemed this coupon.",
+      "redeem_invalid": "Invalid coupon.",
+      "redeem_expired": "Coupon expired or inactive.",
+      "redeem_error": "Couldn't redeem right now. Try again.",
+      "redeem_need_login": "Sign in to redeem a coupon."
     },
     "watched": {
       "title": "Watched players",

@@ -1,22 +1,23 @@
 -- Migration 018 — Seed do cupom `FIRST5`
 --
--- Cupom de escassez: 5.000 tokens validos ate o fim do mes (junho/2026),
--- so para os 5 primeiros que resgatarem. Aparece na /pricing e na /account
--- (public_list = true) com o contador "X restantes"; o codigo fica escondido
--- (easter-egg, decisao Cesar 2026-04-22).
+-- Cupom promocional: +5.000 tokens/dia no chat ate o fim do mes (junho/2026).
+-- Resgate ilimitado por enquanto (max_uses = NULL) — qualquer um que resgatar
+-- ganha o bonus. Aparece na /pricing e na /account (public_list = true) com o
+-- codigo escondido (easter-egg, decisao Cesar 2026-04-22).
 --
--- ATENCAO (estado real do sistema em 2026-06-08):
---   O efeito NAO e aplicado por codigo ainda. O botao "Resgatar" da /account e
---   stub (account/page.tsx) e o token_guard.py e 100% mensal por tier — nao ha
---   fluxo que valide o codigo, incremente uses_count nem conceda os 5k tokens.
---   Esta linha e EXIBICAO. O enforcement (resgate atomico "primeiros 5" + grant
---   de tokens ate o fim do mes) e um ticket futuro.
+-- Semantica do efeito (aplicada pela migration 019 + backend):
+--   effect.tokens = 5000 → bonus somado ao limite DIARIO do chat (/api/v1/chat)
+--   enquanto o cupom estiver valido (expires_at = valid_until). Como o chat
+--   reseta a meia-noite UTC, na pratica sao +5.000 tokens por dia ate 30/06.
 --
--- code em MAIUSCULO: os inputs de resgate ja fazem .toUpperCase(), entao o
--- codigo armazenado precisa casar quando o resgate existir.
+-- A trava "primeiros 5" fica como plano futuro: basta trocar max_uses NULL → 5
+-- que a RPC redeem_coupon (migration 019) ja a impoe de forma atomica.
 --
--- Idempotente: ON CONFLICT (code) DO NOTHING — re-rodar a migration nao duplica
--- nem reseta uses_count.
+-- code em MAIUSCULO: os inputs de resgate fazem .toUpperCase(), entao o codigo
+-- armazenado precisa casar.
+--
+-- Idempotente: ON CONFLICT (code) atualiza o efeito/limites para o estado atual
+-- (re-rodar nao duplica; uses_count e preservado).
 
 INSERT INTO coupons (
   code,
@@ -32,12 +33,20 @@ INSERT INTO coupons (
 VALUES (
   'FIRST5',
   'First 5',
-  '5.000 tokens validos ate o fim do mes. So para os 5 primeiros que resgatarem.',
+  '+5.000 tokens por dia no chat da Metis ate o fim do mes. Resgate ja!',
   '{"tier":"premium","tokens":5000,"duration":"until_end_of_month"}'::jsonb,
   '2026-06-01T00:00:00Z',
   '2026-06-30T23:59:59Z',
-  5,
+  NULL,
   true,
   true
 )
-ON CONFLICT (code) DO NOTHING;
+ON CONFLICT (code) DO UPDATE SET
+  title        = EXCLUDED.title,
+  description  = EXCLUDED.description,
+  effect       = EXCLUDED.effect,
+  valid_from   = EXCLUDED.valid_from,
+  valid_until  = EXCLUDED.valid_until,
+  max_uses     = EXCLUDED.max_uses,
+  public_list  = EXCLUDED.public_list,
+  active       = EXCLUDED.active;

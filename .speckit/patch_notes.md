@@ -2,23 +2,43 @@
 
 *Diário de mudanças significativas no ecossistema e na stack do projeto.*
 
-## Cupom `FIRST5` — seed de cupom de escassez (2026-06-08)
+## Cupom `FIRST5` FUNCIONAL — resgate real + grant de tokens (2026-06-08)
 
-**Responsavel:** Cesar | **Status:** linha criada (exibicao); enforcement pendente
+**Responsavel:** Cesar | **Status:** implementado e aplicado no Supabase; falta deploy (push)
 
-### Entregaveis
-- `database/migrations/018_seed_coupon_first5.sql` — INSERT idempotente (`ON CONFLICT (code) DO NOTHING`)
-- Cupom: `code='FIRST5'`, 5.000 tokens validos ate o fim de junho, `max_uses=5`, `public_list=true`, `active=true`
-- `effect`: `{"tier":"premium","tokens":5000,"duration":"until_end_of_month"}`
-- Valido de 2026-06-01 a 2026-06-30
+### O que faz
+Digitar `FIRST5` na `/account` agora concede **+5.000 tokens/dia no chat ate 30/06**.
+Resgate **ilimitado** (qualquer usuario), **1x por usuario**. Como o chat reseta a
+meia-noite UTC, o bonus equivale a +5k por dia enquanto o cupom vale.
 
-### Comportamento real
-- Aparece na `/pricing` e `/account` com contador "5 restantes" e codigo escondido (easter-egg)
-- **Cosmetico por enquanto:** o efeito NAO e aplicado. Resgate (`/account`) e stub; `token_guard.py` e mensal por tier e nao tem caminho pra cupom conceder tokens nem incrementar `uses_count`
-- Pendente (ticket futuro): endpoint de resgate atomico ("primeiros 5" race-safe) + grant de 5k tokens valido ate o fim do mes no `token_guard`
+### Banco (aplicado no projeto `ebwplwizjsevhcowyfhg`)
+- `018_seed_coupon_first5.sql` — FIRST5 com `max_uses=NULL` (ilimitado), `effect.tokens=5000`, idempotente (`ON CONFLICT DO UPDATE`)
+- `019_coupon_redemptions.sql` — tabela `coupon_redemptions` (`UNIQUE(user_id,coupon_code)`, `expires_at`) + RPC atomica `redeem_coupon(uuid,text)` (SECURITY DEFINER, lock na linha do cupom) + RLS (user le so o proprio resgate)
 
-### Aplicacao no Supabase
-- [ ] Cesar aplica a migration 018 no projeto (writes em `coupons` sao service_role)
+### Backend
+- `backend/core/auth.py` [NEW] — `get_user_from_token(token) -> (tier, user_id)`
+- `backend/services/coupon_service.py` — `redeem_coupon(db, user_id, code)` chama a RPC (normaliza code p/ MAIUSCULO)
+- `backend/api/routes/coupon.py` — `POST /api/v1/coupons/redeem` (mapeia status da RPC → 200/400/404/409/422)
+- `backend/main.py` — `_get_coupon_bonus(user_id)`; `/api/v1/chat` e `/api/v1/chat/usage` somam o bonus ao limite DIARIO (e ao gate 403)
+
+### Frontend
+- `account/page.tsx` — form de resgate agora chama o endpoint real + refaz `/chat/usage`
+- `chat/page.tsx` — gate do chat abre por **limite efetivo > 0** (nao so tier pago): free com cupom ativo entra
+- `messages/pt.json` + `en.json` — chaves `account.coupons.redeem_*`
+
+### Testes
+- `tests/test_coupon_redeem.py` [NEW] — 7 testes (happy/uppercase, not_found, already, expired, 401, 422 vazio, injecao). Suite: **0 regressoes** (baseline 163 fail / 196 pass → 163 fail / 203 pass)
+
+### Decisoes / semantica
+- Sistema **diario** (`/api/v1/chat`, `TIER_LIMITS`) e o que o usuario usa — o bonus entra ai, NAO no `token_guard` mensal (`/api/ai/*` ainda nao esta no front)
+- "ate o fim do mes" num sistema diario = +5k/dia ate 30/06 (era o "5k por dia" original)
+- MVP concede **tokens**, nao muda o **tier** (tier-grant fica pro futuro)
+
+### Pendente
+- [ ] **Deploy:** push p/ Railway (backend) + Vercel (frontend) — sem isso o `/account` ainda mostra "em breve" em producao
+- [ ] Trava "primeiros 5": trocar `coupons.max_uses` NULL → 5 (a RPC ja impoe atomicamente)
+- [ ] Integrar o bonus tambem no `token_guard` mensal quando `/api/ai/*` for pro front
+- [ ] (opcional) grant de tier premium ao resgatar
 
 ---
 

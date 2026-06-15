@@ -239,6 +239,47 @@ export default function AccountPage() {
     setTimeout(() => setCopiedCode(null), 1500)
   }
 
+  async function refreshUsage() {
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) return
+    try {
+      const res = await apiFetch(`/api/v1/chat/usage?supabase_token=${encodeURIComponent(token)}`)
+      if (res.ok) setUsage(await res.json() as Usage)
+    } catch { /* mantém o uso atual */ }
+  }
+
+  async function handleRedeem(e: React.FormEvent) {
+    e.preventDefault()
+    const code = redeemInput.trim().toUpperCase()
+    if (!code) return
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) { flash(t('coupons.redeem_need_login')); return }
+    try {
+      const res = await apiFetch('/api/v1/coupons/redeem', {
+        method: 'POST',
+        body: JSON.stringify({ code, supabase_token: token }),
+      })
+      const data = await res.json().catch(() => null)
+      if (res.ok && data?.status === 'ok') {
+        flash(t('coupons.redeem_success', { tokens: formatNumber(data.granted ?? 0, locale) }))
+        setRedeemInput('')
+        await refreshUsage()
+      } else if (res.status === 409) {
+        flash(t('coupons.redeem_already'))
+      } else if (res.status === 404) {
+        flash(t('coupons.redeem_invalid'))
+      } else if (res.status === 400) {
+        flash(t('coupons.redeem_expired'))
+      } else {
+        flash(t('coupons.redeem_error'))
+      }
+    } catch {
+      flash(t('coupons.redeem_error'))
+    }
+  }
+
   const initial = email?.charAt(0).toUpperCase() ?? '?'
   const username = email?.split('@')[0] ?? '—'
   const meta = TIER_META[tier]
@@ -640,12 +681,7 @@ export default function AccountPage() {
               )}
 
               <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  if (!redeemInput.trim()) return
-                  flash(t('security.delete_coming'))
-                  setRedeemInput('')
-                }}
+                onSubmit={handleRedeem}
                 style={{ display: 'flex', gap: 8 }}
               >
                 <input

@@ -20,6 +20,17 @@ Este doc consolida TUDO que está em aberto, espalhado entre `plano_backend_deci
 
 ---
 
+## 0.5 Cupons (FIRST5 já funcional — ver patch_notes 2026-06-08)
+
+O resgate de cupom está implementado e aplicado no Supabase (`coupon_redemptions` + RPC `redeem_coupon` + bônus diário no chat). Falta só o que está abaixo:
+
+- [ ] **Deploy** do backend (Railway) e frontend (Vercel) — sem push, produção ainda mostra "em breve" no resgate
+- [ ] **Ativar "primeiros 5"**: trocar `coupons.max_uses` de `NULL` → `5` (a RPC `redeem_coupon` já impõe a trava de forma atômica via `FOR UPDATE`)
+- [ ] **Integrar o bônus no `token_guard` mensal** (`/api/ai/*`) quando esses endpoints entrarem no front — hoje o bônus só vale no chat diário (`/api/v1/chat`)
+- [ ] (opcional) **Grant de tier**: resgatar cupom poderia subir o usuário pra `premium` por um período, não só dar tokens
+
+---
+
 ## 1. Tarefas do César (só ele pode fazer — dependem de conhecimento local/contas externas)
 
 ### Task 1.1 — Spike D2 · Power curve signals

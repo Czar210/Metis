@@ -47,6 +47,7 @@ export default function ChatPage() {
   const [userName, setUserName] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [usage, setUsage] = useState<Usage | null>(null)
+  const [usageLoaded, setUsageLoaded] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -62,14 +63,15 @@ export default function ChatPage() {
       setUserTier(typeof meta.tier === 'string' ? meta.tier : hasPremium ? 'premium' : 'free')
       setUserName(session.user.email?.split('@')[0] ?? null)
 
-      if (hasPremium) {
-        apiFetch(`/api/v1/chat/usage?supabase_token=${encodeURIComponent(session.access_token)}`)
-          .then((r) => (r.ok ? r.json() : null))
-          .then((d) => {
-            if (d) setUsage(d)
-          })
-          .catch(() => {})
-      }
+      // Busca usage pra todos: premium pra mostrar a barra, e free/donor pra
+      // detectar acesso liberado por cupom ativo (token_limit > 0).
+      apiFetch(`/api/v1/chat/usage?supabase_token=${encodeURIComponent(session.access_token)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d) setUsage(d)
+        })
+        .catch(() => {})
+        .finally(() => setUsageLoaded(true))
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -124,7 +126,8 @@ export default function ChatPage() {
   }
 
   // ── Loading inicial ─────────────────────────────────────────
-  if (isPremium === null) {
+  // Premium libera na hora; sem plano, espera o usage pra checar bonus de cupom.
+  if (isPremium === null || (!isPremium && !usageLoaded)) {
     return (
       <div
         className="metis-scope"
@@ -161,8 +164,10 @@ export default function ChatPage() {
     )
   }
 
-  // ── Gate: sem plano pago ────────────────────────────────────
-  if (!isPremium) {
+  // ── Gate: sem plano pago e sem cupom ativo ──────────────────
+  // Acesso = plano pago OU limite efetivo > 0 (bonus de cupom liberou o chat).
+  const canChat = isPremium === true || (usage?.token_limit ?? 0) > 0
+  if (!canChat) {
     return (
       <div className="metis-scope" style={{ minHeight: '100vh', background: 'var(--m-bg)' }}>
         <AppHeader active="home" />

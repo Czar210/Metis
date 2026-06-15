@@ -975,7 +975,13 @@
       "input_placeholder": "Resgatar código",
       "redeem": "Resgatar",
       "copy": "Copiar código",
-      "copied": "Copiado!"
+      "copied": "Copiado!",
+      "redeem_success": "Cupom aplicado! +{tokens} tokens por dia até o fim do mês.",
+      "redeem_already": "Você já resgatou este cupom.",
+      "redeem_invalid": "Cupom inválido.",
+      "redeem_expired": "Cupom expirado ou inativo.",
+      "redeem_error": "Não foi possível resgatar agora. Tente de novo.",
+      "redeem_need_login": "Faça login para resgatar um cupom."
     },
     "watched": {
       "title": "Jogadores supervisionados",
